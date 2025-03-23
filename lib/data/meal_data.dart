@@ -1,0 +1,197 @@
+import '../models/meal.dart';
+
+List<Meal> mealData = [
+  //
+  // 🥗 **Balanced Meals**
+  //
+  Meal(
+    id: "1",
+    name: "Eggs and Avocado Toast",
+    image: "assets/images/avocado_toast.jpg",
+    calories: 420,
+    ingredients: ["2 Large eggs", "1 Avocado", "2 Slices of whole grain bread"],
+    instructions: ["Toast bread", "Mash avocado", "Fry eggs", "Place on toast"],
+    diets: ["Balanced", "Mediterranean", "High-Protein"],
+    category: "Breakfast",
+  ),
+  Meal(
+    id: "2",
+    name: "Smoothie Bowl",
+    image: "assets/images/smoothie_bowl.jpg",
+    calories: 350,
+    ingredients: ["1 Banana", "1/2 Cup Greek Yogurt", "1/2 Cup Berries"],
+    instructions: [
+      "Blend ingredients",
+      "Pour into bowl",
+      "Top with granola & fruit",
+    ],
+    diets: ["Balanced", "Vegan", "High-Protein"],
+    category: "Breakfast",
+  ),
+  Meal(
+    id: "3",
+    name: "Chicken Salad",
+    image: "assets/images/chicken_salad.jpg",
+    calories: 600,
+    ingredients: ["Chicken breast", "Lettuce", "Tomato", "Olive oil"],
+    instructions: ["Grill chicken", "Chop veggies", "Toss with dressing"],
+    diets: ["Balanced", "High-Protein"],
+    category: "Lunch",
+  ),
+  Meal(
+    id: "4",
+    name: "Grilled Salmon",
+    image: "assets/images/grilled_salmon.jpg",
+    calories: 550,
+    ingredients: ["Salmon fillet", "Zucchini", "Bell peppers", "Olive oil"],
+    instructions: ["Season salmon", "Grill salmon & veggies"],
+    diets: ["Balanced", "Mediterranean", "High-Protein"],
+    category: "Dinner",
+  ),
+  Meal(
+    id: "5",
+    name: "Protein Bar",
+    image: "assets/images/protein_bar.jpg",
+    calories: 250,
+    ingredients: ["Protein Bar"],
+    instructions: ["Open and eat"],
+    diets: ["Balanced", "Vegan", "High-Protein"],
+    category: "Snack",
+  ),
+  Meal(
+    id: "6",
+    name: "Greek Salad",
+    image: "assets/images/greek_salad.jpg",
+    calories: 320,
+    ingredients: ["Tomato", "Cucumber", "Feta Cheese", "Olives"],
+    instructions: ["Chop veggies", "Add feta", "Drizzle with olive oil"],
+    diets: ["Mediterranean", "Balanced"],
+    category: "Lunch",
+  ),
+
+  //
+  // 🥑 **Keto Meals**
+  //
+  Meal(
+    id: "7",
+    name: "Steak & Broccoli",
+    image: "assets/images/steak_keto.jpg",
+    calories: 600,
+    ingredients: ["Steak", "Broccoli", "Butter"],
+    instructions: [
+      "Season steak & grill",
+      "Steam broccoli",
+      "Serve with butter",
+    ],
+    diets: ["Keto", "Paleo", "High-Protein"],
+    category: "Dinner",
+  ),
+  Meal(
+    id: "8",
+    name: "Zucchini Noodles",
+    image: "assets/images/zoodles_keto.jpg",
+    calories: 400,
+    ingredients: ["Zucchini spirals", "Olive oil", "Parmesan cheese"],
+    instructions: ["Sauté zucchini noodles", "Top with cheese"],
+    diets: ["Keto", "Paleo"],
+    category: "Lunch",
+  ),
+  Meal(
+    id: "9",
+    name: "Cheese Omelette",
+    image: "assets/images/cheese_omelette.jpg",
+    calories: 350,
+    ingredients: ["Eggs", "Cheese", "Butter"],
+    instructions: ["Beat eggs", "Cook in butter", "Fold with cheese"],
+    diets: ["Keto", "Paleo", "High-Protein"],
+    category: "Breakfast",
+  ),
+  Meal(
+    id: "10",
+    name: "Bacon & Avocado Salad",
+    image: "assets/images/bacon_avocado_salad.jpg",
+    calories: 480,
+    ingredients: ["Bacon", "Avocado", "Spinach", "Olive oil"],
+    instructions: ["Cook bacon", "Slice avocado", "Mix ingredients"],
+    diets: ["Keto", "Paleo"],
+    category: "Lunch",
+  ),
+
+  //
+  // 🌱 **Vegan Meals**
+  //
+  Meal(
+    id: "11",
+    name: "Tofu Scramble",
+    image: "assets/images/tofu_scramble.jpg",
+    calories: 300,
+    ingredients: ["Tofu", "Turmeric", "Peppers, Onions"],
+    instructions: ["Crumble tofu", "Sauté with veggies", "Add turmeric"],
+    diets: ["Vegan", "Mediterranean"],
+    category: "Breakfast",
+  ),
+  Meal(
+    id: "12",
+    name: "Vegan Veggie Soup",
+    image: "assets/images/vegan_soup.jpg",
+    calories: 250,
+    ingredients: ["Veggie broth", "Carrots", "Celery", "Beans"],
+    instructions: ["Simmer veggies", "Add beans"],
+    diets: ["Vegan", "Mediterranean"],
+    category: "Dinner",
+  ),
+  Meal(
+    id: "13",
+    name: "Lentil Stew",
+    image: "assets/images/lentil_stew.jpg",
+    calories: 400,
+    ingredients: ["Lentils", "Tomatoes", "Carrots", "Spices"],
+    instructions: ["Cook lentils", "Add vegetables & spices"],
+    diets: ["Vegan", "Mediterranean"],
+    category: "Lunch",
+  ),
+
+  //
+  // 💪 **High-Protein Meals**
+  //
+  Meal(
+    id: "14",
+    name: "Protein Smoothie",
+    image: "assets/images/protein_smoothie.jpg",
+    calories: 400,
+    ingredients: ["Protein Powder", "Banana", "Milk"],
+    instructions: ["Blend everything together", "Serve chilled"],
+    diets: ["High-Protein"],
+    category: "Breakfast",
+  ),
+  Meal(
+    id: "15",
+    name: "Steak with Brown Rice",
+    image: "assets/images/steak_rice.jpg",
+    calories: 650,
+    ingredients: ["Steak", "Brown Rice", "Green Beans"],
+    instructions: ["Grill steak", "Cook rice & beans"],
+    diets: ["High-Protein", "Balanced"],
+    category: "Dinner",
+  ),
+  Meal(
+    id: "16",
+    name: "Almond Butter Toast",
+    image: "assets/images/almond_toast.jpg",
+    calories: 350,
+    ingredients: ["Whole grain bread", "Almond Butter", "Banana slices"],
+    instructions: ["Toast bread", "Spread almond butter", "Add banana"],
+    diets: ["High-Protein", "Balanced"],
+    category: "Breakfast",
+  ),
+  Meal(
+    id: "17",
+    name: "Cottage Cheese & Berries",
+    image: "assets/images/cottage_berries.jpg",
+    calories: 300,
+    ingredients: ["Cottage cheese", "Mixed berries", "Honey (optional)"],
+    instructions: ["Mix all ingredients together"],
+    diets: ["High-Protein"],
+    category: "Snack",
+  ),
+];
