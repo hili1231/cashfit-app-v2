@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../auth/login_screen.dart';
 import '../data/user_data.dart';
 import '../theme.dart';
+import './settings_screen.dart';
+import '../screens/nav_screen.dart'; // ✅ Make sure this is correct path to your NavScreen
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -11,45 +15,39 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final Map<String, TextEditingController> controllers = {};
+  bool isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    controllers['name'] = TextEditingController(text: currentUser?.name ?? '');
-    controllers['email'] = TextEditingController(
-      text: currentUser?.email ?? '',
-    );
-    controllers['gender'] = TextEditingController(
-      text: currentUser?.gender ?? '',
-    );
-    controllers['age'] = TextEditingController(text: currentUser?.age ?? '');
-    controllers['height'] = TextEditingController(
-      text: currentUser?.height ?? '',
-    );
-    controllers['weight'] = TextEditingController(
-      text: currentUser?.weight ?? '',
-    );
-    controllers['activityLevel'] = TextEditingController(
-      text: currentUser?.activityLevel ?? '',
-    );
-    controllers['dietGoal'] = TextEditingController(
-      text: currentUser?.dietGoal ?? '',
-    );
-    controllers['dietPreference'] = TextEditingController(
-      text: currentUser?.dietPreference ?? '',
-    );
-    controllers['workoutGoal'] = TextEditingController(
-      text: currentUser?.workoutGoal ?? '',
-    );
-    controllers['experienceLevel'] = TextEditingController(
-      text: currentUser?.experienceLevel ?? '',
-    );
-    controllers['trainingStyle'] = TextEditingController(
-      text: currentUser?.trainingStyle ?? '',
-    );
-    controllers['workoutFrequency'] = TextEditingController(
-      text: currentUser?.workoutFrequency?.toString() ?? '',
-    );
+
+    if (!isLoggedIn) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+        );
+      });
+      return;
+    }
+
+    // Fetch latest user data
+    if (currentUser != null && currentUser!.id.isNotEmpty) {
+      loadUserFromFirestore(currentUser!.id).then((_) {
+        if (!mounted) return;
+        setState(() {
+          isLoading = false;
+          controllers['name'] = TextEditingController(
+            text: currentUser?.name ?? '',
+          );
+          controllers['email'] = TextEditingController(
+            text: currentUser?.email ?? '',
+          );
+        });
+      });
+    } else {
+      isLoading = false;
+    }
   }
 
   @override
@@ -60,54 +58,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
-  void _updateUser(String key, String value) {
-    setState(() {
-      switch (key) {
-        case 'name':
-          currentUser?.name = value;
-          break;
-        case 'email':
-          currentUser?.email = value;
-          break;
-        case 'gender':
-          currentUser?.gender = value;
-          break;
-        case 'age':
-          currentUser?.age = value;
-          break;
-        case 'height':
-          currentUser?.height = value;
-          break;
-        case 'weight':
-          currentUser?.weight = value;
-          break;
-        case 'activityLevel':
-          currentUser?.activityLevel = value;
-          break;
-        case 'dietGoal':
-          currentUser?.dietGoal = value;
-          break;
-        case 'dietPreference':
-          currentUser?.dietPreference = value;
-          break;
-        case 'workoutGoal':
-          currentUser?.workoutGoal = value;
-          break;
-        case 'experienceLevel':
-          currentUser?.experienceLevel = value;
-          break;
-        case 'trainingStyle':
-          currentUser?.trainingStyle = value;
-          break;
-        case 'workoutFrequency':
-          currentUser?.workoutFrequency = int.tryParse(value);
-          break;
-      }
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
+    if (!isLoggedIn || isLoading) {
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(child: CircularProgressIndicator(color: Colors.amber)),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Stack(
@@ -121,62 +80,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
                 child: SingleChildScrollView(
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       const SizedBox(height: 20),
-                      CircleAvatar(
-                        radius: 55,
-                        backgroundColor: Colors.amber,
-                        child: CircleAvatar(
-                          radius: 50,
-                          backgroundImage: AssetImage(
-                            currentUser?.avatar ?? '',
-                          ),
-                        ),
-                      ),
+                      _buildAvatar(),
                       const SizedBox(height: 20),
-                      ...controllers.entries
-                          .map(
-                            (entry) =>
-                                _buildEditableField(entry.key, entry.value),
-                          )
-                          ,
-                      const SizedBox(height: 20),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 12,
-                          horizontal: 20,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[900],
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            _buildStatBox(
-                              "Workouts",
-                              (currentUser?.workoutsCompleted ?? 0).toString(),
-                            ),
-                            _buildStatBox(
-                              "Meals",
-                              (currentUser?.mealsTracked ?? 0).toString(),
-                            ),
-                          ],
-                        ),
-                      ),
+                      _buildEditableField('name', controllers['name']!),
+                      _buildEditableField('email', controllers['email']!),
                       const SizedBox(height: 30),
+
                       _buildListTile(
                         icon: Icons.settings,
                         title: "Settings",
                         color: Colors.white70,
-                        onTap: () {},
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const SettingsScreen(),
+                            ),
+                          );
+                        },
                       ),
                       _buildListTile(
                         icon: Icons.logout,
                         title: "Logout",
                         color: Colors.red,
-                        onTap: () {},
+                        onTap: () async {
+                          await FirebaseAuth.instance.signOut();
+                          if (!mounted) return;
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const LoginScreen(),
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -184,13 +122,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
           ),
+
+          // ✅ Back button that always returns to NavScreen
           Positioned(
             top: 16,
             left: 16,
             child: SafeArea(
               child: InkWell(
                 borderRadius: BorderRadius.circular(50),
-                onTap: () => Navigator.of(context).maybePop(),
+                onTap: () {
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(builder: (_) => const NavScreen()),
+                    (route) => false,
+                  );
+                },
                 child: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: const BoxDecoration(
@@ -207,56 +153,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Widget _buildAvatar() {
+    final imageUrl = firebaseUser?.photoURL ?? currentUser?.avatar;
+
+    return CircleAvatar(
+      radius: 55,
+      backgroundColor: Colors.amber,
+      child: CircleAvatar(
+        radius: 50,
+        backgroundImage:
+            (imageUrl != null && imageUrl.isNotEmpty)
+                ? NetworkImage(imageUrl)
+                : const AssetImage('assets/images/default_avatar.png')
+                    as ImageProvider,
+        onBackgroundImageError: (_, __) {
+          // fallback silently if asset is missing
+        },
+      ),
+    );
+  }
+
   Widget _buildEditableField(String key, TextEditingController controller) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: TextField(
         controller: controller,
-        onChanged: (value) => _updateUser(key, value),
+        readOnly: true,
         style: const TextStyle(color: Colors.white70),
         decoration: InputDecoration(
-          labelText: _labelFromKey(key),
-          labelStyle: const TextStyle(color: Colors.white54),
+          labelText: key.toUpperCase(),
+          labelStyle: const TextStyle(color: Colors.white70),
           filled: true,
           fillColor: Colors.grey[850],
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Colors.grey),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Colors.amber),
-          ),
         ),
       ),
-    );
-  }
-
-  String _labelFromKey(String key) {
-    return key
-        .replaceAllMapped(RegExp(r'([a-z])([A-Z])'), (m) => '${m[1]} ${m[2]}')
-        .replaceAll('_', ' ')
-        .replaceFirst(key[0], key[0].toUpperCase());
-  }
-
-  Widget _buildStatBox(String label, String value) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            color: Colors.amber,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: const TextStyle(color: Colors.white70, fontSize: 14),
-        ),
-      ],
     );
   }
 

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/side_hustle.dart';
-import '../screens/side_hustle_detail_screen.dart';
+import '../screens/side_hustle/side_hustle_detail_screen.dart';
 
 class SideHustleCard extends StatelessWidget {
   final SideHustle hustle;

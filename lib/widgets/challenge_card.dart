@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/challenge.dart';
-import '../screens/challenge_detail_screen.dart';
+import '../screens/challenges/challenge_detail_screen.dart';
 import '../theme.dart';
 
 class ChallengeCard extends StatelessWidget {
@@ -23,9 +23,7 @@ class ChallengeCard extends StatelessWidget {
           );
         },
         borderRadius: BorderRadius.circular(12),
-        splashColor: AppTheme.gold.withOpacity(
-          0.2,
-        ), // Softer gold ripple effect
+        splashColor: Colors.amber,
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(

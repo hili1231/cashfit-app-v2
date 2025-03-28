@@ -36,14 +36,20 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
+
     Future.delayed(const Duration(milliseconds: 300), () {
-      setState(() => opacity = 1.0);
+      if (mounted) {
+        setState(() => opacity = 1.0);
+      }
     });
+
     Future.delayed(const Duration(seconds: 3), () {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const NavScreen()),
-      );
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const NavScreen()),
+        );
+      }
     });
   }
 
@@ -61,11 +67,13 @@ class _SplashScreenState extends State<SplashScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.fitness_center, size: 80, color: AppTheme.gold),
-                const SizedBox(height: 20),
-                Text("CashFit"),
-                const SizedBox(height: 20),
-                const CircularProgressIndicator(color: AppTheme.gold),
+                Image.asset(
+                  'assets/images/logo.png',
+                  height: 100, // 👈 adjust size as needed
+                  fit: BoxFit.contain,
+                ),
+                const SizedBox(height: 30),
+                const CircularProgressIndicator(color: Colors.amber),
               ],
             ),
           ),

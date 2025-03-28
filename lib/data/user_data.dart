@@ -1,32 +1,25 @@
-import '../models/user.dart';
+import 'package:firebase_auth/firebase_auth.dart' as fb;
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../models/app_user.dart';
 
-/// Holds the current logged-in user (null if not logged in)
-User? currentUser;
+/// Firebase auth instance
+final fb.FirebaseAuth auth = fb.FirebaseAuth.instance;
 
-/// Mock user data (used for development or prefill)
-final User mockUser = User(
-  id: "1",
-  name: "Jordan Lee",
-  email: "jordan.lee@example.com",
-  avatar: "assets/images/avatar.png",
-  workoutsCompleted: 42,
-  mealsTracked: 29,
+/// Global variable for the app's current user.
+AppUser? currentUser;
 
-  // Questionnaire mock data
-  gender: "Male",
-  age: "28",
-  height: "178",
-  weight: "75",
-  activityLevel: "Moderately Active",
-  dietGoal: "Build Muscle",
-  dietPreference: "Balanced",
-  workoutGoal: "Build Muscle",
-  experienceLevel: "Intermediate",
-  trainingStyle: "Gym",
-  availableEquipment: ["Dumbbells", "Resistance Bands", "Barbells"],
-  injuryHistory: ["Shoulder"],
-  workoutFrequency: 5,
-);
+/// Returns true if a user is currently signed in.
+bool get isLoggedIn => auth.currentUser != null;
 
-/// Returns true if a user is currently logged in
-bool get isLoggedIn => currentUser != null;
+/// Returns the current Firebase User.
+fb.User? get firebaseUser => auth.currentUser;
+
+/// Loads the extended user data from Firestore into [currentUser].
+Future<void> loadUserFromFirestore(String uid) async {
+  final snapshot =
+      await FirebaseFirestore.instance.collection('users').doc(uid).get();
+
+  if (snapshot.exists) {
+    currentUser = AppUser.fromMap(snapshot.data()!);
+  }
+}

@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   // 🎨 **Color Palette**
-  static const Color gold = Color(0xFFFFD700); // Gold color for highlights
+  static const Color gold = Colors.amber; // Gold color for highlights
   static const Color white70 = Color(0xB3FFFFFF); // White with 70% opacity
   static const Color darkBg = Colors.black; // Dark background color
   static const Color cardBg = Color(0xFF1A1A1A); // Card background color (dark)
@@ -106,7 +106,10 @@ class AppTheme {
   static ThemeData get theme {
     return ThemeData(
       scaffoldBackgroundColor: Colors.transparent, // Ensures the gradient shows
-      primaryColor: gold,
+      primaryColor: Colors.amber,
+      progressIndicatorTheme: const ProgressIndicatorThemeData(
+        color: Colors.amber, // ✅ fixes purple spinner
+      ),
       fontFamily: GoogleFonts.oswald().fontFamily,
       textTheme: GoogleFonts.oswaldTextTheme(
         TextTheme(

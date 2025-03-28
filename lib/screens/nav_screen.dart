@@ -3,10 +3,10 @@ import 'package:google_fonts/google_fonts.dart';
 import '../theme.dart';
 
 import 'home_screen.dart';
-import 'workouts_screen.dart';
-import 'challenges_screen.dart';
-import 'diet_selector_screen.dart';
-import 'side_hustle_screen.dart';
+import 'workouts/workouts_screen.dart';
+import 'challenges/challenges_screen.dart';
+import 'diets/diet_selector_screen.dart';
+import 'side_hustle/side_hustle_screen.dart';
 import 'profile_screen.dart';
 import '../auth/login_screen.dart'; // ✅ Add this import
 
@@ -94,7 +94,7 @@ class NavScreenState extends State<NavScreen> {
                         alignment: Alignment.center,
                         child: Image.asset(
                           "assets/images/logo.png",
-                          height: 85,
+                          height: 45,
                         ),
                       ),
                     ),

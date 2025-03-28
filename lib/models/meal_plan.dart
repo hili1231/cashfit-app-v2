@@ -4,43 +4,77 @@ import 'meal.dart';
 class MealPlan {
   final String id;
   final String planName;
-  final String description; // ✅ Added description
-  List<MealDay> days; // ✅ User can modify days
-  bool isCustom; // ✅ Tracks if user modified the plan
+  final String description;
+  final List<MealDay> days;
+  final String? userId; // null = global/public plan, otherwise custom
+  final String? type; // ✅ NEW: optional type/category
 
   MealPlan({
     required this.id,
     required this.planName,
-    required this.description, // ✅ New field
+    required this.description,
     required this.days,
-    this.isCustom = false,
+    this.userId,
+    this.type,
   });
 
-  /// ✅ Swap a meal inside the meal plan
-  void swapMeal(int dayIndex, String mealType, Meal newMeal) {
+  /// 🔁 Swap meal by type and day
+  void swapMeal(
+    int dayIndex,
+    String mealType,
+    Meal newMeal,
+    double portionMultiplier,
+  ) {
     if (dayIndex >= 0 && dayIndex < days.length) {
-      days[dayIndex].swapMeal(mealType, newMeal);
-      isCustom = true; // ✅ Mark plan as modified
+      days[dayIndex] = days[dayIndex].swapMeal(
+        mealType,
+        newMeal,
+        portionMultiplier,
+      );
     }
   }
 
-  /// ✅ Convert MealPlan to JSON for future database storage
+  /// 🧾 Serialize for Firestore
   Map<String, dynamic> toJson() => {
-    "id": id,
-    "planName": planName,
-    "description": description, // ✅ Include description
-    "isCustom": isCustom,
-    "days": days.map((day) => day.toJson()).toList(),
+    'id': id,
+    'planName': planName,
+    'description': description,
+    'userId': userId,
+    'type': type,
+    'days': days.map((day) => day.toJson()).toList(),
   };
 
-  /// ✅ Convert JSON back into a MealPlan object (for database retrieval)
+  /// 🔄 Deserialize from Firestore
   factory MealPlan.fromJson(Map<String, dynamic> json) {
     return MealPlan(
-      id: json["id"],
-      planName: json["planName"],
-      description: json["description"] ?? "", // ✅ Load description
-      isCustom: json["isCustom"] ?? false,
-      days: (json["days"] as List).map((day) => MealDay.fromJson(day)).toList(),
+      id: json['id'] ?? '',
+      planName: json['planName'] ?? '',
+      description: json['description'] ?? '',
+      userId: json['userId'],
+      type: json['type'],
+      days:
+          (json['days'] as List)
+              .map((dayJson) => MealDay.fromJson(dayJson))
+              .toList(),
+    );
+  }
+
+  /// 🪄 Clone with overrides
+  MealPlan copyWith({
+    String? id,
+    String? planName,
+    String? description,
+    List<MealDay>? days,
+    String? userId,
+    String? type,
+  }) {
+    return MealPlan(
+      id: id ?? this.id,
+      planName: planName ?? this.planName,
+      description: description ?? this.description,
+      days: days ?? this.days,
+      userId: userId ?? this.userId,
+      type: type ?? this.type,
     );
   }
 }

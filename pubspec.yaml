@@ -1,5 +1,5 @@
 name: cashfit
-description: "A new Flutter project."
+description: "Train and get paid."
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -14,11 +14,16 @@ dependencies:
   # Cupertino Icons for iOS-like icons
   cupertino_icons: ^1.0.8
   video_player: ^2.9.3
-  firebase_core: ^2.31.0
-  firebase_auth: ^4.19.0
-  cloud_firestore: ^4.17.3
-  firebase_storage: ^11.7.0
+  firebase_core: ^3.12.1
+  firebase_auth: ^5.5.1
+  cloud_firestore: ^5.6.5
+  firebase_storage: ^12.4.4
   shared_preferences: ^2.2.3
+  image_picker: ^1.1.2
+  path_provider: ^2.0.11
+  flutter_image_compress: ^2.4.0
+  http: ^1.3.0
+  uuid: ^4.3.3
 dev_dependencies:
   flutter_test:
     sdk: flutter

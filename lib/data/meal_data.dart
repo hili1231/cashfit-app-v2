@@ -1,197 +1,131 @@
+import 'package:cashfit/data/mock_ingredients.dart';
 import '../models/meal.dart';
+import '../models/meal_ingredient.dart';
 
-List<Meal> mealData = [
-  //
-  // 🥗 **Balanced Meals**
-  //
+final List<Meal> mealData = [
+  // 🍳 Breakfast
   Meal(
     id: "1",
     name: "Eggs and Avocado Toast",
     image: "assets/images/avocado_toast.jpg",
-    calories: 420,
-    ingredients: ["2 Large eggs", "1 Avocado", "2 Slices of whole grain bread"],
     instructions: ["Toast bread", "Mash avocado", "Fry eggs", "Place on toast"],
     diets: ["Balanced", "Mediterranean", "High-Protein"],
+    allergies: ["Eggs"],
     category: "Breakfast",
+    prepTime: 10,
+    video: null,
+    ingredients: [
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "egg"),
+        quantity: 2,
+      ),
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "avocado"),
+        quantity: 1,
+      ),
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere(
+          (i) => i.id == "whole_grain_bread",
+        ),
+        quantity: 2,
+      ),
+    ],
   ),
+
+  // 🍌 Snack
   Meal(
     id: "2",
-    name: "Smoothie Bowl",
-    image: "assets/images/smoothie_bowl.jpg",
-    calories: 350,
-    ingredients: ["1 Banana", "1/2 Cup Greek Yogurt", "1/2 Cup Berries"],
-    instructions: [
-      "Blend ingredients",
-      "Pour into bowl",
-      "Top with granola & fruit",
+    name: "Greek Yogurt with Banana",
+    image: "assets/images/yogurt_banana.jpg",
+    instructions: ["Scoop yogurt", "Slice banana", "Mix and serve"],
+    diets: ["Balanced", "High-Protein"],
+    allergies: [],
+    category: "Snack",
+    prepTime: 5,
+    video: null,
+    ingredients: [
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "greek_yogurt"),
+        quantity: 150,
+      ),
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "banana"),
+        quantity: 1,
+      ),
     ],
-    diets: ["Balanced", "Vegan", "High-Protein"],
-    category: "Breakfast",
   ),
+
+  // 🍗 Lunch
   Meal(
     id: "3",
-    name: "Chicken Salad",
-    image: "assets/images/chicken_salad.jpg",
-    calories: 600,
-    ingredients: ["Chicken breast", "Lettuce", "Tomato", "Olive oil"],
-    instructions: ["Grill chicken", "Chop veggies", "Toss with dressing"],
+    name: "Grilled Chicken with Sweet Potato",
+    image: "assets/images/grilled_chicken.jpg",
+    instructions: [
+      "Grill chicken breast",
+      "Boil sweet potato",
+      "Serve together",
+    ],
     diets: ["Balanced", "High-Protein"],
+    allergies: [],
     category: "Lunch",
+    prepTime: 20,
+    video: null,
+    ingredients: [
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "chicken_breast"),
+        quantity: 150,
+      ),
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "sweet_potato"),
+        quantity: 200,
+      ),
+    ],
   ),
+
+  // 🥜 Snack 2
   Meal(
     id: "4",
-    name: "Grilled Salmon",
-    image: "assets/images/grilled_salmon.jpg",
-    calories: 550,
-    ingredients: ["Salmon fillet", "Zucchini", "Bell peppers", "Olive oil"],
-    instructions: ["Season salmon", "Grill salmon & veggies"],
-    diets: ["Balanced", "Mediterranean", "High-Protein"],
-    category: "Dinner",
+    name: "Almond Snack Pack",
+    image: "assets/images/almond_snack.jpg",
+    instructions: ["Portion almonds into container", "Serve"],
+    diets: ["Balanced", "Keto"],
+    allergies: ["Nuts"],
+    category: "Snack",
+    prepTime: 2,
+    video: null,
+    ingredients: [
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "almonds"),
+        quantity: 30,
+      ),
+    ],
   ),
+
+  // 🍚 Dinner
   Meal(
     id: "5",
-    name: "Protein Bar",
-    image: "assets/images/protein_bar.jpg",
-    calories: 250,
-    ingredients: ["Protein Bar"],
-    instructions: ["Open and eat"],
-    diets: ["Balanced", "Vegan", "High-Protein"],
-    category: "Snack",
-  ),
-  Meal(
-    id: "6",
-    name: "Greek Salad",
-    image: "assets/images/greek_salad.jpg",
-    calories: 320,
-    ingredients: ["Tomato", "Cucumber", "Feta Cheese", "Olives"],
-    instructions: ["Chop veggies", "Add feta", "Drizzle with olive oil"],
-    diets: ["Mediterranean", "Balanced"],
-    category: "Lunch",
-  ),
-
-  //
-  // 🥑 **Keto Meals**
-  //
-  Meal(
-    id: "7",
-    name: "Steak & Broccoli",
-    image: "assets/images/steak_keto.jpg",
-    calories: 600,
-    ingredients: ["Steak", "Broccoli", "Butter"],
+    name: "Chicken, Rice and Broccoli",
+    image: "assets/images/chicken_rice_broccoli.jpg",
     instructions: [
-      "Season steak & grill",
+      "Grill chicken",
+      "Cook brown rice",
       "Steam broccoli",
-      "Serve with butter",
+      "Serve together",
     ],
-    diets: ["Keto", "Paleo", "High-Protein"],
+    diets: ["Balanced", "High-Protein"],
+    allergies: [],
     category: "Dinner",
-  ),
-  Meal(
-    id: "8",
-    name: "Zucchini Noodles",
-    image: "assets/images/zoodles_keto.jpg",
-    calories: 400,
-    ingredients: ["Zucchini spirals", "Olive oil", "Parmesan cheese"],
-    instructions: ["Sauté zucchini noodles", "Top with cheese"],
-    diets: ["Keto", "Paleo"],
-    category: "Lunch",
-  ),
-  Meal(
-    id: "9",
-    name: "Cheese Omelette",
-    image: "assets/images/cheese_omelette.jpg",
-    calories: 350,
-    ingredients: ["Eggs", "Cheese", "Butter"],
-    instructions: ["Beat eggs", "Cook in butter", "Fold with cheese"],
-    diets: ["Keto", "Paleo", "High-Protein"],
-    category: "Breakfast",
-  ),
-  Meal(
-    id: "10",
-    name: "Bacon & Avocado Salad",
-    image: "assets/images/bacon_avocado_salad.jpg",
-    calories: 480,
-    ingredients: ["Bacon", "Avocado", "Spinach", "Olive oil"],
-    instructions: ["Cook bacon", "Slice avocado", "Mix ingredients"],
-    diets: ["Keto", "Paleo"],
-    category: "Lunch",
-  ),
-
-  //
-  // 🌱 **Vegan Meals**
-  //
-  Meal(
-    id: "11",
-    name: "Tofu Scramble",
-    image: "assets/images/tofu_scramble.jpg",
-    calories: 300,
-    ingredients: ["Tofu", "Turmeric", "Peppers, Onions"],
-    instructions: ["Crumble tofu", "Sauté with veggies", "Add turmeric"],
-    diets: ["Vegan", "Mediterranean"],
-    category: "Breakfast",
-  ),
-  Meal(
-    id: "12",
-    name: "Vegan Veggie Soup",
-    image: "assets/images/vegan_soup.jpg",
-    calories: 250,
-    ingredients: ["Veggie broth", "Carrots", "Celery", "Beans"],
-    instructions: ["Simmer veggies", "Add beans"],
-    diets: ["Vegan", "Mediterranean"],
-    category: "Dinner",
-  ),
-  Meal(
-    id: "13",
-    name: "Lentil Stew",
-    image: "assets/images/lentil_stew.jpg",
-    calories: 400,
-    ingredients: ["Lentils", "Tomatoes", "Carrots", "Spices"],
-    instructions: ["Cook lentils", "Add vegetables & spices"],
-    diets: ["Vegan", "Mediterranean"],
-    category: "Lunch",
-  ),
-
-  //
-  // 💪 **High-Protein Meals**
-  //
-  Meal(
-    id: "14",
-    name: "Protein Smoothie",
-    image: "assets/images/protein_smoothie.jpg",
-    calories: 400,
-    ingredients: ["Protein Powder", "Banana", "Milk"],
-    instructions: ["Blend everything together", "Serve chilled"],
-    diets: ["High-Protein"],
-    category: "Breakfast",
-  ),
-  Meal(
-    id: "15",
-    name: "Steak with Brown Rice",
-    image: "assets/images/steak_rice.jpg",
-    calories: 650,
-    ingredients: ["Steak", "Brown Rice", "Green Beans"],
-    instructions: ["Grill steak", "Cook rice & beans"],
-    diets: ["High-Protein", "Balanced"],
-    category: "Dinner",
-  ),
-  Meal(
-    id: "16",
-    name: "Almond Butter Toast",
-    image: "assets/images/almond_toast.jpg",
-    calories: 350,
-    ingredients: ["Whole grain bread", "Almond Butter", "Banana slices"],
-    instructions: ["Toast bread", "Spread almond butter", "Add banana"],
-    diets: ["High-Protein", "Balanced"],
-    category: "Breakfast",
-  ),
-  Meal(
-    id: "17",
-    name: "Cottage Cheese & Berries",
-    image: "assets/images/cottage_berries.jpg",
-    calories: 300,
-    ingredients: ["Cottage cheese", "Mixed berries", "Honey (optional)"],
-    instructions: ["Mix all ingredients together"],
-    diets: ["High-Protein"],
-    category: "Snack",
+    prepTime: 25,
+    video: null,
+    ingredients: [
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "chicken_breast"),
+        quantity: 150,
+      ),
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "brown_rice"),
+        quantity: 100,
+      ),
+    ],
   ),
 ];

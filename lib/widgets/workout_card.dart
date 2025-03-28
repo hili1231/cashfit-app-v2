@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/workout_program.dart';
-import '../screens/workout_detail_screen.dart';
+import '../screens/workouts/workout_detail_screen.dart';
 import '../screens/nav_screen.dart';
 
 class WorkoutCard extends StatelessWidget {
@@ -77,14 +77,6 @@ class WorkoutCard extends StatelessWidget {
                         Icons.calendar_today,
                         size: 14,
                         color: Colors.white54,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        "${workout.days} days",
-                        style: GoogleFonts.oswald(
-                          color: Colors.white54,
-                          fontSize: 12,
-                        ),
                       ),
                       const SizedBox(width: 10),
                       Icon(

@@ -1,6 +1,7 @@
 import '../models/meal.dart';
 import '../models/meal_day.dart';
 import '../models/meal_plan.dart';
+import '../models/meal_portion.dart';
 import '../models/diet_category.dart';
 import '../data/meal_data.dart';
 
@@ -11,11 +12,14 @@ List<Meal> getMealsForDietAndType(String diet, String mealType) {
       .toList();
 }
 
-/// ✅ Generate a Meal Plan (Users Can Modify & Save)
+/// ✅ Default portion multiplier (can be customized per user later)
+const defaultPortion = 1.0;
+
+/// ✅ Generate a Meal Plan (with MealPortions)
 MealPlan generateMealPlan(
   String planId,
   String planName,
-  String description, // ✅ Add description parameter
+  String description,
   List<String> diets,
 ) {
   List<Meal> breakfastMeals = [];
@@ -23,7 +27,7 @@ MealPlan generateMealPlan(
   List<Meal> lunchMeals = [];
   List<Meal> dinnerMeals = [];
 
-  // ✅ Cycle through available diets and collect meals
+  // ✅ Collect meals from all provided diets
   for (var diet in diets) {
     breakfastMeals.addAll(getMealsForDietAndType(diet, "Breakfast"));
     snackMeals.addAll(getMealsForDietAndType(diet, "Snack"));
@@ -31,35 +35,54 @@ MealPlan generateMealPlan(
     dinnerMeals.addAll(getMealsForDietAndType(diet, "Dinner"));
   }
 
-  // ✅ Ensure we have at least 1 meal for each category
   if (breakfastMeals.isEmpty ||
       snackMeals.isEmpty ||
       lunchMeals.isEmpty ||
       dinnerMeals.isEmpty) {
-    throw Exception("Not enough meals for diet: $planName");
+    throw Exception("Not enough meals found for: $planName");
   }
 
+  // ✅ Generate 7 days of meals
   List<MealDay> mealDays = List.generate(7, (index) {
     return MealDay(
       dayNumber: index + 1,
-      breakfast: breakfastMeals[index % breakfastMeals.length],
-      snack1: snackMeals[index % snackMeals.length],
-      lunch: lunchMeals[index % lunchMeals.length],
-      snack2: snackMeals[(index + 1) % snackMeals.length],
-      dinner: dinnerMeals[index % dinnerMeals.length],
-      snack3: snackMeals[(index + 2) % snackMeals.length],
+      breakfast: MealPortion(
+        meal: breakfastMeals[index % breakfastMeals.length],
+        portionMultiplier: defaultPortion,
+      ),
+      snack1: MealPortion(
+        meal: snackMeals[index % snackMeals.length],
+        portionMultiplier: defaultPortion,
+      ),
+      lunch: MealPortion(
+        meal: lunchMeals[index % lunchMeals.length],
+        portionMultiplier: defaultPortion,
+      ),
+      snack2: MealPortion(
+        meal: snackMeals[(index + 1) % snackMeals.length],
+        portionMultiplier: defaultPortion,
+      ),
+      dinner: MealPortion(
+        meal: dinnerMeals[index % dinnerMeals.length],
+        portionMultiplier: defaultPortion,
+      ),
+      snack3: MealPortion(
+        meal: snackMeals[(index + 2) % snackMeals.length],
+        portionMultiplier: defaultPortion,
+      ),
     );
   });
 
   return MealPlan(
     id: planId,
     planName: planName,
-    description: description, // ✅ Assign description
+    description: description,
     days: mealDays,
+    userId: null, // ✅ null means it's a shared/default plan, not user-specific
   );
 }
 
-/// ✅ Sample Plans (Can Be Modified & Stored)
+/// ✅ Sample Meal Plans
 final MealPlan ketoPlan1 = generateMealPlan(
   "keto-plan-1",
   "Keto Plan A",
@@ -88,7 +111,7 @@ final MealPlan mediterraneanPlan = generateMealPlan(
   ["Mediterranean"],
 );
 
-/// ✅ Store Multiple Meal Plans
+/// ✅ Categorize all plans under their respective diets
 List<DietCategory> allDiets = [
   DietCategory(
     dietName: "Keto",
@@ -107,12 +130,12 @@ List<DietCategory> allDiets = [
   ),
 ];
 
-/// ✅ Convert MealPlan to JSON (For Database Storage)
+/// ✅ Serialize MealPlans for Firestore or local storage
 List<Map<String, dynamic>> mealPlansToJson(List<MealPlan> plans) {
   return plans.map((plan) => plan.toJson()).toList();
 }
 
-/// ✅ Convert JSON back to MealPlan (When Loading From Database)
+/// ✅ Deserialize MealPlans from Firestore or local storage
 List<MealPlan> mealPlansFromJson(List<Map<String, dynamic>> jsonList) {
   return jsonList.map((json) => MealPlan.fromJson(json)).toList();
 }
