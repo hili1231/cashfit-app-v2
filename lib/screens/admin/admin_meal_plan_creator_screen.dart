@@ -63,7 +63,7 @@ class _AdminCreateMealPlanScreenState extends State<AdminCreateMealPlanScreen> {
         .collection("mealPlans")
         .doc(plan.id)
         .set(plan.toJson());
-
+    if (!mounted) return;
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text("✅ Meal Plan Saved!")));
@@ -79,6 +79,7 @@ class _AdminCreateMealPlanScreenState extends State<AdminCreateMealPlanScreen> {
           .set(plan.toJson());
     }
 
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text("✅ Sample Meal Plans Uploaded!")),
     );

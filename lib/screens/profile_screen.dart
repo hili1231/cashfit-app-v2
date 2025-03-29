@@ -4,7 +4,7 @@ import '../auth/login_screen.dart';
 import '../data/user_data.dart';
 import '../theme.dart';
 import './settings_screen.dart';
-import '../screens/nav_screen.dart'; // ✅ Make sure this is correct path to your NavScreen
+import '../screens/nav_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -21,33 +21,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
 
-    if (!isLoggedIn) {
+    // ✅ If not logged in or currentUser is null or empty, redirect to login
+    if (!isLoggedIn || currentUser == null || currentUser?.id.isEmpty == true) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const LoginScreen()),
-        );
+        final navState = context.findAncestorStateOfType<NavScreenState>();
+        if (navState != null) {
+          navState.setDetailScreen(const LoginScreen());
+        } else {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const NavScreen()),
+          );
+        }
       });
       return;
     }
 
-    // Fetch latest user data
-    if (currentUser != null && currentUser!.id.isNotEmpty) {
-      loadUserFromFirestore(currentUser!.id).then((_) {
-        if (!mounted) return;
-        setState(() {
-          isLoading = false;
-          controllers['name'] = TextEditingController(
-            text: currentUser?.name ?? '',
-          );
-          controllers['email'] = TextEditingController(
-            text: currentUser?.email ?? '',
-          );
-        });
+    // ✅ Fetch latest user data from Firestore
+    loadUserFromFirestore(currentUser!.id).then((_) {
+      if (!mounted) return;
+      setState(() {
+        isLoading = false;
+        controllers['name'] = TextEditingController(
+          text: currentUser?.name ?? '',
+        );
+        controllers['email'] = TextEditingController(
+          text: currentUser?.email ?? '',
+        );
       });
-    } else {
-      isLoading = false;
-    }
+    });
   }
 
   @override
@@ -60,7 +63,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (!isLoggedIn || isLoading) {
+    if (!isLoggedIn || isLoading || currentUser == null) {
       return const Scaffold(
         backgroundColor: Colors.black,
         body: Center(child: CircularProgressIndicator(color: Colors.amber)),
@@ -87,18 +90,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       _buildEditableField('name', controllers['name']!),
                       _buildEditableField('email', controllers['email']!),
                       const SizedBox(height: 30),
-
                       _buildListTile(
                         icon: Icons.settings,
                         title: "Settings",
                         color: Colors.white70,
                         onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const SettingsScreen(),
-                            ),
-                          );
+                          final navState =
+                              context.findAncestorStateOfType<NavScreenState>();
+                          if (navState != null) {
+                            navState.setDetailScreen(const SettingsScreen());
+                          } else {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const SettingsScreen(),
+                              ),
+                            );
+                          }
                         },
                       ),
                       _buildListTile(
@@ -107,13 +115,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         color: Colors.red,
                         onTap: () async {
                           await FirebaseAuth.instance.signOut();
+
                           if (!mounted) return;
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const LoginScreen(),
-                            ),
-                          );
+
+                          final navState =
+                              // ignore: use_build_context_synchronously
+                              context.findAncestorStateOfType<NavScreenState>();
+                          if (navState != null) {
+                            navState.setDetailScreen(const LoginScreen());
+                          } else {
+                            Navigator.pushReplacement(
+                              // ignore: use_build_context_synchronously
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const NavScreen(),
+                              ),
+                            );
+                          }
                         },
                       ),
                     ],
@@ -123,7 +141,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
 
-          // ✅ Back button that always returns to NavScreen
+          // Back Button in ProfileScreen:
           Positioned(
             top: 16,
             left: 16,
@@ -131,10 +149,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: InkWell(
                 borderRadius: BorderRadius.circular(50),
                 onTap: () {
-                  Navigator.pushAndRemoveUntil(
+                  Navigator.pushReplacement(
                     context,
-                    MaterialPageRoute(builder: (_) => const NavScreen()),
-                    (route) => false,
+                    PageRouteBuilder(
+                      transitionDuration: const Duration(milliseconds: 300),
+                      pageBuilder: (_, __, ___) => const NavScreen(),
+                      transitionsBuilder: (_, animation, __, child) {
+                        return FadeTransition(opacity: animation, child: child);
+                      },
+                    ),
                   );
                 },
                 child: Container(
@@ -166,9 +189,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ? NetworkImage(imageUrl)
                 : const AssetImage('assets/images/default_avatar.png')
                     as ImageProvider,
-        onBackgroundImageError: (_, __) {
-          // fallback silently if asset is missing
-        },
+        onBackgroundImageError: (_, __) {},
       ),
     );
   }

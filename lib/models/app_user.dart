@@ -1,5 +1,5 @@
-import 'package:cashfit/models/active_diet_plan.dart';
-import 'package:cashfit/models/active_workout_plan.dart';
+import '../../models/active_diet_plan.dart';
+import '../../models/active_workout_plan.dart';
 
 class AppUser {
   final String id;

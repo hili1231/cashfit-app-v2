@@ -113,6 +113,7 @@ class _AdminUploadIngredientsScreenState
 
       setState(() => parsedIngredients = fetched);
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text("Search error: $e")));
@@ -147,15 +148,17 @@ class _AdminUploadIngredientsScreenState
         batch.set(docRef, ingredient.toJson());
       }
       await batch.commit();
+      if (!mounted) return; // ✅ Check before using context
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("✅ All ingredients uploaded!")),
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text("Upload failed: $e")));
     } finally {
-      setState(() => isLoading = false);
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
@@ -165,10 +168,12 @@ class _AdminUploadIngredientsScreenState
           .collection('ingredients')
           .doc(ingredient.id)
           .set(ingredient.toJson());
+      if (!mounted) return; // ✅
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("✅ '${ingredient.name}' uploaded.")),
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text("Upload failed: $e")));

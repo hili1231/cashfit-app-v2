@@ -246,10 +246,43 @@ class HomeScreen extends StatelessWidget {
   }
 
   Widget _buildViewAllMealPlansButton(BuildContext context) {
-    return _buildTabButton(
+    return _builAllMealButton(
       label: "View All Meal Plans",
       context: context,
       screen: const DietSelectorScreen(),
+    );
+  }
+
+  Widget _builAllMealButton({
+    required String label,
+    required BuildContext context,
+    required Widget screen,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () {
+        final navState = context.findAncestorStateOfType<NavScreenState>();
+        if (navState != null) {
+          navState.setDetailScreen(screen);
+        } else {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+        decoration: BoxDecoration(
+          color: const Color.fromARGB(255, 33, 33, 33),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.oswald(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: Colors.white70,
+          ),
+        ),
+      ),
     );
   }
 
@@ -272,7 +305,7 @@ class HomeScreen extends StatelessWidget {
 
   Widget _buildHorizontalList(List<Widget> items) {
     return SizedBox(
-      height: 230,
+      height: 200,
       child: ListView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.only(left: 16),
@@ -437,12 +470,10 @@ class HomeScreen extends StatelessWidget {
   /// CHALLENGES from Firestore
   Widget _buildChallengeList(BuildContext context) {
     return FutureBuilder<List<Challenge>>(
-      future: fetchChallengesFromFirestore(), // <--- changed
+      future: fetchChallengesFromFirestore(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
-        } else if (snapshot.hasError) {
-          return Center(child: Text("Error: ${snapshot.error}"));
         } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
           return const Center(child: Text("No challenges found"));
         }
@@ -463,10 +494,18 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  /// On tap => if user not logged in => login screen, else challenge detail
   Widget _buildChallengeCard(BuildContext context, Challenge challenge) {
+    final navState = context.findAncestorStateOfType<NavScreenState>();
+    final user = firebaseUser;
+
+    // Participants logic
+    final totalParticipants = challenge.participants.length;
+    final maxP = challenge.maxParticipants ?? 0;
+    final spotsLeft = maxP > 0 ? (maxP - totalParticipants) : 0;
+
     return Container(
       width: 160,
+      height: 220,
       margin: const EdgeInsets.only(right: 12),
       decoration: BoxDecoration(
         color: Colors.black,
@@ -474,10 +513,8 @@ class HomeScreen extends StatelessWidget {
       ),
       child: InkWell(
         onTap: () {
-          final navState = context.findAncestorStateOfType<NavScreenState>();
-
           // If user is not logged in => go to login
-          if (firebaseUser == null) {
+          if (user == null) {
             navState?.setDetailScreen(const LoginScreen());
             return;
           }
@@ -500,12 +537,12 @@ class HomeScreen extends StatelessWidget {
                   challenge.image.startsWith("http")
                       ? Image.network(
                         challenge.image,
-                        height: 100,
+                        height: 90,
                         width: double.infinity,
                         fit: BoxFit.cover,
                         errorBuilder:
                             (context, error, stackTrace) => Container(
-                              height: 100,
+                              height: 90,
                               color: Colors.black,
                               child: const Icon(
                                 Icons.broken_image,
@@ -515,12 +552,12 @@ class HomeScreen extends StatelessWidget {
                       )
                       : Image.asset(
                         challenge.image,
-                        height: 100,
+                        height: 90,
                         width: double.infinity,
                         fit: BoxFit.cover,
                         errorBuilder:
                             (context, error, stackTrace) => Container(
-                              height: 100,
+                              height: 90,
                               color: Colors.black,
                               child: const Icon(
                                 Icons.broken_image,
@@ -536,7 +573,7 @@ class HomeScreen extends StatelessWidget {
               child: Text(
                 challenge.name,
                 style: GoogleFonts.oswald(
-                  fontSize: 16,
+                  fontSize: 14,
                   fontWeight: FontWeight.bold,
                   color: Colors.white70,
                 ),
@@ -545,17 +582,48 @@ class HomeScreen extends StatelessWidget {
               ),
             ),
             const Spacer(),
-            // Participants
+
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               child: Row(
                 children: [
                   const Icon(Icons.people, color: Colors.amber, size: 16),
                   const SizedBox(width: 5),
+                  if (maxP > 0)
+                    Text(
+                      "$spotsLeft spots left",
+                      style: GoogleFonts.oswald(
+                        fontSize: 12,
+                        color: Colors.white70,
+                      ),
+                    )
+                  else
+                    Text(
+                      "$spotsLeft spots left",
+                      style: GoogleFonts.oswald(
+                        fontSize: 12,
+                        color: Colors.white70,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+
+            // Prize
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.monetization_on,
+                    color: Colors.amber,
+                    size: 12,
+                  ),
+                  const SizedBox(width: 5),
                   Text(
-                    "${challenge.participants} participants",
+                    "\$${challenge.prizeAmount.toInt()} prize",
                     style: GoogleFonts.oswald(
-                      fontSize: 16,
+                      fontSize: 12,
                       color: Colors.white70,
                     ),
                   ),
@@ -571,7 +639,7 @@ class HomeScreen extends StatelessWidget {
   /// SIDE HUSTLES from Firestore
   Widget _buildSideHustleList(BuildContext context) {
     return FutureBuilder<List<SideHustle>>(
-      future: fetchSideHustlesFromFirestore(), // <--- new
+      future: fetchSideHustlesFromFirestore(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -597,10 +665,17 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  /// On tap => if user not logged in => login, else side hustle detail
   Widget _buildSideHustleCard(BuildContext context, SideHustle hustle) {
+    final navState = context.findAncestorStateOfType<NavScreenState>();
+    final user = firebaseUser;
+
+    // Participants logic
+    final totalParticipants = hustle.participants.length;
+    final maxP = hustle.maxParticipants ?? 0;
+    final spotsLeft = maxP > 0 ? (maxP - totalParticipants) : 0;
     return Container(
       width: 160,
+      height: 220,
       margin: const EdgeInsets.only(right: 12),
       decoration: BoxDecoration(
         color: Colors.black,
@@ -608,17 +683,15 @@ class HomeScreen extends StatelessWidget {
       ),
       child: InkWell(
         onTap: () {
-          final navState = context.findAncestorStateOfType<NavScreenState>();
-
-          // If user not logged in => show login
-          if (firebaseUser == null) {
+          // If user not logged in => login
+          if (user == null) {
             navState?.setDetailScreen(const LoginScreen());
             return;
           }
-
-          // If user is logged in => hustle detail
+          // Otherwise => hustle detail
           navState?.setDetailScreen(SideHustleDetailScreen(hustle: hustle));
         },
+        borderRadius: BorderRadius.circular(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -630,12 +703,12 @@ class HomeScreen extends StatelessWidget {
               ),
               child: Image.network(
                 hustle.thumbnail,
-                height: 100,
+                height: 90,
                 width: double.infinity,
                 fit: BoxFit.cover,
                 errorBuilder:
                     (context, error, stackTrace) => Container(
-                      height: 100,
+                      height: 90,
                       color: Colors.black,
                       child: const Icon(
                         Icons.broken_image,
@@ -645,13 +718,12 @@ class HomeScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            // Title
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Text(
                 hustle.title,
                 style: GoogleFonts.oswald(
-                  fontSize: 16,
+                  fontSize: 14,
                   fontWeight: FontWeight.bold,
                   color: Colors.white70,
                 ),
@@ -660,7 +732,35 @@ class HomeScreen extends StatelessWidget {
               ),
             ),
             const Spacer(),
-            // Reward Info
+
+            // Spots left OR participant count
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              child: Row(
+                children: [
+                  const Icon(Icons.people, color: Colors.amber, size: 16),
+                  const SizedBox(width: 5),
+                  if (maxP > 0)
+                    Text(
+                      "$spotsLeft spots left",
+                      style: GoogleFonts.oswald(
+                        fontSize: 12,
+                        color: Colors.white70,
+                      ),
+                    )
+                  else
+                    Text(
+                      "$spotsLeft spots left",
+                      style: GoogleFonts.oswald(
+                        fontSize: 12,
+                        color: Colors.white70,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+
+            // Prize
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               child: Row(
@@ -668,13 +768,13 @@ class HomeScreen extends StatelessWidget {
                   const Icon(
                     Icons.monetization_on,
                     color: Colors.amber,
-                    size: 16,
+                    size: 12,
                   ),
                   const SizedBox(width: 5),
                   Text(
                     "\$${hustle.reward} prize",
                     style: GoogleFonts.oswald(
-                      fontSize: 16,
+                      fontSize: 12,
                       color: Colors.white70,
                     ),
                   ),

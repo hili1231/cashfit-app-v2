@@ -1,6 +1,6 @@
-import 'package:cashfit/auth/login_screen.dart';
-import 'package:cashfit/data/user_data.dart';
-import 'package:cashfit/screens/upgrade_to_premium_screen.dart';
+import '../../auth/login_screen.dart';
+import '../../data/user_data.dart';
+import '../../screens/upgrade_to_premium_screen.dart';
 import 'package:flutter/material.dart';
 import '../../data/side_hustle_data.dart';
 import '../../models/side_hustle.dart';
@@ -21,7 +21,7 @@ class SideHustleScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 🏷 Section Title
+              // Screen Title
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 20),
                 child: Center(
@@ -35,8 +35,7 @@ class SideHustleScreen extends StatelessWidget {
                   ),
                 ),
               ),
-
-              // 💼 Hustle List
+              // List of Hustles
               Expanded(
                 child: ListView.builder(
                   physics: const BouncingScrollPhysics(),
@@ -55,21 +54,32 @@ class SideHustleScreen extends StatelessWidget {
     );
   }
 
-  /// 📌 Hustle Card Widget
   Widget _buildHustleCard(BuildContext context, SideHustle hustle) {
+    final navState = context.findAncestorStateOfType<NavScreenState>();
+    final user = firebaseUser;
+
+    // Calculate participants/spots left
+    final totalParticipants = hustle.participants.length;
+    final maxP = hustle.maxParticipants ?? 0;
+    final spotsLeft = maxP > 0 ? (maxP - totalParticipants) : 0;
+
     return InkWell(
       onTap: () {
-        final navState = context.findAncestorStateOfType<NavScreenState>();
-
-        if (firebaseUser == null) {
+        // If not logged in => go to login
+        if (user == null) {
           navState?.setDetailScreen(const LoginScreen());
-        } else if (currentUser?.isPremium == true) {
-          navState?.setDetailScreen(SideHustleDetailScreen(hustle: hustle));
-        } else {
-          navState?.setDetailScreen(const UpgradeToPremierScreen());
+          return;
         }
-      },
 
+        // If logged in but not premium => upgrade screen
+        if (currentUser?.isPremium != true) {
+          navState?.setDetailScreen(const UpgradeToPremierScreen());
+          return;
+        }
+
+        // If premium => side hustle detail
+        navState?.setDetailScreen(SideHustleDetailScreen(hustle: hustle));
+      },
       child: Card(
         color: Colors.grey[900],
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
@@ -79,12 +89,14 @@ class SideHustleScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 🖼 Image
+            // Hustle Image
             ClipRRect(
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(15),
                 topRight: Radius.circular(15),
               ),
+              // If your sideHustleData thumbnails are local asset paths,
+              // you might want to use Image.asset, else Image.network:
               child: Image.asset(
                 hustle.thumbnail,
                 width: double.infinity,
@@ -98,7 +110,7 @@ class SideHustleScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 🧾 Title
+                  // Title
                   Text(
                     hustle.title,
                     style: AppTheme.headline.copyWith(
@@ -110,7 +122,7 @@ class SideHustleScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
 
-                  // 📝 Description
+                  // Description
                   Text(
                     hustle.description,
                     style: AppTheme.smallText.copyWith(color: Colors.white70),
@@ -119,18 +131,45 @@ class SideHustleScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
 
-                  // 💰 Reward & Navigation
+                  // Spots left or participants
+                  Row(
+                    children: [
+                      const Icon(Icons.people, color: Colors.amber, size: 16),
+                      const SizedBox(width: 5),
+                      if (maxP > 0)
+                        Text(
+                          "$spotsLeft spots left",
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 14,
+                          ),
+                        )
+                      else
+                        Text(
+                          "$spotsLeft spots left",
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 14,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+
+                  // Prize row + arrow
                   Row(
                     children: [
                       const Icon(
                         Icons.monetization_on,
                         color: Colors.amber,
-                        size: 20,
+                        size: 16,
                       ),
                       const SizedBox(width: 5),
                       Text(
-                        "Prize: \$${hustle.reward}",
-                        style: TextStyle(
+                        "\$${hustle.reward} prize",
+                        style: const TextStyle(
                           color: Colors.amber,
                           fontWeight: FontWeight.bold,
                           fontSize: 14,
@@ -160,7 +199,6 @@ class SideHustleScreen extends StatelessWidget {
     );
   }
 
-  /// 🧩 Placeholder Image
   Widget _buildPlaceholderImage() {
     return Container(
       height: 160,

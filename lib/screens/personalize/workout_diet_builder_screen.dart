@@ -1,4 +1,4 @@
-import 'package:cashfit/screens/nav_screen.dart';
+import '../../screens/nav_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../theme.dart';
@@ -127,6 +127,9 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
     }
 
     await prefs.setString('personalizedMealPlan', generatedMealPlan.planName);
+
+    // ✅ Check if the widget is still mounted before using context
+    if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -371,6 +374,8 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
           await _storeDataLocally();
           await generatePersonalizedPlans();
 
+          if (!mounted) return;
+
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -379,6 +384,7 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
           );
         }
       },
+
       child: const Text("Generate My Plan"),
     );
   }

@@ -1,11 +1,10 @@
-import 'package:cashfit/auth/register_screen.dart';
-import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 import '../auth/auth_service.dart';
 import '../theme.dart';
 import '../screens/nav_screen.dart';
-import '../data/user_service.dart'; // To load extended user info
-import '../data/user_data.dart'; // Make sure this file defines currentUser
+import '../auth/register_screen.dart';
+import '../data/user_data.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -37,11 +36,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
       // Load the extended AppUser from Firestore
       if (user != null) {
-        currentUser = await UserService.getUserById(user.uid);
+        currentUser = await auth.getAppUser(user.uid);
       }
 
       if (!mounted) return;
-
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const NavScreen()),
@@ -91,6 +89,7 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Form(
               key: _formKey,
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: 30),
                   // Email field
@@ -135,8 +134,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 30),
                   // Login button
                   ElevatedButton(
-                    onPressed: isLoading ? null : login,
                     style: AppTheme.buttonStyle,
+                    onPressed: isLoading ? null : login,
                     child:
                         isLoading
                             ? const SizedBox(
@@ -150,7 +149,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             : const Text("Login"),
                   ),
                   const SizedBox(height: 20),
-                  // Register link
+
                   TextButton(
                     onPressed: () {
                       final navState =

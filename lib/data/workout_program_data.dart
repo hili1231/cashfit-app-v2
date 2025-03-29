@@ -1,7 +1,8 @@
 import '../models/workout_program.dart';
 
+// Single example:
 final workoutProgramExample = WorkoutProgram(
-  id: '1', // Add an ID here for the example program (this can be any string or a unique identifier)
+  id: '5_day_muscle_gain_split',
   title: "5-Day Muscle Gain Split",
   image: "assets/images/muscle_gain_split.jpg",
   level: "Intermediate",
@@ -34,3 +35,7 @@ final workoutProgramExample = WorkoutProgram(
     ],
   },
 );
+
+// Make a list that includes this single example.
+// You can add more WorkoutProgram objects here if you like.
+final List<WorkoutProgram> workoutProgramSamples = [workoutProgramExample];

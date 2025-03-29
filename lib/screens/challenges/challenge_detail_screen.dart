@@ -1,12 +1,13 @@
-import 'package:cashfit/screens/challenges/challenges_screen.dart';
+import '../../screens/challenges/challenges_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../../models/challenge.dart';
+import '../../theme.dart';
+import '../../data/user_data.dart';
 import '../nav_screen.dart';
 import 'challenge_progress_screen.dart';
-import '../../theme.dart';
 import '../upgrade_to_premium_screen.dart';
-import '../../data/user_data.dart'; // Provides currentUser
+import '../../auth/login_screen.dart';
 
 class ChallengeDetailScreen extends StatefulWidget {
   final Challenge challenge;
@@ -24,47 +25,98 @@ class ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
   @override
   void initState() {
     super.initState();
+
     final String currentUserId = currentUser?.id ?? "";
-    isSignedUp = widget.challenge.progressVideos.containsKey(currentUserId);
+    isSignedUp =
+        widget.challenge.progressVideos.containsKey(currentUserId) ||
+        widget.challenge.participants.contains(currentUserId);
   }
 
   Future<void> _signUp() async {
-    setState(() {
-      isSigningUp = true;
-    });
+    // Double-check user is premium
+    final bool isPremium = currentUser?.isPremium ?? false;
+    if (!isPremium) {
+      // If user isn't premium, go to upgrade
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const UpgradeToPremierScreen()),
+        );
+      }
+      return;
+    }
+
+    setState(() => isSigningUp = true);
+    final String currentUserId = currentUser?.id ?? "";
+
     try {
+      // 1) Update challenge doc
       final challengeRef = FirebaseFirestore.instance
           .collection('challenges')
           .doc(widget.challenge.id);
-      // Create a copy of the progressVideos map.
-      Map<String, dynamic> updatedProgressVideos = Map<String, dynamic>.from(
+
+      final updatedProgressVideos = Map<String, dynamic>.from(
         widget.challenge.progressVideos,
       );
-      final String currentUserId = currentUser?.id ?? "";
       if (!updatedProgressVideos.containsKey(currentUserId)) {
         updatedProgressVideos[currentUserId] = [];
       }
-      await challengeRef.update({'progressVideos': updatedProgressVideos});
+
+      final updatedParticipants = List<String>.from(
+        widget.challenge.participants,
+      );
+      if (!updatedParticipants.contains(currentUserId)) {
+        updatedParticipants.add(currentUserId);
+      }
+
+      await challengeRef.update({
+        'progressVideos': updatedProgressVideos,
+        'participants': updatedParticipants,
+      });
+
+      // 2) Add challenge.id to user doc
+      if (!currentUser!.joinedChallenges.contains(widget.challenge.id)) {
+        currentUser!.joinedChallenges.add(widget.challenge.id);
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUserId)
+            .update({'joinedChallenges': currentUser!.joinedChallenges});
+      }
+
+      // 3) Update local model
+      widget.challenge.progressVideos[currentUserId] ??= [];
+      widget.challenge.participants.add(currentUserId);
+
       setState(() {
         isSignedUp = true;
       });
-      ScaffoldMessenger.of(
-        // ignore: use_build_context_synchronously
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Signed up successfully!")));
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Signed up successfully!")),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(
-        // ignore: use_build_context_synchronously
-        context,
-      ).showSnackBar(SnackBar(content: Text("Sign up failed: $e")));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Sign up failed: $e")));
+      }
     }
-    setState(() {
-      isSigningUp = false;
-    });
+
+    setState(() => isSigningUp = false);
   }
 
   @override
   Widget build(BuildContext context) {
+    // 1) Check if user is logged in at all
+    final user = firebaseUser;
+    if (user == null) {
+      // Not logged in => show or navigate to Login
+      return const _NotLoggedInView();
+    }
+
+    // 2) Now check premium
     final bool isPremium = currentUser?.isPremium ?? false;
     if (!isPremium) {
       return Scaffold(
@@ -94,6 +146,7 @@ class ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
       );
     }
 
+    // If user is logged in AND premium => show detail
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
@@ -104,7 +157,6 @@ class ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
         decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
         child: Stack(
           children: [
-            // Main scrollable content.
             SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -145,7 +197,7 @@ class ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
                       const Icon(Icons.people, color: Colors.white70, size: 20),
                       const SizedBox(width: 5),
                       Text(
-                        "${widget.challenge.participants} Participants",
+                        "${widget.challenge.participants.length} Participants",
                         style: AppTheme.goldText.copyWith(fontSize: 16),
                       ),
                     ],
@@ -169,7 +221,7 @@ class ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
                               ? null
                               : () {
                                 if (isSignedUp) {
-                                  // Navigate to progress view.
+                                  // View progress
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
@@ -196,7 +248,6 @@ class ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
                 ],
               ),
             ),
-            // Floating Back Button.
             Positioned(
               top: 16,
               left: 16,
@@ -207,7 +258,6 @@ class ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
                     final navState =
                         context.findAncestorStateOfType<NavScreenState>();
                     if (navState != null) {
-                      // Optionally, you might want to refresh the challenges list here.
                       navState.setDetailScreen(const ChallengesScreen());
                     } else {
                       Navigator.pop(context);
@@ -246,5 +296,29 @@ class ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
 
   Widget _buildSectionTitle(String title) {
     return Text(title, style: AppTheme.headline.copyWith(fontSize: 18));
+  }
+}
+
+/// A simple widget to show a login screen if user is not logged in
+/// You can do a direct `Navigator.pushReplacement` to login if you prefer
+class _NotLoggedInView extends StatelessWidget {
+  const _NotLoggedInView();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Center(
+        child: ElevatedButton(
+          onPressed: () {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const LoginScreen()),
+            );
+          },
+          child: const Text("Login to view Challenge"),
+        ),
+      ),
+    );
   }
 }

@@ -1,4 +1,4 @@
-import 'package:cashfit/models/workout_program.dart';
+import '../../models/workout_program.dart';
 import 'package:flutter/material.dart';
 import '../workouts/workout_detail_screen.dart';
 import '../../services/workout_plan_generator.dart';

@@ -1,4 +1,4 @@
-import 'package:cashfit/models/exercise.dart';
+import '../../models/exercise.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -18,7 +18,8 @@ class DayDetailScreen extends StatelessWidget {
     super.key,
     required this.dayNumber,
     required this.dayExerciseIds,
-    required this.workout, required List<String> dayExercises,
+    required this.workout,
+    required List<String> dayExercises,
   });
 
   Future<List<WorkoutExercise>> fetchWorkoutExercises() async {

@@ -1,26 +1,18 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/challenge.dart';
-import '../models/progress_video.dart';
 
+/// Updated local sample challenge data
+/// - No local `progressVideos` anymore
+/// - `participants`: an empty list of user IDs
+/// - `maxParticipants`: numeric limit
 final List<Challenge> challengeData = [
   Challenge(
-    id: "1",
+    id: "30_day_fitness_challenge_29032025",
     name: "30-Day Fitness Challenge",
     description:
         "A full-body challenge for 30 days to improve endurance and strength.",
-    participants: 150,
-    progressVideos: {
-      "user1": [
-        ProgressVideo(
-          url: "assets/videos/progress1.mp4",
-          uploadedAt: DateTime.now().subtract(const Duration(days: 3)),
-        ),
-        ProgressVideo(
-          url: "assets/videos/progress2.mp4",
-          uploadedAt: DateTime.now().subtract(const Duration(days: 2)),
-        ),
-      ],
-    },
+    participants: [],
+    maxParticipants: 150,
     instructions: [
       "Day 1: 10 push-ups, 20 squats, 30-second plank.",
       "Day 2: 15 push-ups, 25 squats, 40-second plank.",
@@ -29,46 +21,23 @@ final List<Challenge> challengeData = [
     ],
     image: "assets/images/dance_challenge.jpg",
     prizeAmount: 100,
-  ),
-  Challenge(
-    id: "2",
-    name: "Yoga Flexibility Challenge",
-    description:
-        "Improve flexibility and relaxation with this 21-day yoga program.",
-    participants: 95,
-    progressVideos: {
-      "user2": [
-        ProgressVideo(
-          url: "assets/videos/yoga1.mp4",
-          uploadedAt: DateTime.now().subtract(const Duration(days: 1)),
-        ),
-        ProgressVideo(
-          url: "assets/videos/yoga2.mp4",
-          uploadedAt: DateTime.now(),
-        ),
-      ],
-    },
-    instructions: [
-      "Day 1: 5-minute full-body stretch.",
-      "Day 2: 10-minute sun salutation.",
-      "Day 3: 15-minute deep breathing & relaxation.",
-      "Increase duration daily to improve flexibility!",
-    ],
-    image: "assets/images/dance_challenge.jpg",
-    prizeAmount: 100,
+    // We'll omit `progressVideos` from this local sample:
+    // progressVideos: {},
   ),
 ];
 
+/// Fetch challenges from Firestore, or fall back to [challengeData] if none are found.
 Future<List<Challenge>> fetchChallengeData() async {
   try {
-    QuerySnapshot snapshot =
+    final snapshot =
         await FirebaseFirestore.instance.collection('challenges').get();
 
-    List<Challenge> challenges =
+    // Parse each doc into a Challenge
+    final challenges =
         snapshot.docs.map((doc) {
-          final data = doc.data() as Map<String, dynamic>;
+          final data = doc.data();
 
-          // Ensure progressVideos is parsed correctly
+          // If you need to parse progressVideos from Firestore, you can do so here:
           final progressVideosRaw = Map<String, dynamic>.from(
             data['progressVideos'] ?? {},
           );
@@ -88,14 +57,17 @@ Future<List<Challenge>> fetchChallengeData() async {
             );
           });
 
+          // Merge the parsed progress videos back into the data
           return Challenge.fromMap({
             ...data,
             'progressVideos': parsedProgressVideos,
           });
         }).toList();
 
+    // If Firestore is empty, use the local fallback sample data
     return challenges.isEmpty ? challengeData : challenges;
   } catch (e) {
+    // On error, fall back to local sample data
     return challengeData;
   }
 }

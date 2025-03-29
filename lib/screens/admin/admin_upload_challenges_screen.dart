@@ -1,6 +1,3 @@
-// Full file with all UI fixes and proper dropdown handling
-// File: admin_upload_challenges_screen.dart
-
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -9,6 +6,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:intl/intl.dart'; // (NEW) for date formatting
 
 import '../../models/challenge.dart';
 import '../../data/challenge_data.dart';
@@ -31,8 +29,9 @@ class _AdminUploadChallengesScreenState
   final nameController = TextEditingController();
   final descController = TextEditingController();
   final instructionController = TextEditingController();
-  final participantsController = TextEditingController();
   final prizeAmountController = TextEditingController();
+
+  final maxParticipantsController = TextEditingController(); // (CHANGED)
 
   List<String> instructions = [];
 
@@ -48,19 +47,23 @@ class _AdminUploadChallengesScreenState
   }
 
   Future<void> _loadChallenges() async {
+    if (!mounted) return;
     setState(() => isLoading = true);
     try {
       final snapshot =
           await FirebaseFirestore.instance.collection('challenges').get();
       final List<Challenge> loaded =
           snapshot.docs.map((doc) => Challenge.fromMap(doc.data())).toList();
-      setState(() => _challenges = loaded);
+      if (mounted) {
+        setState(() => _challenges = loaded);
+      }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text("Failed to load challenges: $e")));
     }
-    setState(() => isLoading = false);
+    if (mounted) setState(() => isLoading = false);
   }
 
   void _onChallengeSelected(Challenge? challenge) {
@@ -69,8 +72,9 @@ class _AdminUploadChallengesScreenState
       if (challenge != null) {
         nameController.text = challenge.name;
         descController.text = challenge.description;
-        participantsController.text = challenge.participants.toString();
         prizeAmountController.text = challenge.prizeAmount.toString();
+        maxParticipantsController.text =
+            challenge.maxParticipants?.toString() ?? "";
         instructions = List.from(challenge.instructions);
         _currentImageUrl = challenge.image;
         _selectedImage = null;
@@ -86,6 +90,7 @@ class _AdminUploadChallengesScreenState
   }
 
   Future<Object?> _compressImage(File file) async {
+    // Skip compress if web or desktop
     if (kIsWeb || Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       return file;
     }
@@ -105,9 +110,22 @@ class _AdminUploadChallengesScreenState
     if (!_formKey.currentState!.validate()) return;
     setState(() => isLoading = true);
 
-    final String challengeId =
-        _selectedChallenge?.id ??
-        DateTime.now().millisecondsSinceEpoch.toString();
+    // (NEW) Build the doc ID
+    final String challengeId;
+    if (_selectedChallenge != null) {
+      // If editing, keep the existing doc ID
+      challengeId = _selectedChallenge!.id;
+    } else {
+      // If creating new, build ID from name + date
+      final formatter = DateFormat('yyyyMMdd_HHmmss');
+      final nowStr = formatter.format(DateTime.now());
+      final sanitizedName = nameController.text.trim().replaceAll(' ', '_');
+      challengeId = '${sanitizedName}_$nowStr';
+    }
+
+    // Keep existing participants if editing, else empty
+    final existingParticipants = _selectedChallenge?.participants ?? [];
+
     String imageUrl = _currentImageUrl ?? "default_url";
 
     if (_selectedImage != null) {
@@ -120,6 +138,7 @@ class _AdminUploadChallengesScreenState
         await ref.putFile(compressed as File);
         imageUrl = await ref.getDownloadURL();
       } catch (e) {
+        if (!mounted) return;
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text("Image upload failed: $e")));
@@ -128,22 +147,26 @@ class _AdminUploadChallengesScreenState
       }
     }
 
-    final updated = Challenge(
+    final parsedMaxParticipants = int.tryParse(maxParticipantsController.text);
+
+    final updatedChallenge = Challenge(
       id: challengeId,
       name: nameController.text,
       description: descController.text,
       image: imageUrl,
-      participants: int.tryParse(participantsController.text) ?? 0,
+      participants: existingParticipants,
       prizeAmount: double.tryParse(prizeAmountController.text) ?? 0.0,
       instructions: instructions,
       progressVideos: _selectedChallenge?.progressVideos ?? {},
+      maxParticipants: parsedMaxParticipants,
     );
 
     try {
       await FirebaseFirestore.instance
           .collection('challenges')
           .doc(challengeId)
-          .set(updated.toMap());
+          .set(updatedChallenge.toMap());
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -154,13 +177,15 @@ class _AdminUploadChallengesScreenState
         ),
       );
       _clearForm();
-      _loadChallenges();
+      await _loadChallenges();
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text("Save failed: $e")));
     }
-    setState(() => isLoading = false);
+
+    if (mounted) setState(() => isLoading = false);
   }
 
   Future<void> _deleteChallenge() async {
@@ -171,17 +196,19 @@ class _AdminUploadChallengesScreenState
           .collection('challenges')
           .doc(_selectedChallenge!.id)
           .delete();
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text("Challenge deleted!")));
       _clearForm();
-      _loadChallenges();
+      await _loadChallenges();
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text("Delete failed: $e")));
     }
-    setState(() => isLoading = false);
+    if (mounted) setState(() => isLoading = false);
   }
 
   Future<void> _uploadChallengesFromDataFile() async {
@@ -193,27 +220,30 @@ class _AdminUploadChallengesScreenState
             .doc(challenge.id)
             .set(challenge.toMap());
       }
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("✅ Challenges uploaded from data file!")),
       );
+      await _loadChallenges();
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text("Upload failed: $e")));
     }
-    setState(() => isLoading = false);
+    if (mounted) setState(() => isLoading = false);
   }
 
   void _clearForm() {
     _selectedChallenge = null;
     nameController.clear();
     descController.clear();
-    participantsController.clear();
     prizeAmountController.clear();
     instructionController.clear();
     instructions.clear();
     _selectedImage = null;
     _currentImageUrl = null;
+    maxParticipantsController.clear();
   }
 
   InputDecoration _input(String label) => InputDecoration(
@@ -249,19 +279,16 @@ class _AdminUploadChallengesScreenState
         Wrap(
           spacing: 8,
           children:
-              instructions
-                  .map(
-                    (text) => Chip(
-                      label: Text(
-                        text,
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                      backgroundColor: Colors.grey[800],
-                      onDeleted:
-                          () => setState(() => instructions.remove(text)),
-                    ),
-                  )
-                  .toList(),
+              instructions.map((text) {
+                return Chip(
+                  label: Text(
+                    text,
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  backgroundColor: Colors.grey[800],
+                  onDeleted: () => setState(() => instructions.remove(text)),
+                );
+              }).toList(),
         ),
       ],
     );
@@ -309,6 +336,8 @@ class _AdminUploadChallengesScreenState
                         onChanged: (val) => _onChallengeSelected(val),
                       ),
                       const SizedBox(height: 16),
+
+                      // Name
                       TextFormField(
                         controller: nameController,
                         style: const TextStyle(color: Colors.white),
@@ -317,6 +346,8 @@ class _AdminUploadChallengesScreenState
                             (v) => v == null || v.isEmpty ? "Required" : null,
                       ),
                       const SizedBox(height: 12),
+
+                      // Description
                       TextFormField(
                         controller: descController,
                         style: const TextStyle(color: Colors.white),
@@ -324,20 +355,25 @@ class _AdminUploadChallengesScreenState
                         decoration: _input("Description"),
                       ),
                       const SizedBox(height: 12),
-                      TextFormField(
-                        controller: participantsController,
-                        style: const TextStyle(color: Colors.white),
-                        keyboardType: TextInputType.number,
-                        decoration: _input("Participants"),
-                      ),
-                      const SizedBox(height: 12),
+
+                      // Prize
                       TextFormField(
                         controller: prizeAmountController,
                         style: const TextStyle(color: Colors.white),
                         keyboardType: TextInputType.number,
                         decoration: _input("Prize Amount"),
                       ),
+                      const SizedBox(height: 12),
+
+                      // Max Participants
+                      TextFormField(
+                        controller: maxParticipantsController,
+                        style: const TextStyle(color: Colors.white),
+                        keyboardType: TextInputType.number,
+                        decoration: _input("Max Participants (optional)"),
+                      ),
                       const SizedBox(height: 16),
+
                       const Text(
                         "Challenge Image",
                         style: TextStyle(color: Colors.white70),
@@ -359,8 +395,12 @@ class _AdminUploadChallengesScreenState
                             ),
                           ),
                       const SizedBox(height: 16),
+
+                      // Instructions dynamic field
                       _buildDynamicField(),
                       const SizedBox(height: 24),
+
+                      // Save button
                       ElevatedButton(
                         onPressed: _saveChallenge,
                         style: ElevatedButton.styleFrom(
@@ -373,6 +413,8 @@ class _AdminUploadChallengesScreenState
                         ),
                       ),
                       const SizedBox(height: 12),
+
+                      // Delete button (only if we have a selected challenge)
                       if (_selectedChallenge != null)
                         ElevatedButton(
                           onPressed: _deleteChallenge,
@@ -382,6 +424,8 @@ class _AdminUploadChallengesScreenState
                           child: const Text("Delete Challenge"),
                         ),
                       const SizedBox(height: 12),
+
+                      // Upload from data file
                       ElevatedButton(
                         onPressed: _uploadChallengesFromDataFile,
                         child: const Text("Upload Challenges from Data File"),

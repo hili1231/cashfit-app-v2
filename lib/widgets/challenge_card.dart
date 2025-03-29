@@ -40,7 +40,7 @@ class ChallengeCard extends StatelessWidget {
                 Text(
                   challenge.name,
                   style: GoogleFonts.oswald(
-                    fontSize: 18,
+                    fontSize: 14,
                     fontWeight: FontWeight.bold,
                     color: AppTheme.gold,
                   ),
@@ -66,7 +66,7 @@ class ChallengeCard extends StatelessWidget {
                       style: GoogleFonts.oswald(fontSize: 14),
                     ),
                     const Spacer(),
-                    const Icon(Icons.arrow_forward_ios, size: 18),
+                    const Icon(Icons.arrow_forward_ios, size: 14),
                   ],
                 ),
               ],

@@ -1,4 +1,4 @@
-import 'package:cashfit/models/progress_video.dart';
+import '../../models/progress_video.dart';
 
 class SideHustle {
   final String id;

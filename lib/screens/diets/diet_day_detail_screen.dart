@@ -79,6 +79,8 @@ class _DietDayDetailScreenState extends State<DietDayDetailScreen> {
               icon: const Icon(Icons.save_alt),
               onPressed: () async {
                 final user = FirebaseAuth.instance.currentUser;
+                if (!mounted) return;
+
                 if (user == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -102,6 +104,8 @@ class _DietDayDetailScreenState extends State<DietDayDetailScreen> {
                     .set(customPlan.toJson());
 
                 if (!mounted) return;
+
+                // ignore: use_build_context_synchronously
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text("✅ Custom meal plan saved!")),
                 );
@@ -304,7 +308,7 @@ class _DietDayDetailScreenState extends State<DietDayDetailScreen> {
   //    ),
   //  );
   //}
-//
+  //
   //Widget _buildReplacementModal(BuildContext context, List<Meal> options) {
   //  return ListView.builder(
   //    itemCount: options.length,

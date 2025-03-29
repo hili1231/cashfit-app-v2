@@ -1,11 +1,14 @@
-import 'package:cashfit/models/donation.dart';
-import 'package:cashfit/models/progress_video.dart';
+import '../../models/donation.dart';
+import '../../models/progress_video.dart';
 
 class Challenge {
   final String id;
   final String name;
   final String description;
-  final int participants;
+
+  // Instead of storing just an int, store the actual user IDs
+  final List<String> participants;
+
   final Map<String, List<ProgressVideo>> progressVideos;
   final List<String> instructions;
   final String image;
@@ -13,19 +16,23 @@ class Challenge {
   final List<String> winners;
   final List<Donation> donations;
   final double prizeAmount;
+  final int? maxParticipants; // Optional if you want to limit participants
 
   Challenge({
     required this.id,
     required this.name,
     required this.description,
-    required this.participants,
-    required this.progressVideos,
-    required this.instructions,
-    required this.image,
+    // CHANGED: store user IDs
+    this.participants = const [],
+
+    this.progressVideos = const {},
+    this.instructions = const [],
+    this.image = '',
     this.endDate,
     this.winners = const [],
     this.donations = const [],
     required this.prizeAmount,
+    this.maxParticipants,
   });
 
   Map<String, dynamic> toMap() {
@@ -33,7 +40,9 @@ class Challenge {
       'id': id,
       'name': name,
       'description': description,
+      // store participant user IDs in Firestore
       'participants': participants,
+
       'progressVideos': progressVideos.map(
         (userId, videos) =>
             MapEntry(userId, videos.map((v) => v.toMap()).toList()),
@@ -44,6 +53,9 @@ class Challenge {
       'winners': winners,
       'donations': donations.map((d) => d.toMap()).toList(),
       'prizeAmount': prizeAmount,
+
+      // Only include if you use it
+      'maxParticipants': maxParticipants,
     };
   }
 
@@ -52,7 +64,10 @@ class Challenge {
       id: map['id'] ?? '',
       name: map['name'] ?? '',
       description: map['description'] ?? '',
-      participants: map['participants'] ?? 0,
+
+      // CHANGED: read participants as List<String>
+      participants: List<String>.from(map['participants'] ?? []),
+
       progressVideos:
           (map['progressVideos'] as Map<String, dynamic>?)?.map(
             (userId, videoList) => MapEntry(
@@ -74,6 +89,9 @@ class Challenge {
               .toList() ??
           [],
       prizeAmount: (map['prizeAmount'] as num?)?.toDouble() ?? 0.0,
+
+      // Only include if you use it
+      maxParticipants: map['maxParticipants'],
     );
   }
 }

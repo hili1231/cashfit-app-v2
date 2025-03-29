@@ -11,121 +11,119 @@ class WorkoutCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent, // Ensures ripple effect works correctly
+    // Calculate how many days are in this workout
+    final totalDays = workout.days.length;
+
+    return Container(
+      width: 160,
+      height: 200,
+      margin: const EdgeInsets.only(right: 12),
+      decoration: BoxDecoration(
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: InkWell(
         onTap: () {
-          // Use NavScreenState for correct navigation
           final navState = context.findAncestorStateOfType<NavScreenState>();
           if (navState != null) {
             navState.setDetailScreen(WorkoutDetailScreen(workout: workout));
           } else {
-            // Fallback to normal push if navState is not found
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => WorkoutDetailScreen(workout: workout),
+                builder: (_) => WorkoutDetailScreen(workout: workout),
               ),
             );
           }
         },
         borderRadius: BorderRadius.circular(12),
-        splashColor: Colors.transparent, // Remove splash effect
-        highlightColor: Colors.transparent, // Remove highlight effect
-        child: Card(
-          color: Colors.black, // Matches Dark Theme
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          elevation: 4, // Softer depth
-          shadowColor: Colors.white70.withAlpha(10),
-          child: SizedBox(
-            width: 180,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Workout Image
-                ClipRRect(
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(12),
-                  ),
-                  child: _buildWorkoutImage(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Image
+            ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(12),
+                topRight: Radius.circular(12),
+              ),
+              child: _buildWorkoutImage(),
+            ),
+            const SizedBox(height: 8),
+
+            // Title
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Text(
+                workout.title,
+                style: GoogleFonts.oswald(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white70,
                 ),
-                // Workout Title
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  child: Text(
-                    workout.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const Spacer(),
+
+            // "X days" row
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              child: Row(
+                children: [
+                  const Icon(Icons.people, color: Colors.amber, size: 16),
+                  const SizedBox(width: 5),
+                  Text(
+                    "$totalDays days",
                     style: GoogleFonts.oswald(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
                       color: Colors.white70,
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-                // Days & Level
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.calendar_today,
-                        size: 14,
-                        color: Colors.white54,
-                      ),
-                      const SizedBox(width: 10),
-                      Icon(
-                        Icons.fitness_center,
-                        size: 14,
-                        color: Colors.white54,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        workout.level,
-                        style: GoogleFonts.oswald(
-                          color: Colors.white54,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 10),
-              ],
+                ],
+              ),
             ),
-          ),
+
+            // Level row
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.fitness_center,
+                    color: Colors.amber,
+                    size: 12,
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    workout.level,
+                    style: GoogleFonts.oswald(
+                      fontSize: 12,
+                      color: Colors.white70,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  /// Workout Image with fallback
   Widget _buildWorkoutImage() {
     return Image.asset(
       workout.image,
+      height: 90,
+      width: double.infinity,
       fit: BoxFit.cover,
-      width: 180,
-      height: 110,
-      errorBuilder: (_, __, ___) => _buildPlaceholderImage(),
-    );
-  }
-
-  /// Placeholder image if an image fails to load
-  Widget _buildPlaceholderImage() {
-    return Container(
-      width: 180,
-      height: 110,
-      decoration: BoxDecoration(
-        color: Colors.grey[850],
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-      ),
-      alignment: Alignment.center,
-      child: const Icon(Icons.fitness_center, size: 40, color: Colors.grey),
+      errorBuilder:
+          (_, __, ___) => Container(
+            height: 90,
+            color: Colors.black,
+            alignment: Alignment.center,
+            child: const Icon(Icons.broken_image, color: Colors.white70),
+          ),
     );
   }
 }

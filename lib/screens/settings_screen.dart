@@ -52,17 +52,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // Profile Option
-            ListTile(
-              leading: const Icon(Icons.person, color: Colors.white70),
-              title: const Text(
-                "Profile",
-                style: TextStyle(color: Colors.white70, fontSize: 16),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-              },
-            ),
             const Divider(color: Colors.white38),
 
             // ✅ Admin Panel (safe with loaded currentUser)

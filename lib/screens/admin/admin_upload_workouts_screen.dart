@@ -1,5 +1,4 @@
 import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -21,6 +20,8 @@ class AdminExerciseManagementScreenState
   final FirebaseStorage storage = FirebaseStorage.instance;
 
   List<Exercise> exercises = [];
+  List<Exercise> filteredExercises = []; // <--- New: for search filtering
+
   String? selectedExerciseId;
   String? imageUrl, videoUrl, category;
 
@@ -29,12 +30,13 @@ class AdminExerciseManagementScreenState
 
   final nameController = TextEditingController();
   final instructionsController = TextEditingController();
+  final TextEditingController searchController = TextEditingController();
 
   final List<String> allCategories = [
-    'Strength',
+    'Gym',
+    'Bodyweight',
     'Cardio',
-    'Flexibility',
-    'Mobility',
+    'dumbbells',
     'Rest',
   ];
 
@@ -42,14 +44,18 @@ class AdminExerciseManagementScreenState
     'Upper Chest',
     'Middle Chest',
     'Lower Chest',
+    'Chest',
     'Upper Back',
     'Middle Back',
     'Lower Back',
+    'Back,',
     'Lats',
     'Front Delt',
     'Side Delt',
     'Rear Delt',
+    'Shoulders',
     'Rotator Cuff',
+    'Arms',
     'Short Head Biceps',
     'Long Head Biceps',
     'Forearm Flexors',
@@ -62,6 +68,7 @@ class AdminExerciseManagementScreenState
     'Obliques',
     'Glutes',
     'Outer Quad',
+    'Legs',
     'Inner Quad',
     'Hamstring Long Head',
     'Hamstring Short Head',
@@ -87,6 +94,15 @@ class AdminExerciseManagementScreenState
   void initState() {
     super.initState();
     loadExercises();
+    // Whenever the search field changes, we’ll update the filtered list
+    searchController.addListener(_updateFilteredExercises);
+  }
+
+  @override
+  void dispose() {
+    searchController.removeListener(_updateFilteredExercises);
+    searchController.dispose();
+    super.dispose();
   }
 
   Future<void> loadExercises() async {
@@ -95,6 +111,36 @@ class AdminExerciseManagementScreenState
     setState(() {
       exercises =
           snapshot.docs.map((doc) => Exercise.fromMap(doc.data())).toList();
+      // By default, filtered list = full list
+      filteredExercises = [...exercises];
+    });
+  }
+
+  // <--- Called whenever user types in search box
+  void _updateFilteredExercises() {
+    final query = searchController.text.trim().toLowerCase();
+    setState(() {
+      if (query.isEmpty) {
+        // No search? Show all
+        filteredExercises = exercises;
+      } else {
+        // Filter by name containing the query
+        filteredExercises =
+            exercises.where((ex) {
+              return ex.name.toLowerCase().contains(query);
+            }).toList();
+      }
+
+      // If the currently selected exercise is no longer in the filtered list,
+      // we can clear it or keep it as-is
+      if (selectedExerciseId != null) {
+        final stillExists = filteredExercises.any(
+          (e) => e.id == selectedExerciseId,
+        );
+        if (!stillExists) {
+          selectedExerciseId = null;
+        }
+      }
     });
   }
 
@@ -134,6 +180,9 @@ class AdminExerciseManagementScreenState
     if (exerciseId == null) {
       final existing =
           await firestore.collection('exercises').doc(normalizedId).get();
+
+      if (!mounted) return; // ✅ Ensure context is still valid
+
       if (existing.exists) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -167,6 +216,7 @@ class AdminExerciseManagementScreenState
       injuryRisks = [];
       imageUrl = null;
     });
+    if (!mounted) return; // ✅ Safe use of context
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Exercise saved successfully!')),
@@ -178,6 +228,7 @@ class AdminExerciseManagementScreenState
     if (!mounted) return;
     setState(() {
       exercises.removeWhere((exercise) => exercise.id == exerciseId);
+      filteredExercises.removeWhere((exercise) => exercise.id == exerciseId);
       selectedExerciseId = null;
     });
     ScaffoldMessenger.of(context).showSnackBar(
@@ -191,6 +242,7 @@ class AdminExerciseManagementScreenState
     }
     if (!mounted) return;
     await loadExercises();
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Exercises uploaded from local data')),
     );
@@ -264,10 +316,7 @@ class AdminExerciseManagementScreenState
               decoration: const InputDecoration(labelText: 'Instructions *'),
             ),
             DropdownButtonFormField<String>(
-              value:
-                  allCategories.contains(category)
-                      ? category
-                      : null, // ✅ Safe check
+              value: allCategories.contains(category) ? category : null,
               items:
                   allCategories
                       .map(
@@ -296,20 +345,34 @@ class AdminExerciseManagementScreenState
               onPressed: () async => await createOrEditExercise(),
               child: const Text('Save New Exercise'),
             ),
-            const Divider(height: 40),
 
+            const Divider(height: 40),
             const Text(
               'Edit Existing Exercise',
               style: TextStyle(fontSize: 20),
             ),
+
+            // <--- New: Search box to filter the dropdown
+            TextField(
+              controller: searchController,
+              decoration: const InputDecoration(
+                labelText: 'Search Exercises',
+                suffixIcon: Icon(Icons.search),
+              ),
+            ),
+            const SizedBox(height: 10),
+
             DropdownButton<String>(
               hint: const Text("Select Exercise to Edit"),
               value: selectedExerciseId,
+              isExpanded: true, // Let it expand horizontally
               onChanged: (newValue) {
                 setState(() {
                   selectedExerciseId = newValue;
                   if (newValue != null) {
-                    final ex = exercises.firstWhere((e) => e.id == newValue);
+                    final ex = filteredExercises.firstWhere(
+                      (e) => e.id == newValue,
+                    );
                     nameController.text = ex.name;
                     instructionsController.text = ex.instructions;
                     imageUrl = ex.image;
@@ -321,7 +384,7 @@ class AdminExerciseManagementScreenState
                 });
               },
               items:
-                  exercises.map((e) {
+                  filteredExercises.map((e) {
                     return DropdownMenuItem<String>(
                       value: e.id,
                       child: Text(e.name),

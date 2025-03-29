@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+
 import '../../models/exercise.dart';
 import '../../models/workout_exercise.dart';
 import '../../data/workout_exercise_data.dart';
@@ -20,9 +21,11 @@ class _AdminWorkoutExerciseManagementScreenState
 
   List<Exercise> exercises = [];
   List<WorkoutExercise> workoutExercises = [];
+
   String? selectedWorkoutExerciseId;
   String? selectedExerciseId;
-  int? sets, reps;
+  int? sets;
+  String? reps;
 
   final TextEditingController setsController = TextEditingController();
   final TextEditingController repsController = TextEditingController();
@@ -56,14 +59,13 @@ class _AdminWorkoutExerciseManagementScreenState
     String? workoutExerciseId,
     required String exerciseId,
     required int sets,
-    required int reps,
+    required String reps,
   }) async {
     final exercise = exercises.firstWhere((e) => e.id == exerciseId);
     final sanitizedExerciseName =
         exercise.name.replaceAll(' ', '_').toLowerCase();
     final id =
-        workoutExerciseId ??
-        '${sanitizedExerciseName}_sets_${sets}_reps_$reps';
+        workoutExerciseId ?? '${sanitizedExerciseName}_sets_${sets}_reps_$reps';
 
     await firestore.collection('workoutExercises').doc(id).set({
       'exerciseId': exerciseId,
@@ -72,6 +74,7 @@ class _AdminWorkoutExerciseManagementScreenState
     });
 
     await loadWorkoutExercises();
+    if (!mounted) return;
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('✅ Workout Exercise saved!')));
@@ -85,6 +88,8 @@ class _AdminWorkoutExerciseManagementScreenState
     setState(() {
       workoutExercises.removeWhere((we) => we.id == workoutExerciseId);
     });
+
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('🗑️ Workout Exercise deleted!')),
     );
@@ -98,6 +103,8 @@ class _AdminWorkoutExerciseManagementScreenState
           .set(workoutEx.toMap());
     }
     await loadWorkoutExercises();
+
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('📦 Local Workout Exercises Uploaded!')),
     );
@@ -124,6 +131,7 @@ class _AdminWorkoutExerciseManagementScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ➕ Add New Workout Exercise
             const Text(
               "➕ Add New Workout Exercise",
               style: TextStyle(
@@ -133,21 +141,22 @@ class _AdminWorkoutExerciseManagementScreenState
               ),
             ),
             const SizedBox(height: 16),
+            // 1) Dropdown for exercise selection
             DropdownButtonFormField<String>(
               value: selectedExerciseId,
+              isExpanded: true,
               dropdownColor: Colors.grey[900],
               style: const TextStyle(color: Colors.white),
               decoration: _inputDecoration("Select Exercise"),
               items:
-                  exercises
-                      .map(
-                        (e) =>
-                            DropdownMenuItem(value: e.id, child: Text(e.name)),
-                      )
-                      .toList(),
+                  exercises.map((e) {
+                    return DropdownMenuItem(value: e.id, child: Text(e.name));
+                  }).toList(),
               onChanged: (val) => setState(() => selectedExerciseId = val),
             ),
             const SizedBox(height: 12),
+
+            // Sets
             TextField(
               decoration: _inputDecoration('Sets'),
               keyboardType: TextInputType.number,
@@ -155,18 +164,23 @@ class _AdminWorkoutExerciseManagementScreenState
               onChanged: (val) => sets = int.tryParse(val),
             ),
             const SizedBox(height: 12),
+
+            // Reps (as a string)
             TextField(
               decoration: _inputDecoration('Reps'),
-              keyboardType: TextInputType.number,
+              keyboardType: TextInputType.text,
               style: const TextStyle(color: Colors.white),
-              onChanged: (val) => reps = int.tryParse(val),
+              onChanged: (val) => reps = val.trim(),
             ),
             const SizedBox(height: 16),
+
+            // Create button
             ElevatedButton(
               onPressed: () async {
                 if (selectedExerciseId != null &&
                     sets != null &&
-                    reps != null) {
+                    reps != null &&
+                    reps!.isNotEmpty) {
                   await createOrEditWorkoutExercise(
                     exerciseId: selectedExerciseId!,
                     sets: sets!,
@@ -180,7 +194,11 @@ class _AdminWorkoutExerciseManagementScreenState
               ),
               child: const Text('💾 Save Workout Exercise'),
             ),
+
+            // Divider
             const Divider(height: 40, color: Colors.white30),
+
+            // ✏️ Edit Existing Workout Exercise
             const Text(
               "✏️ Edit Existing Workout Exercise",
               style: TextStyle(
@@ -190,18 +208,18 @@ class _AdminWorkoutExerciseManagementScreenState
               ),
             ),
             const SizedBox(height: 16),
+
+            // 2) Dropdown for existing workoutEx selection
             DropdownButtonFormField<String>(
               value: selectedWorkoutExerciseId,
+              isExpanded: true,
               dropdownColor: Colors.grey[900],
               style: const TextStyle(color: Colors.white),
               decoration: _inputDecoration("Select Workout Exercise"),
               items:
-                  workoutExercises
-                      .map(
-                        (we) =>
-                            DropdownMenuItem(value: we.id, child: Text(we.id)),
-                      )
-                      .toList(),
+                  workoutExercises.map((we) {
+                    return DropdownMenuItem(value: we.id, child: Text(we.id));
+                  }).toList(),
               onChanged: (val) {
                 setState(() {
                   selectedWorkoutExerciseId = val;
@@ -211,12 +229,14 @@ class _AdminWorkoutExerciseManagementScreenState
                     sets = we.sets;
                     reps = we.reps;
                     setsController.text = sets.toString();
-                    repsController.text = reps.toString();
+                    repsController.text = we.reps;
                   }
                 });
               },
             ),
             const SizedBox(height: 12),
+
+            // Edit sets
             TextField(
               controller: setsController,
               style: const TextStyle(color: Colors.white),
@@ -225,19 +245,24 @@ class _AdminWorkoutExerciseManagementScreenState
               onChanged: (val) => sets = int.tryParse(val),
             ),
             const SizedBox(height: 12),
+
+            // Edit reps (as a string)
             TextField(
               controller: repsController,
               style: const TextStyle(color: Colors.white),
               decoration: _inputDecoration('Reps'),
               keyboardType: TextInputType.number,
-              onChanged: (val) => reps = int.tryParse(val),
+              onChanged: (val) => reps = val.trim(),
             ),
             const SizedBox(height: 16),
+
+            // Save changes
             ElevatedButton(
               onPressed: () async {
                 if (selectedWorkoutExerciseId != null &&
                     sets != null &&
-                    reps != null) {
+                    reps != null &&
+                    reps!.isNotEmpty) {
                   await createOrEditWorkoutExercise(
                     workoutExerciseId: selectedWorkoutExerciseId,
                     exerciseId: selectedExerciseId!,
@@ -253,6 +278,8 @@ class _AdminWorkoutExerciseManagementScreenState
               child: const Text('💾 Save Changes'),
             ),
             const SizedBox(height: 12),
+
+            // Delete
             ElevatedButton(
               onPressed: () async {
                 if (selectedWorkoutExerciseId != null) {
@@ -265,7 +292,11 @@ class _AdminWorkoutExerciseManagementScreenState
               ),
               child: const Text('🗑 Delete Selected Workout Exercise'),
             ),
+
+            // Divider
             const Divider(height: 40, color: Colors.white30),
+
+            // Upload from Local
             ElevatedButton(
               onPressed: uploadWorkoutExercisesFromLocal,
               style: ElevatedButton.styleFrom(

@@ -5,7 +5,7 @@ class WorkoutExercise {
   final String id;
   final String exerciseId;
   final int sets;
-  final int reps;
+  final String reps; // reps is now a String
   Exercise? exercise; // This will hold the fetched Exercise object
 
   WorkoutExercise({
@@ -31,7 +31,11 @@ class WorkoutExercise {
   }
 
   Map<String, dynamic> toMap() {
-    return {'exerciseId': exerciseId, 'sets': sets, 'reps': reps};
+    return {
+      'exerciseId': exerciseId,
+      'sets': sets,
+      'reps': reps, // Save reps as a string
+    };
   }
 
   factory WorkoutExercise.fromMap(String id, Map<String, dynamic> map) {
@@ -39,7 +43,9 @@ class WorkoutExercise {
       id: id,
       exerciseId: map['exerciseId'] ?? '',
       sets: map['sets'] ?? 0,
-      reps: map['reps'] ?? 0,
+      reps:
+          map['reps']?.toString() ??
+          '', // Convert to String and default to empty
     );
   }
 
@@ -47,7 +53,7 @@ class WorkoutExercise {
     String? id,
     String? exerciseId,
     int? sets,
-    int? reps,
+    String? reps,
     Exercise? exercise,
   }) {
     return WorkoutExercise(

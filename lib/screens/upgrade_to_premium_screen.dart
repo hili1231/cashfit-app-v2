@@ -1,9 +1,37 @@
-import 'package:cashfit/screens/nav_screen.dart';
+import '../../auth/login_screen.dart';
+import '../../data/user_data.dart';
+import '../../screens/nav_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-class UpgradeToPremierScreen extends StatelessWidget {
+class UpgradeToPremierScreen extends StatefulWidget {
   const UpgradeToPremierScreen({super.key});
+
+  @override
+  State<UpgradeToPremierScreen> createState() => _UpgradeToPremierScreenState();
+}
+
+class _UpgradeToPremierScreenState extends State<UpgradeToPremierScreen> {
+  @override
+  void initState() {
+    super.initState();
+
+    // ✅ Same login check as ProfileScreen
+    if (!isLoggedIn || currentUser == null || currentUser?.id.isEmpty == true) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final navState = context.findAncestorStateOfType<NavScreenState>();
+        if (navState != null) {
+          navState.setDetailScreen(const LoginScreen());
+        } else {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const LoginScreen()),
+          );
+        }
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -23,9 +51,9 @@ class UpgradeToPremierScreen extends StatelessWidget {
           onPressed: () {
             final navState = context.findAncestorStateOfType<NavScreenState>();
             if (navState != null) {
-              navState.setDetailScreen(null); // ✅ Clears the detail screen
+              navState.setDetailScreen(null);
             } else if (Navigator.canPop(context)) {
-              Navigator.pop(context); // ✅ Fallback if not using NavScreen
+              Navigator.pop(context);
             }
           },
         ),
@@ -107,7 +135,6 @@ class UpgradeToPremierScreen extends StatelessWidget {
           const SizedBox(height: 20),
           ElevatedButton(
             onPressed: () {
-              // Hook up your billing / auth logic here
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text("Upgrade functionality coming soon!"),

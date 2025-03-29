@@ -1,9 +1,9 @@
-import 'package:cashfit/auth/login_screen.dart';
+import '../../auth/login_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../../models/challenge.dart';
 import '../../theme.dart';
-import '../../data/user_data.dart'; // Provides currentUser
+import '../../data/user_data.dart';
 import '../nav_screen.dart';
 import 'challenge_detail_screen.dart';
 import '../upgrade_to_premium_screen.dart';
@@ -16,25 +16,17 @@ class ChallengesScreen extends StatelessWidget {
     QuerySnapshot snapshot =
         await FirebaseFirestore.instance.collection('challenges').get();
 
-    // Map each document to a Challenge instance.
+    // Map each document to a Challenge instance
     List<Challenge> challenges =
-        snapshot.docs.map((doc) {
-          return Challenge.fromMap(doc.data() as Map<String, dynamic>);
-        }).toList();
+        snapshot.docs
+            .map((doc) => Challenge.fromMap(doc.data() as Map<String, dynamic>))
+            .toList();
 
-    // Optionally, you can fallback to hardcoded data if no challenges are found.
-    if (challenges.isEmpty) {
-      // import your hardcoded list from challenge_data.dart if needed.
-      // return challengeData;
-    }
     return challenges;
   }
 
   @override
   Widget build(BuildContext context) {
-    final bool isPremium = currentUser?.isPremium ?? false;
-    final String currentUserId = currentUser?.id ?? "";
-
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Container(
@@ -56,7 +48,7 @@ class ChallengesScreen extends StatelessWidget {
                   ),
                 ),
               ),
-              // Challenge List using FutureBuilder
+              // Challenge List via FutureBuilder
               Expanded(
                 child: FutureBuilder<List<Challenge>>(
                   future: fetchChallenges(),
@@ -68,18 +60,14 @@ class ChallengesScreen extends StatelessWidget {
                     } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
                       return const Center(child: Text("No challenges found"));
                     }
+
                     final challenges = snapshot.data!;
                     return ListView.builder(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       itemCount: challenges.length,
                       itemBuilder: (context, index) {
                         final challenge = challenges[index];
-                        return _buildChallengeCard(
-                          context,
-                          challenge,
-                          isPremium,
-                          currentUserId,
-                        );
+                        return _buildChallengeCard(context, challenge);
                       },
                     );
                   },
@@ -92,30 +80,33 @@ class ChallengesScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildChallengeCard(
-    BuildContext context,
-    Challenge challenge,
-    bool isPremium,
-    String currentUserId,
-  ) {
+  Widget _buildChallengeCard(BuildContext context, Challenge challenge) {
+    final navState = context.findAncestorStateOfType<NavScreenState>();
+    final user = firebaseUser;
+
+    // Calculate participants/spots left
+    final totalParticipants = challenge.participants.length;
+    final maxP = challenge.maxParticipants ?? 0;
+    final spotsLeft = maxP > 0 ? (maxP - totalParticipants) : 0;
+
     return GestureDetector(
       onTap: () {
-        final navState = context.findAncestorStateOfType<NavScreenState>();
-
-        if (firebaseUser == null) {
-          // Not logged in
+        // 1) If nobody is logged in => go to LoginScreen.
+        if (user == null) {
           navState?.setDetailScreen(const LoginScreen());
-        } else if (currentUser?.isPremium == true) {
-          // Logged in + premium
+          return;
+        }
+        // 2) If user is Premium => show detail
+        if (currentUser?.isPremium == true) {
           navState?.setDetailScreen(
             ChallengeDetailScreen(challenge: challenge),
           );
-        } else {
-          // Logged in but NOT premium
+        }
+        // 3) Otherwise => upgrade screen
+        else {
           navState?.setDetailScreen(const UpgradeToPremierScreen());
         }
       },
-
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
         decoration: AppTheme.cardDecoration,
@@ -129,7 +120,7 @@ class ChallengesScreen extends StatelessWidget {
                 topRight: Radius.circular(15),
               ),
               child:
-                  (challenge.image.startsWith("http"))
+                  challenge.image.startsWith("http")
                       ? Image.network(
                         challenge.image,
                         width: double.infinity,
@@ -161,6 +152,7 @@ class ChallengesScreen extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 6),
+
                   // Description
                   Text(
                     challenge.description,
@@ -168,25 +160,39 @@ class ChallengesScreen extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 6),
-                  // Prize Amount
-                  Text(
-                    "Prize: \$${challenge.prizeAmount.toStringAsFixed(2)}",
-                    style: AppTheme.smallText.copyWith(
-                      color: Colors.greenAccent,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  // Participants
+                  const SizedBox(height: 8),
+
+                  // Spots left or participants
                   Row(
                     children: [
-                      const Icon(Icons.people, color: Colors.amber, size: 20),
+                      const Icon(Icons.people, color: Colors.amber, size: 18),
+                      const SizedBox(width: 5),
+                      if (maxP > 0)
+                        Text("$spotsLeft spots left", style: AppTheme.goldText)
+                      else
+                        Text("$spotsLeft spots left", style: AppTheme.goldText),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Prize Amount
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.monetization_on,
+                        color: Colors.amber,
+                        size: 18,
+                      ),
                       const SizedBox(width: 5),
                       Text(
-                        "${challenge.participants} Participants",
-                        style: AppTheme.goldText,
+                        "\$${challenge.prizeAmount.toInt()} prize",
+                        style: AppTheme.smallText.copyWith(
+                          color: Colors.greenAccent,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const Spacer(),
+                      // Arrow
                       const Icon(
                         Icons.arrow_forward_ios,
                         color: Colors.white70,
