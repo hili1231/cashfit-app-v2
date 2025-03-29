@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 // User data & model
-import '../data/user_data.dart' show currentUser;
+import '../data/user_data.dart' show currentUser, firebaseUser;
 import '../auth/login_screen.dart';
 
 // Screens & Models
@@ -15,8 +15,6 @@ import '../models/challenge.dart';
 import '../models/side_hustle.dart';
 
 // Local widgets or data
-import '../data/challenge_data.dart';
-import '../data/side_hustle_data.dart';
 import '../screens/nav_screen.dart';
 import '../widgets/workout_card.dart';
 import '../screens/personalize/workout_diet_builder_screen.dart';
@@ -44,19 +42,34 @@ class _WorkoutDietHeaderDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   double get maxExtent => height;
-
   @override
   double get minExtent => height;
-
   @override
   bool shouldRebuild(covariant _WorkoutDietHeaderDelegate oldDelegate) {
     return oldDelegate.child != child || oldDelegate.height != height;
   }
 }
 
+/// NEW: Firestore fetch for Challenges
+Future<List<Challenge>> fetchChallengesFromFirestore() async {
+  final snapshot =
+      await FirebaseFirestore.instance.collection('challenges').get();
+  return snapshot.docs.map((doc) {
+    return Challenge.fromMap(doc.data());
+  }).toList();
+}
+
+/// NEW: Firestore fetch for Side Hustles
+Future<List<SideHustle>> fetchSideHustlesFromFirestore() async {
+  final snapshot =
+      await FirebaseFirestore.instance.collection('sideHustles').get();
+  return snapshot.docs.map((doc) {
+    return SideHustle.fromMap(doc.data());
+  }).toList();
+}
+
 class HomeScreen extends StatelessWidget {
   final MealPlan? activeMealPlan; // optional: user’s Active Meal Plan
-
   const HomeScreen({super.key, this.activeMealPlan});
 
   Future<List<WorkoutProgram>> fetchWorkoutPrograms() async {
@@ -86,7 +99,8 @@ class HomeScreen extends StatelessWidget {
               ),
               // Auto-rotating banner
               const SliverToBoxAdapter(child: AutoRotatingBanner()),
-              // Other content as slivers
+
+              // Main content
               SliverToBoxAdapter(
                 child: FutureBuilder<List<WorkoutProgram>>(
                   future: fetchWorkoutPrograms(),
@@ -139,52 +153,46 @@ class HomeScreen extends StatelessWidget {
 
   /// PERSONALIZE SECTION
   Widget _buildWorkoutDietSection(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 0),
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Colors.black,
-          borderRadius: BorderRadius.circular(0),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "PERSONALIZE",
-              style: GoogleFonts.oswald(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: Colors.white70,
-              ),
+    return Container(
+      color: Colors.black,
+      padding: const EdgeInsets.all(8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "PERSONALIZE",
+            style: GoogleFonts.oswald(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: Colors.white70,
             ),
-            const SizedBox(height: 10),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _buildTabButton(
-                    label: "Workout & Diet",
-                    context: context,
-                    screen: const WorkoutDietBuilderScreen(),
-                  ),
-                  const SizedBox(width: 8),
-                  _buildTabButton(
-                    label: "Workout",
-                    context: context,
-                    screen: const WorkoutBuilderScreen(buildBoth: false),
-                  ),
-                  const SizedBox(width: 8),
-                  _buildTabButton(
-                    label: "Diet",
-                    context: context,
-                    screen: const DietBuilderScreen(),
-                  ),
-                ],
-              ),
+          ),
+          const SizedBox(height: 10),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildTabButton(
+                  label: "Workout & Diet",
+                  context: context,
+                  screen: const WorkoutDietBuilderScreen(),
+                ),
+                const SizedBox(width: 8),
+                _buildTabButton(
+                  label: "Workout",
+                  context: context,
+                  screen: const WorkoutBuilderScreen(buildBoth: false),
+                ),
+                const SizedBox(width: 8),
+                _buildTabButton(
+                  label: "Diet",
+                  context: context,
+                  screen: const DietBuilderScreen(),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -197,24 +205,21 @@ class HomeScreen extends StatelessWidget {
     return InkWell(
       borderRadius: BorderRadius.circular(8),
       onTap: () {
-        // 1. Check if user is logged in:
+        // Check if user is logged in
         if (currentUser == null || currentUser!.id.isEmpty) {
-          // 2. Grab NavScreen’s state:
           final navState = context.findAncestorStateOfType<NavScreenState>();
           if (navState != null) {
-            // 3. If user is NOT logged in, show the LoginScreen using setDetailScreen
             navState.setDetailScreen(const LoginScreen());
           } else {
-            // Fallback (should rarely happen):
             Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const LoginScreen()),
             );
           }
-          return; // Stop here if not logged in
+          return;
         }
 
-        // If user IS logged in, proceed as usual:
+        // If user is logged in, proceed as usual
         final navState = context.findAncestorStateOfType<NavScreenState>();
         if (navState != null) {
           navState.setDetailScreen(screen);
@@ -248,30 +253,18 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSectionTitle(
-    BuildContext context,
-    String title, [
-    IconData? icon,
-  ]) {
+  Widget _buildSectionTitle(BuildContext context, String title) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16),
-        child: Row(
-          children: [
-            if (icon != null) ...[
-              Icon(icon, color: Colors.amber, size: 24),
-              const SizedBox(width: 8),
-            ],
-            Text(
-              title.toUpperCase(),
-              style: GoogleFonts.oswald(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.white70,
-              ),
-            ),
-          ],
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+        child: Text(
+          title.toUpperCase(),
+          style: GoogleFonts.oswald(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.white70,
+          ),
         ),
       ),
     );
@@ -288,6 +281,7 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+  /// Display meal plans from Firestore
   Widget _buildRecommendedMealPlans(BuildContext context) {
     return FutureBuilder<QuerySnapshot>(
       future: FirebaseFirestore.instance.collection('mealPlans').get(),
@@ -298,7 +292,6 @@ class HomeScreen extends StatelessWidget {
             child: Center(child: CircularProgressIndicator()),
           );
         }
-
         if (!snapshot.hasData ||
             snapshot.data == null ||
             snapshot.data!.docs.isEmpty) {
@@ -382,7 +375,7 @@ class HomeScreen extends StatelessWidget {
                         width: double.infinity,
                         fit: BoxFit.cover,
                         errorBuilder:
-                            (_, __, ___) => _buildPlaceholderImage(100),
+                            (_, __, ___) => _buildPlaceholderImage(90),
                       )
                       : _buildPlaceholderImage(90),
             ),
@@ -441,9 +434,10 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+  /// CHALLENGES from Firestore
   Widget _buildChallengeList(BuildContext context) {
     return FutureBuilder<List<Challenge>>(
-      future: fetchChallengeData(),
+      future: fetchChallengesFromFirestore(), // <--- changed
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -469,6 +463,7 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+  /// On tap => if user not logged in => login screen, else challenge detail
   Widget _buildChallengeCard(BuildContext context, Challenge challenge) {
     return Container(
       width: 160,
@@ -480,6 +475,14 @@ class HomeScreen extends StatelessWidget {
       child: InkWell(
         onTap: () {
           final navState = context.findAncestorStateOfType<NavScreenState>();
+
+          // If user is not logged in => go to login
+          if (firebaseUser == null) {
+            navState?.setDetailScreen(const LoginScreen());
+            return;
+          }
+
+          // If user is logged in => show challenge detail
           navState?.setDetailScreen(
             ChallengeDetailScreen(challenge: challenge),
           );
@@ -565,21 +568,36 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+  /// SIDE HUSTLES from Firestore
   Widget _buildSideHustleList(BuildContext context) {
-    return SizedBox(
-      height: 200,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: sideHustleData.length,
-        padding: const EdgeInsets.only(left: 16),
-        itemBuilder: (context, index) {
-          final hustle = sideHustleData[index];
-          return _buildSideHustleCard(context, hustle);
-        },
-      ),
+    return FutureBuilder<List<SideHustle>>(
+      future: fetchSideHustlesFromFirestore(), // <--- new
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        } else if (snapshot.hasError) {
+          return Center(child: Text("Error: ${snapshot.error}"));
+        } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const Center(child: Text("No side hustles found"));
+        }
+        final hustles = snapshot.data!;
+        return SizedBox(
+          height: 200,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: hustles.length,
+            padding: const EdgeInsets.only(left: 16),
+            itemBuilder: (context, index) {
+              final hustle = hustles[index];
+              return _buildSideHustleCard(context, hustle);
+            },
+          ),
+        );
+      },
     );
   }
 
+  /// On tap => if user not logged in => login, else side hustle detail
   Widget _buildSideHustleCard(BuildContext context, SideHustle hustle) {
     return Container(
       width: 160,
@@ -591,6 +609,14 @@ class HomeScreen extends StatelessWidget {
       child: InkWell(
         onTap: () {
           final navState = context.findAncestorStateOfType<NavScreenState>();
+
+          // If user not logged in => show login
+          if (firebaseUser == null) {
+            navState?.setDetailScreen(const LoginScreen());
+            return;
+          }
+
+          // If user is logged in => hustle detail
           navState?.setDetailScreen(SideHustleDetailScreen(hustle: hustle));
         },
         child: Column(
@@ -602,7 +628,7 @@ class HomeScreen extends StatelessWidget {
                 topLeft: Radius.circular(12),
                 topRight: Radius.circular(12),
               ),
-              child: Image.asset(
+              child: Image.network(
                 hustle.thumbnail,
                 height: 100,
                 width: double.infinity,
@@ -662,14 +688,7 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-/// A placeholder function to represent the future that fetches challenges
-Future<List<Challenge>> fetchChallengeData() async {
-  // In real code, you might fetch from Firestore or an API
-  await Future.delayed(const Duration(milliseconds: 300));
-  return challengeData; // from challenge_data.dart
-}
-
-/// A placeholder banner for demonstration
+/// A placeholder auto-rotating banner
 class AutoRotatingBanner extends StatefulWidget {
   const AutoRotatingBanner({super.key});
 
@@ -688,7 +707,7 @@ class AutoRotatingBannerState extends State<AutoRotatingBanner> {
     // Start auto-rotate every 5 seconds
     _timer = Timer.periodic(const Duration(seconds: 5), (Timer timer) {
       if (_pageController.hasClients) {
-        _currentPage = (_currentPage + 1) % 2; // we have 2 pages
+        _currentPage = (_currentPage + 1) % 2; // two pages
         _pageController.animateToPage(
           _currentPage,
           duration: const Duration(milliseconds: 300),
@@ -708,7 +727,7 @@ class AutoRotatingBannerState extends State<AutoRotatingBanner> {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 160, // Adjust as needed
+      height: 160,
       child: PageView(
         controller: _pageController,
         children: [
@@ -718,9 +737,10 @@ class AutoRotatingBannerState extends State<AutoRotatingBanner> {
             onTap: () {
               final navState =
                   context.findAncestorStateOfType<NavScreenState>();
+              // Example: just show the first challenge, or navigate to challenges screen...
               navState?.setDetailScreen(
-                ChallengeDetailScreen(challenge: challengeData.first),
-              );
+                const LoginScreen(),
+              ); // or something else
             },
             imageAsset: 'assets/challenge_ad.jpg',
           ),
@@ -731,8 +751,8 @@ class AutoRotatingBannerState extends State<AutoRotatingBanner> {
               final navState =
                   context.findAncestorStateOfType<NavScreenState>();
               navState?.setDetailScreen(
-                SideHustleDetailScreen(hustle: sideHustleData.first),
-              );
+                const LoginScreen(),
+              ); // or something else
             },
             imageAsset: 'assets/side_hustle_ad.jpg',
           ),
@@ -757,12 +777,10 @@ class AutoRotatingBannerState extends State<AutoRotatingBanner> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // Use `imageAsset` or fallback?
               Image.asset(
-                'assets/fallback_banner.jpg',
+                imageAsset,
                 fit: BoxFit.cover,
-                errorBuilder:
-                    (context, error, stackTrace) => _buildBannerFallback(),
+                errorBuilder: (context, error, stackTrace) => _buildFallback(),
               ),
               Align(
                 alignment: Alignment.bottomLeft,
@@ -785,7 +803,7 @@ class AutoRotatingBannerState extends State<AutoRotatingBanner> {
     );
   }
 
-  Widget _buildBannerFallback() {
+  Widget _buildFallback() {
     return Container(
       color: Colors.black,
       alignment: Alignment.center,

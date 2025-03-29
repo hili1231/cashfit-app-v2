@@ -1,3 +1,4 @@
+import 'package:cashfit/auth/register_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../auth/auth_service.dart';
@@ -92,8 +93,6 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 children: [
                   const SizedBox(height: 30),
-                  Text("Welcome Back", style: AppTheme.headline),
-                  const SizedBox(height: 30),
                   // Email field
                   TextFormField(
                     controller: emailController,
@@ -154,10 +153,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   // Register link
                   TextButton(
                     onPressed: () {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(builder: (_) => const LoginScreen()),
-                      );
+                      final navState =
+                          context.findAncestorStateOfType<NavScreenState>();
+                      if (navState != null) {
+                        navState.setDetailScreen(const RegisterScreen());
+                      }
                     },
                     child: const Text(
                       "Register Here",

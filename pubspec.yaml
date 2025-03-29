@@ -3,7 +3,10 @@ description: "Train and get paid."
 publish_to: 'none'
 
 version: 1.0.0+1
-
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/app_icon.png" # <- your image path
 environment:
   sdk: ^3.7.2
 video_player: ^2.9.3

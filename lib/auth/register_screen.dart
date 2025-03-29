@@ -69,10 +69,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
 
       // Save the user data to Firestore
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(currentUser!.id)
-          .set(currentUser!.toMap());
+      if (currentUser != null) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser!.id)
+            .set(currentUser!.toMap());
+      }
 
       // Reload user data from Firestore to ensure currentUser is updated
       await loadUserFromFirestore(currentUser!.id);
