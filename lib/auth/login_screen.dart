@@ -1,10 +1,10 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../auth/auth_service.dart';
 import '../theme.dart';
 import '../screens/nav_screen.dart';
 import '../auth/register_screen.dart';
-import '../data/user_data.dart';
+import '../data/user_data.dart'; // For currentUser
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -34,7 +34,7 @@ class _LoginScreenState extends State<LoginScreen> {
         passwordController.text.trim(),
       );
 
-      // Load the extended AppUser from Firestore
+      // Load extended AppUser from Firestore into global currentUser.
       if (user != null) {
         currentUser = await auth.getAppUser(user.uid);
       }
@@ -149,14 +149,15 @@ class _LoginScreenState extends State<LoginScreen> {
                             : const Text("Login"),
                   ),
                   const SizedBox(height: 20),
-
+                  // Register link
                   TextButton(
                     onPressed: () {
-                      final navState =
-                          context.findAncestorStateOfType<NavScreenState>();
-                      if (navState != null) {
-                        navState.setDetailScreen(const RegisterScreen());
-                      }
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const RegisterScreen(),
+                        ),
+                      );
                     },
                     child: const Text(
                       "Register Here",

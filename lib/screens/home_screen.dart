@@ -3,10 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-// User data & model
-import '../data/user_data.dart' show currentUser, firebaseUser;
-import '../auth/login_screen.dart';
-
 // Screens & Models
 import '../theme.dart';
 import '../models/meal_plan.dart';
@@ -24,6 +20,8 @@ import '../screens/challenges/challenge_detail_screen.dart';
 import '../screens/side_hustle/side_hustle_detail_screen.dart';
 import '../screens/diets/diet_selector_screen.dart';
 import '../screens/diets/meal_plan_screen.dart';
+import 'challenges/challenges_screen.dart';
+import 'side_hustle/side_hustle_screen.dart';
 
 class _WorkoutDietHeaderDelegate extends SliverPersistentHeaderDelegate {
   final Widget child;
@@ -205,21 +203,6 @@ class HomeScreen extends StatelessWidget {
     return InkWell(
       borderRadius: BorderRadius.circular(8),
       onTap: () {
-        // Check if user is logged in
-        if (currentUser == null || currentUser!.id.isEmpty) {
-          final navState = context.findAncestorStateOfType<NavScreenState>();
-          if (navState != null) {
-            navState.setDetailScreen(const LoginScreen());
-          } else {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const LoginScreen()),
-            );
-          }
-          return;
-        }
-
-        // If user is logged in, proceed as usual
         final navState = context.findAncestorStateOfType<NavScreenState>();
         if (navState != null) {
           navState.setDetailScreen(screen);
@@ -496,7 +479,6 @@ class HomeScreen extends StatelessWidget {
 
   Widget _buildChallengeCard(BuildContext context, Challenge challenge) {
     final navState = context.findAncestorStateOfType<NavScreenState>();
-    final user = firebaseUser;
 
     // Participants logic
     final totalParticipants = challenge.participants.length;
@@ -513,13 +495,6 @@ class HomeScreen extends StatelessWidget {
       ),
       child: InkWell(
         onTap: () {
-          // If user is not logged in => go to login
-          if (user == null) {
-            navState?.setDetailScreen(const LoginScreen());
-            return;
-          }
-
-          // If user is logged in => show challenge detail
           navState?.setDetailScreen(
             ChallengeDetailScreen(challenge: challenge),
           );
@@ -667,7 +642,6 @@ class HomeScreen extends StatelessWidget {
 
   Widget _buildSideHustleCard(BuildContext context, SideHustle hustle) {
     final navState = context.findAncestorStateOfType<NavScreenState>();
-    final user = firebaseUser;
 
     // Participants logic
     final totalParticipants = hustle.participants.length;
@@ -682,15 +656,10 @@ class HomeScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       child: InkWell(
-        onTap: () {
-          // If user not logged in => login
-          if (user == null) {
-            navState?.setDetailScreen(const LoginScreen());
-            return;
-          }
-          // Otherwise => hustle detail
+        onTap: () async {
           navState?.setDetailScreen(SideHustleDetailScreen(hustle: hustle));
         },
+
         borderRadius: BorderRadius.circular(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -839,7 +808,7 @@ class AutoRotatingBannerState extends State<AutoRotatingBanner> {
                   context.findAncestorStateOfType<NavScreenState>();
               // Example: just show the first challenge, or navigate to challenges screen...
               navState?.setDetailScreen(
-                const LoginScreen(),
+                const ChallengesScreen(),
               ); // or something else
             },
             imageAsset: 'assets/challenge_ad.jpg',
@@ -850,9 +819,7 @@ class AutoRotatingBannerState extends State<AutoRotatingBanner> {
             onTap: () {
               final navState =
                   context.findAncestorStateOfType<NavScreenState>();
-              navState?.setDetailScreen(
-                const LoginScreen(),
-              ); // or something else
+              navState?.setDetailScreen(const SideHustleScreen());
             },
             imageAsset: 'assets/side_hustle_ad.jpg',
           ),

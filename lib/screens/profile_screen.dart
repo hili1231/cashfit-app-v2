@@ -16,41 +16,39 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final Map<String, TextEditingController> controllers = {};
   bool isLoading = true;
+  User? firebaseCurrentUser;
 
   @override
   void initState() {
     super.initState();
+    _checkAuthAndLoadUser();
+  }
 
-    // ✅ If not logged in or currentUser is null or empty, redirect to login
-    if (!isLoggedIn || currentUser == null || currentUser?.id.isEmpty == true) {
+  Future<void> _checkAuthAndLoadUser() async {
+    // Get the current Firebase user.
+    firebaseCurrentUser = FirebaseAuth.instance.currentUser;
+    // If no user is logged in, navigate to Login.
+    if (firebaseCurrentUser == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        final navState = context.findAncestorStateOfType<NavScreenState>();
-        if (navState != null) {
-          navState.setDetailScreen(const LoginScreen());
-        } else {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const NavScreen()),
-          );
-        }
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+        );
       });
       return;
     }
-
-    // ✅ Fetch latest user data from Firestore
-    loadUserFromFirestore(currentUser!.id).then((_) {
-      if (!mounted) return;
+    // Load extended user data into the global currentUser.
+    await loadUserFromFirestore(firebaseCurrentUser!.uid);
+    // Initialize controllers if currentUser is loaded.
+    if (currentUser != null) {
+      controllers['name'] = TextEditingController(text: currentUser!.name);
+      controllers['email'] = TextEditingController(text: currentUser!.email);
+    }
+    if (mounted) {
       setState(() {
         isLoading = false;
-        controllers['name'] = TextEditingController(
-          text: currentUser?.name ?? '',
-        );
-        controllers['email'] = TextEditingController(
-          text: currentUser?.email ?? '',
-        );
       });
-    });
+    }
   }
 
   @override
@@ -63,7 +61,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (!isLoggedIn || isLoading || currentUser == null) {
+    // If loading or if Firebase user is not available, show a loading screen.
+    if (isLoading || FirebaseAuth.instance.currentUser == null) {
       return const Scaffold(
         backgroundColor: Colors.black,
         body: Center(child: CircularProgressIndicator(color: Colors.amber)),
@@ -95,18 +94,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         title: "Settings",
                         color: Colors.white70,
                         onTap: () {
-                          final navState =
-                              context.findAncestorStateOfType<NavScreenState>();
-                          if (navState != null) {
-                            navState.setDetailScreen(const SettingsScreen());
-                          } else {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const SettingsScreen(),
-                              ),
-                            );
-                          }
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const SettingsScreen(),
+                            ),
+                          );
                         },
                       ),
                       _buildListTile(
@@ -114,24 +107,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         title: "Logout",
                         color: Colors.red,
                         onTap: () async {
+                          // Sign out the user.
                           await FirebaseAuth.instance.signOut();
-
                           if (!mounted) return;
-
-                          final navState =
-                              // ignore: use_build_context_synchronously
-                              context.findAncestorStateOfType<NavScreenState>();
-                          if (navState != null) {
-                            navState.setDetailScreen(const LoginScreen());
-                          } else {
-                            Navigator.pushReplacement(
-                              // ignore: use_build_context_synchronously
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const NavScreen(),
-                              ),
-                            );
-                          }
+                          // Navigate to Home (NavScreen) after logout.
+                          Navigator.pushReplacement(
+                            // ignore: use_build_context_synchronously
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const NavScreen(),
+                            ),
+                          );
                         },
                       ),
                     ],
@@ -140,8 +126,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
           ),
-
-          // Back Button in ProfileScreen:
+          // Back Button in ProfileScreen
           Positioned(
             top: 16,
             left: 16,
@@ -178,7 +163,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildAvatar() {
     final imageUrl = firebaseUser?.photoURL ?? currentUser?.avatar;
-
     return CircleAvatar(
       radius: 55,
       backgroundColor: Colors.amber,

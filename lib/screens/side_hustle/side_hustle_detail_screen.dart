@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../data/user_data.dart';
 import '../../screens/side_hustle/side_hustle_progress_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -21,19 +22,45 @@ class SideHustleDetailScreen extends StatefulWidget {
 class _SideHustleDetailScreenState extends State<SideHustleDetailScreen> {
   bool isJoining = false;
   bool hasJoined = false;
+  bool isLoading = true;
+  final Map<String, TextEditingController> controllers = {};
+  User? firebaseCurrentUser;
 
   @override
   void initState() {
     super.initState();
+    _checkAuthAndLoadUser();
+  }
 
-    final userId = currentUser?.id ?? "";
-    hasJoined =
-        widget.hustle.participants.contains(userId) ||
-        currentUser?.joinedSideHustles.contains(widget.hustle.id) == true;
+  Future<void> _checkAuthAndLoadUser() async {
+    firebaseCurrentUser = FirebaseAuth.instance.currentUser;
+
+    if (firebaseCurrentUser == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final navState = context.findAncestorStateOfType<NavScreenState>();
+        if (navState != null) {
+          navState.setDetailScreen(const LoginScreen());
+        } else {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const LoginScreen()),
+          );
+        }
+      });
+      return;
+    }
+
+    await loadUserFromFirestore(firebaseCurrentUser!.uid);
+
+    if (currentUser != null) {
+      controllers['name'] = TextEditingController(text: currentUser!.name);
+      controllers['email'] = TextEditingController(text: currentUser!.email);
+    }
+
+    setState(() => isLoading = false);
   }
 
   Future<void> _joinHustle() async {
-    // If user not premium => upgrade
     final isPremium = currentUser?.isPremium ?? false;
     if (!isPremium) {
       if (mounted) {
@@ -50,7 +77,6 @@ class _SideHustleDetailScreenState extends State<SideHustleDetailScreen> {
     if (userId == null) return;
 
     try {
-      // 1) Update user doc
       if (!currentUser!.joinedSideHustles.contains(widget.hustle.id)) {
         currentUser!.joinedSideHustles.add(widget.hustle.id);
         await FirebaseFirestore.instance.collection('users').doc(userId).update(
@@ -58,7 +84,6 @@ class _SideHustleDetailScreenState extends State<SideHustleDetailScreen> {
         );
       }
 
-      // 2) Update hustle doc
       final hustleRef = FirebaseFirestore.instance
           .collection('sideHustles')
           .doc(widget.hustle.id);
@@ -69,12 +94,9 @@ class _SideHustleDetailScreenState extends State<SideHustleDetailScreen> {
       }
 
       await hustleRef.update({'participants': updatedParticipants});
-
-      // 3) Update local
       widget.hustle.participants.add(userId);
-      setState(() {
-        hasJoined = true;
-      });
+
+      setState(() => hasJoined = true);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -94,14 +116,13 @@ class _SideHustleDetailScreenState extends State<SideHustleDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 1) Check if user is logged in
-    final user = firebaseUser;
-    if (user == null) {
-      // Not logged in => show login
-      return const _NotLoggedInView();
+    if (isLoading || firebaseCurrentUser == null) {
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(child: CircularProgressIndicator(color: Colors.amber)),
+      );
     }
 
-    // 2) If user is not premium => show upgrade
     final isPremium = currentUser?.isPremium ?? false;
     if (!isPremium) {
       return Scaffold(
@@ -131,7 +152,6 @@ class _SideHustleDetailScreenState extends State<SideHustleDetailScreen> {
       );
     }
 
-    // Otherwise => show detail
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Stack(
@@ -162,7 +182,6 @@ class _SideHustleDetailScreenState extends State<SideHustleDetailScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Title
                           Text(
                             widget.hustle.title,
                             style: const TextStyle(
@@ -172,8 +191,6 @@ class _SideHustleDetailScreenState extends State<SideHustleDetailScreen> {
                             ),
                           ),
                           const SizedBox(height: 12),
-
-                          // Description
                           Text(
                             widget.hustle.description,
                             style: const TextStyle(
@@ -182,8 +199,6 @@ class _SideHustleDetailScreenState extends State<SideHustleDetailScreen> {
                             ),
                           ),
                           const SizedBox(height: 20),
-
-                          // Prize
                           Row(
                             children: [
                               const Icon(
@@ -203,8 +218,6 @@ class _SideHustleDetailScreenState extends State<SideHustleDetailScreen> {
                             ],
                           ),
                           const SizedBox(height: 20),
-
-                          // Video Requirement
                           const Text(
                             "Video Requirement:",
                             style: TextStyle(
@@ -222,8 +235,6 @@ class _SideHustleDetailScreenState extends State<SideHustleDetailScreen> {
                             ),
                           ),
                           const SizedBox(height: 20),
-
-                          // Participants
                           Text(
                             "${widget.hustle.participants.length} participants have joined",
                             style: const TextStyle(
@@ -232,8 +243,6 @@ class _SideHustleDetailScreenState extends State<SideHustleDetailScreen> {
                             ),
                           ),
                           const SizedBox(height: 20),
-
-                          // Join or View Progress
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton.icon(
@@ -338,39 +347,14 @@ class _SideHustleDetailScreenState extends State<SideHustleDetailScreen> {
     );
   }
 
-  Widget _buildPlaceholderImage() {
-    return Container(
-      width: double.infinity,
-      height: 220,
-      decoration: BoxDecoration(
-        color: Colors.grey[800],
-        borderRadius: BorderRadius.circular(15),
-      ),
-      alignment: Alignment.center,
-      child: const Icon(Icons.broken_image, size: 50, color: Colors.white70),
-    );
-  }
-}
-
-/// If user not logged in => show a small screen to login
-class _NotLoggedInView extends StatelessWidget {
-  const _NotLoggedInView();
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Center(
-        child: ElevatedButton(
-          onPressed: () {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => const LoginScreen()),
-            );
-          },
-          child: const Text("Login to view Side Hustle"),
-        ),
-      ),
-    );
-  }
+  Widget _buildPlaceholderImage() => Container(
+    width: double.infinity,
+    height: 220,
+    decoration: BoxDecoration(
+      color: Colors.grey[800],
+      borderRadius: BorderRadius.circular(15),
+    ),
+    alignment: Alignment.center,
+    child: const Icon(Icons.broken_image, size: 50, color: Colors.white70),
+  );
 }

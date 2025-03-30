@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../theme.dart'; // Global theme
-import '../nav_screen.dart'; // Navigation state for back button
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../auth/login_screen.dart';
+import '../../theme.dart';
+import '../nav_screen.dart';
 
 class WorkoutBuilderScreen extends StatefulWidget {
   final bool buildBoth;
@@ -22,6 +24,31 @@ class _WorkoutBuilderScreenState extends State<WorkoutBuilderScreen> {
   List<String> injuries = [];
   double weight = 0.0;
   double height = 0.0;
+
+  bool isLoading = true;
+  User? firebaseUser;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkLoginStatus();
+  }
+
+  Future<void> _checkLoginStatus() async {
+    firebaseUser = FirebaseAuth.instance.currentUser;
+    if (firebaseUser == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final navState = context.findAncestorStateOfType<NavScreenState>();
+        if (navState != null) {
+          navState.setDetailScreen(const LoginScreen());
+        }
+      });
+      return;
+    }
+    if (mounted) {
+      setState(() => isLoading = false);
+    }
+  }
 
   final List<String> experienceLevels = [
     "Beginner",
@@ -64,6 +91,13 @@ class _WorkoutBuilderScreenState extends State<WorkoutBuilderScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (isLoading || FirebaseAuth.instance.currentUser == null) {
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(child: CircularProgressIndicator(color: Colors.amber)),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Stack(
@@ -79,55 +113,48 @@ class _WorkoutBuilderScreenState extends State<WorkoutBuilderScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     sectionTitle("Build Your Workout Plan"),
-                    _buildDropdown("Unit System", unitOptions, unitSystem, (
-                      value,
-                    ) {
-                      setState(() => unitSystem = value!);
-                    }),
+                    _buildDropdown(
+                      "Unit System",
+                      unitOptions,
+                      unitSystem,
+                      (val) => unitSystem = val!,
+                    ),
                     _buildDropdown(
                       "Experience Level",
                       experienceLevels,
                       experienceLevel,
-                      (value) {
-                        setState(() => experienceLevel = value!);
-                      },
+                      (val) => experienceLevel = val!,
                     ),
-                    _buildDropdown("Workout Goal", workoutGoals, workoutGoal, (
-                      value,
-                    ) {
-                      setState(() => workoutGoal = value!);
-                    }),
-                    _buildDropdown("Workout Type", workoutTypes, workoutType, (
-                      value,
-                    ) {
-                      setState(() => workoutType = value!);
-                    }),
+                    _buildDropdown(
+                      "Workout Goal",
+                      workoutGoals,
+                      workoutGoal,
+                      (val) => workoutGoal = val!,
+                    ),
+                    _buildDropdown(
+                      "Workout Type",
+                      workoutTypes,
+                      workoutType,
+                      (val) => workoutType = val!,
+                    ),
                     _buildDropdown(
                       "Activity Level",
                       activityLevels,
                       activityLevel,
-                      (value) {
-                        setState(() => activityLevel = value!);
-                      },
+                      (val) => activityLevel = val!,
                     ),
                     _buildNumberInput(
                       "Weight (${unitSystem == "Metric" ? "kg" : "lbs"})",
-                      (value) => setState(
-                        () => weight = double.tryParse(value) ?? 0.0,
-                      ),
+                      (v) => weight = double.tryParse(v) ?? 0.0,
                     ),
                     _buildNumberInput(
                       "Height (${unitSystem == "Metric" ? "cm" : "inches"})",
-                      (value) => setState(
-                        () => height = double.tryParse(value) ?? 0.0,
-                      ),
+                      (v) => height = double.tryParse(v) ?? 0.0,
                     ),
                     _buildSliderInput(
                       "Workout Frequency (Days per Week)",
                       workoutFrequency,
-                      (value) {
-                        setState(() => workoutFrequency = value.toInt());
-                      },
+                      (val) => workoutFrequency = val.toInt(),
                     ),
                     sectionTitle("Available Equipment"),
                     _buildResponsiveChipGrid(
@@ -143,13 +170,11 @@ class _WorkoutBuilderScreenState extends State<WorkoutBuilderScreen> {
               ),
             ),
           ),
-          // Floating back button
           Positioned(
             top: 16,
             left: 16,
             child: SafeArea(
               child: InkWell(
-                borderRadius: BorderRadius.circular(50),
                 onTap: () {
                   final navState =
                       context.findAncestorStateOfType<NavScreenState>();
@@ -159,6 +184,7 @@ class _WorkoutBuilderScreenState extends State<WorkoutBuilderScreen> {
                     Navigator.of(context).maybePop();
                   }
                 },
+                borderRadius: BorderRadius.circular(50),
                 child: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: const BoxDecoration(
@@ -175,148 +201,134 @@ class _WorkoutBuilderScreenState extends State<WorkoutBuilderScreen> {
     );
   }
 
-  Widget sectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 25, bottom: 10),
-      child: Text(
-        title,
-        style: const TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.bold,
-          color: Colors.white70,
-        ),
+  Widget sectionTitle(String title) => Padding(
+    padding: const EdgeInsets.only(top: 25, bottom: 10),
+    child: Text(
+      title,
+      style: const TextStyle(
+        fontSize: 20,
+        fontWeight: FontWeight.bold,
+        color: Colors.white70,
       ),
-    );
-  }
+    ),
+  );
 
   Widget _buildDropdown(
     String title,
     List<String> options,
     String selectedValue,
     ValueChanged<String?> onChanged,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: DropdownButtonFormField<String>(
-        value: selectedValue,
-        dropdownColor: Colors.grey[900],
-        decoration: InputDecoration(
-          labelText: title,
-          labelStyle: const TextStyle(color: Colors.white70),
-          filled: true,
-          fillColor: Colors.grey[850],
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-        items:
-            options
-                .map(
-                  (value) => DropdownMenuItem(
-                    value: value,
-                    child: Text(
-                      value,
-                      style: const TextStyle(color: Colors.white70),
-                    ),
+  ) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: DropdownButtonFormField<String>(
+      value: selectedValue,
+      dropdownColor: Colors.grey[900],
+      decoration: InputDecoration(
+        labelText: title,
+        labelStyle: const TextStyle(color: Colors.white70),
+        filled: true,
+        fillColor: Colors.grey[850],
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+      items:
+          options
+              .map(
+                (val) => DropdownMenuItem(
+                  value: val,
+                  child: Text(
+                    val,
+                    style: const TextStyle(color: Colors.white70),
                   ),
-                )
-                .toList(),
-        onChanged: onChanged,
-      ),
-    );
-  }
+                ),
+              )
+              .toList(),
+      onChanged: onChanged,
+    ),
+  );
 
-  Widget _buildNumberInput(String label, ValueChanged<String> onChanged) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: TextField(
-        keyboardType: TextInputType.number,
-        decoration: InputDecoration(
-          labelText: label,
-          labelStyle: const TextStyle(color: Colors.white70),
-          filled: true,
-          fillColor: Colors.grey[850],
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+  Widget _buildNumberInput(String label, ValueChanged<String> onChanged) =>
+      Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: TextField(
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            labelText: label,
+            labelStyle: const TextStyle(color: Colors.white70),
+            filled: true,
+            fillColor: Colors.grey[850],
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+          style: const TextStyle(color: Colors.white70),
+          onChanged: onChanged,
         ),
-        style: const TextStyle(color: Colors.white70),
-        onChanged: onChanged,
-      ),
-    );
-  }
+      );
 
   Widget _buildSliderInput(
     String label,
     int currentValue,
     ValueChanged<double> onChanged,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          "$label: $currentValue",
-          style: const TextStyle(color: Colors.white70, fontSize: 16),
-        ),
-        Slider(
-          value: currentValue.toDouble(),
-          min: 1,
-          max: 7,
-          divisions: 6,
-          onChanged: onChanged,
-          activeColor: Colors.amber,
-        ),
-      ],
-    );
-  }
+  ) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        "$label: $currentValue",
+        style: const TextStyle(color: Colors.white70, fontSize: 16),
+      ),
+      Slider(
+        value: currentValue.toDouble(),
+        min: 1,
+        max: 7,
+        divisions: 6,
+        onChanged: onChanged,
+        activeColor: Colors.amber,
+      ),
+    ],
+  );
 
   Widget _buildResponsiveChipGrid(
     List<String> options,
     List<String> selectedList,
-  ) {
-    return Wrap(
-      spacing: 10,
-      runSpacing: 10,
-      children:
-          options.map((item) {
-            final isSelected = selectedList.contains(item);
-            return ChoiceChip(
-              label: Text(
-                item,
-                style: TextStyle(
-                  color: isSelected ? Colors.black : Colors.white70,
-                  fontWeight: FontWeight.w500,
-                ),
+  ) => Wrap(
+    spacing: 10,
+    runSpacing: 10,
+    children:
+        options.map((item) {
+          final isSelected = selectedList.contains(item);
+          return ChoiceChip(
+            label: Text(
+              item,
+              style: TextStyle(
+                color: isSelected ? Colors.black : Colors.white70,
+                fontWeight: FontWeight.w500,
               ),
-              selected: isSelected,
-              selectedColor: Colors.amber,
-              backgroundColor: Colors.grey[850],
-              onSelected: (_) {
-                setState(() {
+            ),
+            selected: isSelected,
+            selectedColor: Colors.amber,
+            backgroundColor: Colors.grey[850],
+            onSelected:
+                (_) => setState(() {
                   isSelected
                       ? selectedList.remove(item)
                       : selectedList.add(item);
-                });
-              },
-            );
-          }).toList(),
-    );
-  }
+                }),
+          );
+        }).toList(),
+  );
 
-  Widget _buildSubmitButton() {
-    return Center(
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.amber,
-          foregroundColor: Colors.black,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          minimumSize: const Size(double.infinity, 50),
-        ),
-        onPressed: () {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text("Workout Plan Saved!")));
-        },
-        child: const Text("Generate Workout Plan"),
+  Widget _buildSubmitButton() => Center(
+    child: ElevatedButton(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.amber,
+        foregroundColor: Colors.black,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        minimumSize: const Size(double.infinity, 50),
       ),
-    );
-  }
+      onPressed: () {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Workout Plan Saved!")));
+      },
+      child: const Text("Generate Workout Plan"),
+    ),
+  );
 }

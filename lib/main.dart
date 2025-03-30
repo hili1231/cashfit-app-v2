@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 import 'screens/nav_screen.dart';
 import 'theme.dart';
+import 'data/user_data.dart'; // Exports loadUserFromFirestore and currentUser
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -12,73 +14,41 @@ void main() async {
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: AppTheme.theme,
-      home: const SplashScreen(),
+      home: const AuthWrapper(),
     );
   }
 }
 
-class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
 
-  @override
-  State<SplashScreen> createState() => _SplashScreenState();
-}
-
-class _SplashScreenState extends State<SplashScreen> {
-  double opacity = 0.0;
-
-  @override
-  void initState() {
-    super.initState();
-
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (mounted) {
-        setState(() => opacity = 1.0);
-      }
-    });
-
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const NavScreen()),
-        );
-      }
-    });
+  Future<bool> _initializeUser() async {
+    final firebaseUser = FirebaseAuth.instance.currentUser;
+    if (firebaseUser != null) {
+      // Try to load the extended AppUser
+      await loadUserFromFirestore(firebaseUser.uid);
+    }
+    return true; // Always resolve to true
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: AnimatedOpacity(
-        duration: const Duration(seconds: 2),
-        opacity: opacity,
-        child: Container(
-          decoration: const BoxDecoration(
-            gradient: AppTheme.backgroundGradient,
-          ),
-          child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Image.asset(
-                  'assets/images/logo.png',
-                  height: 100, // 👈 adjust size as needed
-                  fit: BoxFit.contain,
-                ),
-                const SizedBox(height: 30),
-                const CircularProgressIndicator(color: Colors.amber),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return FutureBuilder<bool>(
+      future: _initializeUser(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            backgroundColor: Colors.black,
+            body: Center(child: CircularProgressIndicator(color: Colors.amber)),
+          );
+        }
+        return const NavScreen(); // Safe to show NavScreen now
+      },
     );
   }
 }

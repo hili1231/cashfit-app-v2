@@ -1,8 +1,15 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../models/app_user.dart'; // Make sure the path is correct
+import 'package:flutter/material.dart';
+import '../models/app_user.dart';
+import '../auth/login_screen.dart';
 
 class AuthService {
+  // Singleton setup
+  static final AuthService instance = AuthService._internal();
+  factory AuthService() => instance;
+  AuthService._internal();
+
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -17,11 +24,13 @@ class AuthService {
 
   /// Returns the current Firebase User.
   User? get firebaseUser => _auth.currentUser;
+
+  /// Collection reference for 'users'
   CollectionReference get usersRef => _firestore.collection('users');
 
-  /// Save new user or overwrite existing user data
+  /// Save new user or merge with existing data.
   Future<void> saveUser(AppUser user) async {
-    await usersRef.doc(user.id).set(user.toMap());
+    await usersRef.doc(user.id).set(user.toMap(), SetOptions(merge: true));
   }
 
   /// Update user partially (only selected fields)
@@ -32,22 +41,49 @@ class AuthService {
     await usersRef.doc(userId).update(updates);
   }
 
-  /// Fetch user by ID
-  Future<AppUser?> getUserById(String userId) async {
+  /// Fetch extended user data from Firestore.
+  Future<AppUser?> getAppUser(String userId) async {
     final doc = await usersRef.doc(userId).get();
     if (doc.exists) {
       return AppUser.fromMap(doc.data() as Map<String, dynamic>);
-    } else {
-      return null;
+    }
+    return null;
+  }
+
+  /// Loads the extended user data into [currentUser].
+  Future<void> loadUserFromFirestore(String uid) async {
+    final snapshot = await usersRef.doc(uid).get();
+    if (snapshot.exists) {
+      currentUser = AppUser.fromMap(snapshot.data() as Map<String, dynamic>);
     }
   }
 
-  /// Loads the extended user data from Firestore into [currentUser].
-  Future<void> loadUserFromFirestore(String uid) async {
-    final snapshot = await _firestore.collection('users').doc(uid).get();
-    if (snapshot.exists) {
-      currentUser = AppUser.fromMap(snapshot.data()!);
+  /// Ensures a user is logged in and extended data is loaded.
+  Future<bool> ensureUserIsReady(BuildContext context) async {
+    final user = _auth.currentUser;
+
+    if (user == null) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+      );
+      return false;
     }
+
+    if (currentUser == null || currentUser?.id.isEmpty == true) {
+      await loadUserFromFirestore(user.uid);
+    }
+
+    if (currentUser == null || currentUser?.id.isEmpty == true) {
+      Navigator.pushReplacement(
+        // ignore: use_build_context_synchronously
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+      );
+      return false;
+    }
+
+    return true;
   }
 
   /// SIGN UP & CREATE USER IN FIRESTORE
@@ -57,11 +93,9 @@ class AuthService {
         email: email.trim(),
         password: password.trim(),
       );
+
       final User? user = result.user;
       if (user != null) {
-        // Optionally, send email verification:
-        // await user.sendEmailVerification();
-
         final appUser = AppUser(
           id: user.uid,
           name: user.displayName ?? '',
@@ -103,8 +137,7 @@ class AuthService {
           balance: 0.0,
         );
 
-        await _firestore.collection('users').doc(user.uid).set(appUser.toMap());
-        // Load extended user data into currentUser.
+        await saveUser(appUser);
         await loadUserFromFirestore(user.uid);
       }
       return user;
@@ -122,10 +155,16 @@ class AuthService {
         email: email.trim(),
         password: password.trim(),
       );
-      if (result.user != null) {
-        await loadUserFromFirestore(result.user!.uid);
+      final user = result.user;
+
+      if (user != null) {
+        await updateUserFields(user.uid, {
+          'lastLogin': DateTime.now().toIso8601String(),
+        });
+        await loadUserFromFirestore(user.uid);
       }
-      return result.user;
+
+      return user;
     } on FirebaseAuthException catch (e) {
       throw Exception("Sign in failed: ${e.message}");
     } catch (e) {
@@ -133,21 +172,9 @@ class AuthService {
     }
   }
 
+  /// SIGN OUT
   Future<void> signOut() async {
+    currentUser = null;
     await _auth.signOut();
-  }
-
-  /// FETCH custom user model from Firestore.
-  Future<AppUser?> getAppUser(String uid) async {
-    try {
-      final DocumentSnapshot doc =
-          await _firestore.collection('users').doc(uid).get();
-      if (doc.exists) {
-        return AppUser.fromMap(doc.data() as Map<String, dynamic>);
-      }
-      return null;
-    } catch (e) {
-      throw Exception("Failed to fetch user data: $e");
-    }
   }
 }

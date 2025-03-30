@@ -1,3 +1,7 @@
+import 'package:firebase_auth/firebase_auth.dart';
+
+import '../../auth/login_screen.dart';
+import '../../data/user_data.dart';
 import '../../screens/nav_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -74,6 +78,54 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
     "Barbells",
     "Gym Equipment",
   ];
+  final Map<String, TextEditingController> controllers = {};
+  bool isLoading = true;
+  User? firebaseCurrentUser;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAuthAndLoadUser();
+  }
+
+  Future<void> _checkAuthAndLoadUser() async {
+    // Get the current Firebase user.
+    firebaseCurrentUser = FirebaseAuth.instance.currentUser;
+
+    // If no user is logged in, switch the detail screen to LoginScreen.
+    if (firebaseCurrentUser == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final navState = context.findAncestorStateOfType<NavScreenState>();
+        if (navState != null) {
+          navState.setDetailScreen(const LoginScreen());
+        }
+      });
+      return;
+    }
+
+    // Load extended user data into the global currentUser.
+    await loadUserFromFirestore(firebaseCurrentUser!.uid);
+
+    // Initialize controllers if currentUser is loaded.
+    if (currentUser != null) {
+      controllers['name'] = TextEditingController(text: currentUser!.name);
+      controllers['email'] = TextEditingController(text: currentUser!.email);
+    }
+
+    if (mounted) {
+      setState(() {
+        isLoading = false;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    for (var controller in controllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
 
   Future<void> _storeDataLocally() async {
     final prefs = await SharedPreferences.getInstance();
@@ -140,6 +192,13 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // If loading or if Firebase user is not available, show a loading screen.
+    if (isLoading || FirebaseAuth.instance.currentUser == null) {
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(child: CircularProgressIndicator(color: Colors.amber)),
+      );
+    }
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Stack(

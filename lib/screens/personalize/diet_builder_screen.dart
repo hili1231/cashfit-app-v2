@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../theme.dart'; // ✅ Import global theme
-import '../nav_screen.dart'; // For finding NavScreenState
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../theme.dart';
+import '../nav_screen.dart';
+import '../../auth/login_screen.dart';
 
 class DietBuilderScreen extends StatefulWidget {
   const DietBuilderScreen({super.key});
@@ -29,6 +31,31 @@ class DietBuilderScreenState extends State<DietBuilderScreen> {
     "No Red Meat",
   ];
 
+  bool isLoading = true;
+  User? firebaseUser;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkLoginStatus();
+  }
+
+  Future<void> _checkLoginStatus() async {
+    firebaseUser = FirebaseAuth.instance.currentUser;
+    if (firebaseUser == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final navState = context.findAncestorStateOfType<NavScreenState>();
+        if (navState != null) {
+          navState.setDetailScreen(const LoginScreen());
+        }
+      });
+      return;
+    }
+    if (mounted) {
+      setState(() => isLoading = false);
+    }
+  }
+
   void _toggleRestriction(String restriction) {
     setState(() {
       if (selectedRestrictions.contains(restriction)) {
@@ -41,6 +68,13 @@ class DietBuilderScreenState extends State<DietBuilderScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (isLoading || FirebaseAuth.instance.currentUser == null) {
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(child: CircularProgressIndicator(color: Colors.amber)),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Stack(
@@ -55,7 +89,6 @@ class DietBuilderScreenState extends State<DietBuilderScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 🔹 Header
                     Center(
                       child: Text(
                         "Build Your Diet Plan",
@@ -63,16 +96,13 @@ class DietBuilderScreenState extends State<DietBuilderScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
-
                     _buildSectionTitle("Select Your Goal"),
                     const SizedBox(height: 8),
                     _buildDropdown(),
-
                     const SizedBox(height: 20),
                     _buildSectionTitle("Dietary Restrictions"),
                     const SizedBox(height: 8),
                     _buildChipGrid(),
-
                     const SizedBox(height: 30),
                     SizedBox(
                       width: double.infinity,
@@ -91,8 +121,6 @@ class DietBuilderScreenState extends State<DietBuilderScreen> {
               ),
             ),
           ),
-
-          // 🔙 Floating Back Button
           Positioned(
             top: 16,
             left: 16,
