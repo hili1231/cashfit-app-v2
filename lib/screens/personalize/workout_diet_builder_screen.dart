@@ -6,7 +6,6 @@ import '../../screens/nav_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../theme.dart';
-import '../../utils/meal_plan_generator.dart';
 import 'personalized_plan_screen.dart';
 import '../../models/workout_program.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; // Import Firestore
@@ -44,6 +43,7 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
   final List<String> dietGoals = [
     "Lose Fat",
     "Build Muscle",
+    "Lose Fat & Build Muscle",
     "Maintain Weight",
   ];
   final List<String> dietPreferences = [
@@ -52,6 +52,19 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
     "Vegan",
     "Keto",
     "Paleo",
+    "Nut-Free",
+    "High Fiber",
+    "Low Fat",
+    "Low Sugar",
+    "Low Carb",
+    "FODMAP Friendly",
+    "Gluten-Free",
+    "Dairy-Free",
+    "High Fiber",
+    "High Protein",
+    "Mediterranean",
+    "Low Glycemic / Blood Sugar Friendly",
+    "Pescatarian",
   ];
   final List<String> workoutGoals = [
     "Build Muscle",
@@ -163,22 +176,22 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
     final generatedWorkout =
         matchingWorkouts.isNotEmpty ? matchingWorkouts.first : null;
 
-    final generatedMealPlan = generatePersonalizedMealPlan(
-      userId:
-          "defaultUserId", // Replace with the actual userId variable or value
-      dietGoal: dietGoal ?? "Maintain Weight",
-      dietPreference: dietPreference ?? "Balanced",
-      activityLevel: activity ?? "Moderately Active",
-      weight: weight ?? "70",
-      height: height ?? "175",
-      days: workoutFrequency,
-    );
+    //final generatedMealPlan = generatePersonalizedMealPlan(
+    //  userId:
+    //      "defaultUserId", // Replace with the actual userId variable or value
+    //  dietGoal: dietGoal ?? "Maintain Weight",
+    //  dietPreference: dietPreference ?? "Balanced",
+    //  activityLevel: activity ?? "Moderately Active",
+    //  weight: weight ?? "70",
+    //  height: height ?? "175",
+    //  days: workoutFrequency,
+    //);
 
     if (generatedWorkout != null) {
       await prefs.setString('personalizedWorkout', generatedWorkout.title);
     }
 
-    await prefs.setString('personalizedMealPlan', generatedMealPlan.planName);
+    //await prefs.setString('personalizedMealPlan', generatedMealPlan.planName);
 
     // ✅ Check if the widget is still mounted before using context
     if (!mounted) return;

@@ -38,21 +38,35 @@ class _AdminWorkoutExerciseManagementScreenState
   }
 
   Future<void> loadExercises() async {
-    final snapshot = await firestore.collection('exercises').get();
-    setState(() {
-      exercises =
-          snapshot.docs.map((doc) => Exercise.fromMap(doc.data())).toList();
-    });
+    try {
+      final snapshot = await firestore.collection('exercises').get();
+      setState(() {
+        exercises =
+            snapshot.docs.map((doc) => Exercise.fromMap(doc.data())).toList();
+      });
+    } catch (e) {
+      debugPrint("Error loading exercises: $e");
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error loading exercises: $e")));
+    }
   }
 
   Future<void> loadWorkoutExercises() async {
-    final snapshot = await firestore.collection('workoutExercises').get();
-    setState(() {
-      workoutExercises =
-          snapshot.docs
-              .map((doc) => WorkoutExercise.fromMap(doc.id, doc.data()))
-              .toList();
-    });
+    try {
+      final snapshot = await firestore.collection('workoutExercises').get();
+      setState(() {
+        workoutExercises =
+            snapshot.docs
+                .map((doc) => WorkoutExercise.fromMap(doc.id, doc.data()))
+                .toList();
+      });
+    } catch (e) {
+      debugPrint("Error loading workout exercises: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error loading workout exercises: $e")),
+      );
+    }
   }
 
   Future<void> createOrEditWorkoutExercise({
@@ -61,53 +75,80 @@ class _AdminWorkoutExerciseManagementScreenState
     required int sets,
     required String reps,
   }) async {
-    final exercise = exercises.firstWhere((e) => e.id == exerciseId);
-    final sanitizedExerciseName =
-        exercise.name.replaceAll(' ', '_').toLowerCase();
-    final id =
-        workoutExerciseId ?? '${sanitizedExerciseName}_sets_${sets}_reps_$reps';
+    try {
+      // Use orElse to prevent no element exception
+      final exercise = exercises.firstWhere(
+        (e) => e.id == exerciseId,
+        orElse: () => throw Exception('Exercise not found'),
+      );
 
-    await firestore.collection('workoutExercises').doc(id).set({
-      'exerciseId': exerciseId,
-      'sets': sets,
-      'reps': reps,
-    });
+      final sanitizedExerciseName =
+          exercise.name.replaceAll(' ', '_').toLowerCase();
+      final id =
+          workoutExerciseId ??
+          '${sanitizedExerciseName}_sets_${sets}_reps_$reps';
 
-    await loadWorkoutExercises();
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('✅ Workout Exercise saved!')));
+      await firestore.collection('workoutExercises').doc(id).set({
+        'exerciseId': exerciseId,
+        'sets': sets,
+        'reps': reps,
+      });
+
+      await loadWorkoutExercises();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('✅ Workout Exercise saved!')),
+      );
+    } catch (e) {
+      debugPrint("Error creating/editing workout exercise: $e");
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error: $e")));
+    }
   }
 
   Future<void> deleteWorkoutExercise(String workoutExerciseId) async {
-    await firestore
-        .collection('workoutExercises')
-        .doc(workoutExerciseId)
-        .delete();
-    setState(() {
-      workoutExercises.removeWhere((we) => we.id == workoutExerciseId);
-    });
+    try {
+      await firestore
+          .collection('workoutExercises')
+          .doc(workoutExerciseId)
+          .delete();
+      setState(() {
+        workoutExercises.removeWhere((we) => we.id == workoutExerciseId);
+      });
 
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('🗑️ Workout Exercise deleted!')),
-    );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('🗑️ Workout Exercise deleted!')),
+      );
+    } catch (e) {
+      debugPrint("Error deleting workout exercise: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error deleting workout exercise: $e")),
+      );
+    }
   }
 
   Future<void> uploadWorkoutExercisesFromLocal() async {
-    for (final workoutEx in workoutExerciseLibrary) {
-      await firestore
-          .collection('workoutExercises')
-          .doc(workoutEx.id)
-          .set(workoutEx.toMap());
-    }
-    await loadWorkoutExercises();
+    try {
+      for (final workoutEx in workoutExerciseLibrary) {
+        await firestore
+            .collection('workoutExercises')
+            .doc(workoutEx.id)
+            .set(workoutEx.toMap());
+      }
+      await loadWorkoutExercises();
 
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('📦 Local Workout Exercises Uploaded!')),
-    );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('📦 Local Workout Exercises Uploaded!')),
+      );
+    } catch (e) {
+      debugPrint("Error uploading local workout exercises: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error uploading local workout exercises: $e")),
+      );
+    }
   }
 
   InputDecoration _inputDecoration(String label) => InputDecoration(
@@ -141,7 +182,7 @@ class _AdminWorkoutExerciseManagementScreenState
               ),
             ),
             const SizedBox(height: 16),
-            // 1) Dropdown for exercise selection
+            // Dropdown for exercise selection
             DropdownButtonFormField<String>(
               value: selectedExerciseId,
               isExpanded: true,
@@ -152,10 +193,13 @@ class _AdminWorkoutExerciseManagementScreenState
                   exercises.map((e) {
                     return DropdownMenuItem(value: e.id, child: Text(e.name));
                   }).toList(),
-              onChanged: (val) => setState(() => selectedExerciseId = val),
+              onChanged: (val) {
+                setState(() {
+                  selectedExerciseId = val;
+                });
+              },
             ),
             const SizedBox(height: 12),
-
             // Sets
             TextField(
               decoration: _inputDecoration('Sets'),
@@ -164,7 +208,6 @@ class _AdminWorkoutExerciseManagementScreenState
               onChanged: (val) => sets = int.tryParse(val),
             ),
             const SizedBox(height: 12),
-
             // Reps (as a string)
             TextField(
               decoration: _inputDecoration('Reps'),
@@ -173,7 +216,6 @@ class _AdminWorkoutExerciseManagementScreenState
               onChanged: (val) => reps = val.trim(),
             ),
             const SizedBox(height: 16),
-
             // Create button
             ElevatedButton(
               onPressed: () async {
@@ -194,10 +236,7 @@ class _AdminWorkoutExerciseManagementScreenState
               ),
               child: const Text('💾 Save Workout Exercise'),
             ),
-
-            // Divider
             const Divider(height: 40, color: Colors.white30),
-
             // ✏️ Edit Existing Workout Exercise
             const Text(
               "✏️ Edit Existing Workout Exercise",
@@ -208,8 +247,7 @@ class _AdminWorkoutExerciseManagementScreenState
               ),
             ),
             const SizedBox(height: 16),
-
-            // 2) Dropdown for existing workoutEx selection
+            // Dropdown for existing workout exercise selection
             DropdownButtonFormField<String>(
               value: selectedWorkoutExerciseId,
               isExpanded: true,
@@ -221,21 +259,35 @@ class _AdminWorkoutExerciseManagementScreenState
                     return DropdownMenuItem(value: we.id, child: Text(we.id));
                   }).toList(),
               onChanged: (val) {
-                setState(() {
-                  selectedWorkoutExerciseId = val;
+                try {
+                  setState(() {
+                    selectedWorkoutExerciseId = val;
+                  });
                   if (val != null) {
-                    final we = workoutExercises.firstWhere((w) => w.id == val);
-                    selectedExerciseId = we.exerciseId;
-                    sets = we.sets;
-                    reps = we.reps;
-                    setsController.text = sets.toString();
-                    repsController.text = we.reps;
+                    // Use a fallback via orElse to avoid exceptions
+                    final we = workoutExercises.firstWhere(
+                      (w) => w.id == val,
+                      orElse: () => workoutExercises.first,
+                    );
+                    setState(() {
+                      selectedExerciseId = we.exerciseId;
+                      sets = we.sets;
+                      reps = we.reps;
+                      setsController.text = sets?.toString() ?? "";
+                      repsController.text = we.reps;
+                    });
                   }
-                });
+                } catch (e) {
+                  debugPrint("Error in dropdown selection: $e");
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text("Error selecting workout exercise: $e"),
+                    ),
+                  );
+                }
               },
             ),
             const SizedBox(height: 12),
-
             // Edit sets
             TextField(
               controller: setsController,
@@ -245,8 +297,7 @@ class _AdminWorkoutExerciseManagementScreenState
               onChanged: (val) => sets = int.tryParse(val),
             ),
             const SizedBox(height: 12),
-
-            // Edit reps (as a string)
+            // Edit reps
             TextField(
               controller: repsController,
               style: const TextStyle(color: Colors.white),
@@ -255,7 +306,6 @@ class _AdminWorkoutExerciseManagementScreenState
               onChanged: (val) => reps = val.trim(),
             ),
             const SizedBox(height: 16),
-
             // Save changes
             ElevatedButton(
               onPressed: () async {
@@ -278,7 +328,6 @@ class _AdminWorkoutExerciseManagementScreenState
               child: const Text('💾 Save Changes'),
             ),
             const SizedBox(height: 12),
-
             // Delete
             ElevatedButton(
               onPressed: () async {
@@ -292,10 +341,7 @@ class _AdminWorkoutExerciseManagementScreenState
               ),
               child: const Text('🗑 Delete Selected Workout Exercise'),
             ),
-
-            // Divider
             const Divider(height: 40, color: Colors.white30),
-
             // Upload from Local
             ElevatedButton(
               onPressed: uploadWorkoutExercisesFromLocal,

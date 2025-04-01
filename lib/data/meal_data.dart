@@ -3,362 +3,278 @@ import '../models/meal.dart';
 import '../models/meal_ingredient.dart';
 
 final List<Meal> mealData = [
-  // ----------------------------------------------------
-  // 5 BREAKFASTS
-  // ----------------------------------------------------
-
-  // 1) Vegan Overnight Oats (Breakfast)
+  // 1) Spicy Tofu Stir-Fry (Dinner)
   Meal(
-    id: "vegan_overnight_oats",
-    name: "Vegan Overnight Oats",
-    image: "assets/images/overnight_oats.jpg",
+    id: "spicy_tofu_stirfry",
+    name: "Spicy Tofu Stir-Fry",
+    image: "assets/images/spicy_tofu_stirfry.jpg",
     instructions: [
-      "Combine rolled oats, plant-based milk, and chia seeds in a jar.",
-      "Refrigerate overnight.",
-      "Top with mixed berries and a sprinkle of cinnamon before serving.",
+      "Press and cube tofu, then stir-fry with broccoli and red bell pepper.",
+      "Add minced garlic, ginger, a splash of soy sauce, and a drizzle of sesame oil.",
+      "Finish with a sprinkle of chili flakes and serve hot."
     ],
-    diets: [
-      "Vegan",
-      "Dairy-Free",
-      "Nut-Free",
-      "High Fiber",
-      "Low Fat",
-      "Low Sugar",
-      "FODMAP Friendly",
-      "Gluten-Free",
-    ],
-    allergies: [],
-    category: "Breakfast",
-    prepTime: 5,
+    diets: ["Vegan", "Gluten-Free", "High Protein"],
+    allergies: ["Soy"],
+    category: "Dinner",
+    prepTime: 25,
     video: null,
     ingredients: [
       MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "rolled_oats"),
-        quantity: 50,
+        ingredient: mockIngredients.firstWhere((i) => i.id == "tofu"),
+        quantity: 150,
       ),
       MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "plant_milk"),
-        quantity: 200,
+        ingredient: mockIngredients.firstWhere((i) => i.id == "broccoli"),
+        quantity: 100,
       ),
       MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "chia_seeds"),
+        ingredient: mockIngredients.firstWhere((i) => i.id == "bell_pepper"),
+        quantity: 60,
+      ),
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "garlic"),
+        quantity: 5,
+      ),
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "ginger"),
+        quantity: 5,
+      ),
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "soy_sauce"),
         quantity: 10,
       ),
       MealIngredient(
-        // Assuming you added a "berries" ingredient in your mockIngredients file
-        ingredient: mockIngredients.firstWhere((i) => i.id == "berries"),
-        quantity: 50,
+        ingredient: mockIngredients.firstWhere((i) => i.id == "sesame_oil"),
+        quantity: 5,
       ),
     ],
   ),
 
-  // 2) Mediterranean Avocado Toast (Breakfast)
+  // 2) Herbed Avocado Toast Deluxe (Breakfast)
   Meal(
-    id: "mediterranean_avocado_toast",
-    name: "Mediterranean Avocado Toast",
-    image: "assets/images/avocado_toast.jpg",
+    id: "herbed_avocado_toast_deluxe",
+    name: "Herbed Avocado Toast Deluxe",
+    image: "assets/images/herbed_avocado_toast_deluxe.jpg",
     instructions: [
-      "Toast whole grain bread.",
-      "Mash avocado with lemon juice, salt, and pepper.",
-      "Top with diced tomato and drizzle olive oil.",
+      "Toast slices of whole grain bread until crisp.",
+      "Spread mashed avocado mixed with lemon juice, salt, and pepper.",
+      "Top with a poached egg and garnish with microgreens."
     ],
-    diets: [
-      "Vegan",
-      "Vegetarian",
-      "Mediterranean",
-      "Balanced",
-      "Low Sugar",
-      "High Fiber",
-      "Gluten-Free", // if using GF bread variant
-    ],
+    diets: ["Vegetarian", "High Protein"],
     allergies: [],
     category: "Breakfast",
-    prepTime: 10,
+    prepTime: 12,
     video: null,
     ingredients: [
       MealIngredient(
-        ingredient: mockIngredients.firstWhere(
-          (i) => i.id == "whole_grain_bread",
-        ),
-        quantity: 1,
+        ingredient: mockIngredients.firstWhere((i) => i.id == "whole_grain_bread"),
+        quantity: 2,
       ),
       MealIngredient(
         ingredient: mockIngredients.firstWhere((i) => i.id == "avocado"),
         quantity: 1,
       ),
       MealIngredient(
-        // Assuming tomato exists
-        ingredient: mockIngredients.firstWhere((i) => i.id == "tomato"),
+        ingredient: mockIngredients.firstWhere((i) => i.id == "egg"),
         quantity: 1,
       ),
       MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "olive_oil"),
-        quantity: 5, // in ml
+        ingredient: mockIngredients.firstWhere((i) => i.id == "microgreens"),
+        quantity: 10,
+      ),
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "lemon"),
+        quantity: 1,
       ),
     ],
   ),
 
-  // 3) Egg & Spinach Scramble (Breakfast)
+  // 3) Banana Walnut Smoothie Bowl (Breakfast)
   Meal(
-    id: "egg_spinach_scramble",
-    name: "Egg & Spinach Scramble",
-    image: "assets/images/egg_scramble.jpg",
+    id: "banana_walnut_smoothie_bowl",
+    name: "Banana Walnut Smoothie Bowl",
+    image: "assets/images/banana_walnut_smoothie_bowl.jpg",
     instructions: [
-      "Whisk eggs with salt and pepper.",
-      "Sauté spinach in a non-stick pan.",
-      "Pour eggs over spinach and scramble until fluffy.",
+      "Blend banana with almond milk until smooth.",
+      "Pour into a bowl and top with rolled oats, chopped walnuts, honey, and fresh berries.",
+      "Serve immediately for a filling breakfast."
     ],
-    diets: [
-      "Balanced",
-      "High Protein",
-      "Low Carb",
-      "Nut-Free",
-      "Vegetarian", // if eggs are acceptable for vegetarians
-    ],
-    allergies: ["Eggs"],
-    category: "Breakfast",
-    prepTime: 8,
-    video: null,
-    ingredients: [
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "egg"),
-        quantity: 2,
-      ),
-      MealIngredient(
-        // Assuming spinach exists in your mockIngredients
-        ingredient: mockIngredients.firstWhere((i) => i.id == "spinach"),
-        quantity: 50,
-      ),
-    ],
-  ),
-
-  // 4) Keto Almond Pancakes (Breakfast)
-  Meal(
-    id: "keto_almond_pancakes",
-    name: "Keto Almond Pancakes",
-    image: "assets/images/keto_almond_pancakes.jpg",
-    instructions: [
-      "Mix almond flour, egg, baking powder, and a pinch of salt.",
-      "Cook on a skillet with coconut oil until golden.",
-      "Serve with a sugar-free syrup.",
-    ],
-    diets: [
-      "Keto",
-      "Gluten-Free",
-      "Low Carb",
-      "Dairy-Free",
-      "Paleo",
-      "High Protein",
-    ],
-    allergies: ["Nuts", "Eggs"],
+    diets: ["Vegetarian", "Gluten-Free", "High Fiber"],
+    allergies: ["Nuts"],
     category: "Breakfast",
     prepTime: 10,
     video: null,
     ingredients: [
       MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "almond_flour"),
-        quantity: 30,
-      ),
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "egg"),
+        ingredient: mockIngredients.firstWhere((i) => i.id == "banana"),
         quantity: 1,
       ),
       MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "baking_powder"),
+        ingredient: mockIngredients.firstWhere((i) => i.id == "almond_milk"),
+        quantity: 200,
+      ),
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "rolled_oats"),
+        quantity: 50,
+      ),
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "walnuts"),
+        quantity: 30,
+      ),
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "honey"),
+        quantity: 5,
+      ),
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "berries"),
+        quantity: 50,
+      ),
+    ],
+  ),
+
+  // 4) Quinoa & Black Bean Stuffed Bell Peppers (Dinner)
+  Meal(
+    id: "quinoa_blackbean_stuffed_peppers",
+    name: "Quinoa & Black Bean Stuffed Peppers",
+    image: "assets/images/quinoa_blackbean_stuffed_peppers.jpg",
+    instructions: [
+      "Halve bell peppers and remove seeds.",
+      "Mix cooked quinoa with black beans, diced tomato, cumin, and cilantro.",
+      "Stuff peppers with the mixture and bake at 180°C for 20 minutes."
+    ],
+    diets: ["Vegan", "Gluten-Free", "High Fiber"],
+    allergies: [],
+    category: "Dinner",
+    prepTime: 35,
+    video: null,
+    ingredients: [
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "bell_pepper"),
         quantity: 2,
       ),
       MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "coconut_oil"),
-        quantity: 5,
+        ingredient: mockIngredients.firstWhere((i) => i.id == "quinoa"),
+        quantity: 100,
       ),
-    ],
-  ),
-
-  // 5) Paleo Sweet Potato Hash (Breakfast)
-  Meal(
-    id: "paleo_sweet_potato_hash",
-    name: "Paleo Sweet Potato Hash",
-    image: "assets/images/paleo_sweetpotato_hash.jpg",
-    instructions: [
-      "Dice sweet potatoes, bell peppers, and onions.",
-      "Sauté in olive oil until tender and slightly crispy.",
-      "Season with pepper and fresh herbs.",
-    ],
-    diets: [
-      "Paleo",
-      "Gluten-Free",
-      "Nut-Free",
-      "Low Glycemic / Blood Sugar Friendly",
-      "Vegetarian",
-    ],
-    allergies: [],
-    category: "Breakfast",
-    prepTime: 15,
-    video: null,
-    ingredients: [
       MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "sweet_potato"),
+        ingredient: mockIngredients.firstWhere((i) => i.id == "black_beans"),
         quantity: 150,
-      ),
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "bell_pepper"),
-        quantity: 1,
-      ),
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "onion"),
-        quantity: 1,
-      ),
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "olive_oil"),
-        quantity: 5,
-      ),
-    ],
-  ),
-
-  // ----------------------------------------------------
-  // 5 LUNCHES
-  // ----------------------------------------------------
-
-  // 1) Pescatarian Salmon Salad (Lunch)
-  Meal(
-    id: "pescatarian_salmon_salad",
-    name: "Pescatarian Salmon Salad",
-    image: "assets/images/salmon_salad.jpg",
-    instructions: [
-      "Grill salmon fillet with herbs.",
-      "Toss mixed greens, spinach, cucumber, and cherry tomatoes.",
-      "Top salad with salmon and a light vinaigrette.",
-    ],
-    diets: [
-      "Pescatarian",
-      "Low Sugar",
-      "High Protein",
-      "Gluten-Free",
-      "Mediterranean",
-    ],
-    allergies: ["Fish"],
-    category: "Lunch",
-    prepTime: 15,
-    video: null,
-    ingredients: [
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "salmon"),
-        quantity: 150,
-      ),
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "spinach"),
-        quantity: 30,
-      ),
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "cucumber"),
-        quantity: 1,
       ),
       MealIngredient(
         ingredient: mockIngredients.firstWhere((i) => i.id == "tomato"),
         quantity: 1,
       ),
       MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "vinaigrette"),
+        ingredient: mockIngredients.firstWhere((i) => i.id == "cumin"),
+        quantity: 3,
+      ),
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "cilantro"),
         quantity: 10,
       ),
     ],
   ),
 
-  // 2) Vegan Lentil & Veggie Bowl (Lunch)
+  // 5) Miso Glazed Cod (Dinner)
   Meal(
-    id: "vegan_lentil_veggie_bowl",
-    name: "Vegan Lentil & Veggie Bowl",
-    image: "assets/images/vegan_lentil_bowl.jpg",
+    id: "miso_glazed_cod",
+    name: "Miso Glazed Cod",
+    image: "assets/images/miso_glazed_cod.jpg",
     instructions: [
-      "Cook lentils in vegetable broth.",
-      "Sauté mixed veggies (zucchini, carrots).",
-      "Combine and season with herbs and lemon juice.",
+      "Brush cod fillets with a mixture of miso paste and soy sauce.",
+      "Bake until the fish is just cooked through.",
+      "Serve over jasmine rice and garnish with sliced green onions."
     ],
-    diets: [
-      "Vegan",
-      "High Fiber",
-      "Low Fat",
-      "Anti-Inflammatory",
-      "Gluten-Free",
-    ],
-    allergies: [],
-    category: "Lunch",
-    prepTime: 20,
+    diets: ["Pescatarian", "Gluten-Free", "High Protein"],
+    allergies: ["Fish", "Soy"],
+    category: "Dinner",
+    prepTime: 30,
     video: null,
     ingredients: [
       MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "lentils"),
-        quantity: 100,
+        ingredient: mockIngredients.firstWhere((i) => i.id == "cod"),
+        quantity: 150,
       ),
       MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "zucchini"),
-        quantity: 100,
+        ingredient: mockIngredients.firstWhere((i) => i.id == "miso_paste"),
+        quantity: 20,
       ),
       MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "carrots"),
-        quantity: 80,
+        ingredient: mockIngredients.firstWhere((i) => i.id == "soy_sauce"),
+        quantity: 10,
       ),
       MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "olive_oil"),
-        quantity: 5,
+        ingredient: mockIngredients.firstWhere((i) => i.id == "jasmine_rice"),
+        quantity: 150,
+      ),
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "green_onion"),
+        quantity: 10,
       ),
     ],
   ),
 
-  // 3) Gluten-Free Turkey Wrap (Lunch)
+  // 6) Falafel Wrap with Tahini Sauce (Lunch)
   Meal(
-    id: "glutenfree_turkey_wrap",
-    name: "Gluten-Free Turkey Wrap",
-    image: "assets/images/glutenfree_turkey_wrap.jpg",
+    id: "falafel_wrap_tahini",
+    name: "Falafel Wrap with Tahini Sauce",
+    image: "assets/images/falafel_wrap_tahini.jpg",
     instructions: [
-      "Use a gluten-free tortilla.",
-      "Layer turkey slices, lettuce, and tomato.",
-      "Roll and slice into wraps.",
+      "Prepare falafel from blended chickpeas and spices, and fry until crispy.",
+      "Fill pita bread with falafel, lettuce, tomato, and cucumber.",
+      "Drizzle generously with tahini sauce and a squeeze of lemon."
     ],
-    diets: ["Gluten-Free", "Low Calorie", "Dairy-Free", "High Protein"],
+    diets: ["Vegan", "Gluten-Free", "High Protein"],
     allergies: [],
     category: "Lunch",
-    prepTime: 8,
+    prepTime: 25,
     video: null,
     ingredients: [
       MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "gf_tortilla"),
-        quantity: 1,
+        ingredient: mockIngredients.firstWhere((i) => i.id == "chickpeas"),
+        quantity: 150,
       ),
       MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "turkey_slices"),
-        quantity: 100,
+        ingredient: mockIngredients.firstWhere((i) => i.id == "tahini"),
+        quantity: 20,
+      ),
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "pita_bread"),
+        quantity: 1,
       ),
       MealIngredient(
         ingredient: mockIngredients.firstWhere((i) => i.id == "lettuce"),
-        quantity: 1,
+        quantity: 30,
       ),
       MealIngredient(
         ingredient: mockIngredients.firstWhere((i) => i.id == "tomato"),
         quantity: 1,
       ),
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "cucumber"),
+        quantity: 50,
+      ),
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "lemon"),
+        quantity: 1,
+      ),
     ],
   ),
 
-  // 4) Low Sodium Chicken & Veggies (Lunch)
+  // 7) Grilled Chicken Caesar Salad (Lunch)
   Meal(
-    id: "lowsodium_chicken_veggies",
-    name: "Low Sodium Chicken & Veggies",
-    image: "assets/images/chicken_veggies.jpg",
+    id: "grilled_chicken_caesar_salad",
+    name: "Grilled Chicken Caesar Salad",
+    image: "assets/images/grilled_chicken_caesar_salad.jpg",
     instructions: [
-      "Season chicken breast with herbs (no salt).",
-      "Bake with mixed veggies (broccoli, carrots).",
-      "Serve with a squeeze of lemon.",
+      "Grill chicken breast until charred and slice thinly.",
+      "Toss romaine lettuce with a light Caesar dressing and top with chicken and shaved parmesan.",
+      "Finish with gluten-free croutons and a squeeze of lemon."
     ],
-    diets: [
-      "Low Sodium / Heart Healthy",
-      "Balanced",
-      "High Protein",
-      "Gluten-Free",
-    ],
-    allergies: [],
+    diets: ["High Protein", "Gluten-Free"],
+    allergies: ["Dairy"],
     category: "Lunch",
-    prepTime: 25,
+    prepTime: 20,
     video: null,
     ingredients: [
       MealIngredient(
@@ -366,12 +282,20 @@ final List<Meal> mealData = [
         quantity: 150,
       ),
       MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "broccoli"),
+        ingredient: mockIngredients.firstWhere((i) => i.id == "romaine_lettuce"),
         quantity: 100,
       ),
       MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "carrots"),
-        quantity: 80,
+        ingredient: mockIngredients.firstWhere((i) => i.id == "caesar_dressing"),
+        quantity: 30,
+      ),
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "parmesan"),
+        quantity: 40,
+      ),
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "croutons"),
+        quantity: 30,
       ),
       MealIngredient(
         ingredient: mockIngredients.firstWhere((i) => i.id == "lemon"),
@@ -380,387 +304,144 @@ final List<Meal> mealData = [
     ],
   ),
 
-  // 5) Whole30 Zucchini Noodles (Lunch)
+  // 8) Shrimp & Avocado Salad (Lunch)
   Meal(
-    id: "whole30_zucchini_noodles",
-    name: "Whole30 Zucchini Noodles",
-    image: "assets/images/whole30_zoodles.jpg",
+    id: "shrimp_avocado_salad",
+    name: "Shrimp & Avocado Salad",
+    image: "assets/images/shrimp_avocado_salad.jpg",
     instructions: [
-      "Spiralize zucchini into noodles.",
-      "Sauté with olive oil, garlic, and cherry tomatoes.",
-      "Serve with a squeeze of lemon.",
+      "Grill shrimp until pink and cooked through.",
+      "Toss mixed greens with sliced avocado, cherry tomatoes, and cucumber.",
+      "Drizzle with olive oil and lemon juice, then top with shrimp."
     ],
-    diets: ["Whole30", "Low Carb", "Dairy-Free", "Nut-Free", "High Fiber"],
-    allergies: [],
+    diets: ["Pescatarian", "Gluten-Free", "High Protein"],
+    allergies: ["Fish"],
     category: "Lunch",
     prepTime: 15,
     video: null,
     ingredients: [
       MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "zucchini"),
+        ingredient: mockIngredients.firstWhere((i) => i.id == "shrimp"),
         quantity: 150,
       ),
       MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "mixed_greens"),
+        quantity: 100,
+      ),
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "avocado"),
+        quantity: 1,
+      ),
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "cherry_tomatoes"),
+        quantity: 30,
+      ),
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "cucumber"),
+        quantity: 50,
+      ),
+      MealIngredient(
         ingredient: mockIngredients.firstWhere((i) => i.id == "olive_oil"),
-        quantity: 5,
+        quantity: 10,
+      ),
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "lemon"),
+        quantity: 1,
+      ),
+    ],
+  ),
+
+  // 9) Vegetable Paella (Dinner)
+  Meal(
+    id: "vegetable_paella",
+    name: "Vegetable Paella",
+    image: "assets/images/vegetable_paella.jpg",
+    instructions: [
+      "Sauté onions, garlic, and bell pepper in olive oil.",
+      "Add short-grain rice, diced tomatoes, saffron, and vegetable broth; simmer until rice is tender.",
+      "Mix in peas and artichoke hearts and garnish with parsley."
+    ],
+    diets: ["Vegan", "Gluten-Free", "High Fiber"],
+    allergies: [],
+    category: "Dinner",
+    prepTime: 40,
+    video: null,
+    ingredients: [
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "short_grain_rice"),
+        quantity: 150,
+      ),
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "onion"),
+        quantity: 1,
       ),
       MealIngredient(
         ingredient: mockIngredients.firstWhere((i) => i.id == "garlic"),
         quantity: 5,
       ),
       MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "lemon"),
-        quantity: 1,
-      ),
-    ],
-  ),
-
-  // ----------------------------------------------------
-  // 5 DINNERS
-  // ----------------------------------------------------
-
-  // 1) Keto Cauliflower Fried Rice (Dinner)
-  Meal(
-    id: "keto_cauliflower_fried_rice",
-    name: "Keto Cauliflower Fried Rice",
-    image: "assets/images/keto_cauliflower_rice.jpg",
-    instructions: [
-      "Pulse cauliflower into rice.",
-      "Stir-fry with scrambled egg and mixed low-carb veggies.",
-      "Season with coconut aminos and pepper.",
-    ],
-    diets: ["Keto", "Low Carb", "Soy-Free", "Nut-Free", "High Protein"],
-    allergies: ["Eggs"],
-    category: "Dinner",
-    prepTime: 15,
-    video: null,
-    ingredients: [
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "cauliflower"),
-        quantity: 150,
-      ),
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "egg"),
-        quantity: 1,
-      ),
-      MealIngredient(
-        // Assuming mixed low-carb veggies include broccoli and carrots
-        ingredient: mockIngredients.firstWhere((i) => i.id == "broccoli"),
-        quantity: 80,
-      ),
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "coconut_amino"),
-        quantity: 5,
-      ),
-    ],
-  ),
-
-  // 2) Salmon & Asparagus (Dinner)
-  Meal(
-    id: "salmon_asparagus",
-    name: "Salmon & Asparagus",
-    image: "assets/images/salmon_asparagus.jpg",
-    instructions: [
-      "Season salmon with herbs and lemon.",
-      "Bake salmon with asparagus.",
-      "Drizzle extra virgin olive oil before serving.",
-    ],
-    diets: [
-      "Pescatarian",
-      "Mediterranean",
-      "Low Glycemic / Blood Sugar Friendly",
-      "High Protein",
-    ],
-    allergies: ["Fish"],
-    category: "Dinner",
-    prepTime: 20,
-    video: null,
-    ingredients: [
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "salmon"),
-        quantity: 150,
-      ),
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "asparagus"),
-        quantity: 100,
-      ),
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "lemon"),
-        quantity: 1,
-      ),
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "olive_oil"),
-        quantity: 5,
-      ),
-    ],
-  ),
-
-  // 3) Dairy-Free Turkey Chili (Dinner)
-  Meal(
-    id: "dairyfree_turkey_chili",
-    name: "Dairy-Free Turkey Chili",
-    image: "assets/images/turkey_chili.jpg",
-    instructions: [
-      "Brown ground turkey with diced onions.",
-      "Add tomatoes, beans, and chili spices.",
-      "Simmer until the flavors meld.",
-    ],
-    diets: ["Low Fat", "High Protein", "Dairy-Free", "Gluten-Free"],
-    allergies: [],
-    category: "Dinner",
-    prepTime: 25,
-    video: null,
-    ingredients: [
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "turkey_slices"),
-        quantity: 150,
-      ),
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "onion"),
-        quantity: 1,
-      ),
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "tomato"),
-        quantity: 2,
-      ),
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "beans"),
-        quantity: 100,
-      ),
-    ],
-  ),
-
-  // 4) Vegan Portobello Fajitas (Dinner)
-  Meal(
-    id: "vegan_portobello_fajitas",
-    name: "Vegan Portobello Fajitas",
-    image: "assets/images/vegan_portobello_fajitas.jpg",
-    instructions: [
-      "Slice portobello mushrooms, onions, and bell peppers.",
-      "Sauté with fajita seasoning until tender.",
-      "Serve in corn tortillas with avocado slices.",
-    ],
-    diets: ["Vegan", "Gluten-Free", "Nut-Free", "Low Calorie", "High Fiber"],
-    allergies: [],
-    category: "Dinner",
-    prepTime: 20,
-    video: null,
-    ingredients: [
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere(
-          (i) => i.id == "portobello_mushrooms",
-        ),
-        quantity: 150,
-      ),
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "onion"),
-        quantity: 1,
-      ),
-      MealIngredient(
         ingredient: mockIngredients.firstWhere((i) => i.id == "bell_pepper"),
-        quantity: 1,
-      ),
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "corn_tortillas"),
-        quantity: 2,
-      ),
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "avocado"),
-        quantity: 0.5,
-      ),
-    ],
-  ),
-
-  // 5) Low Glycemic Lentil Curry (Dinner)
-  Meal(
-    id: "lowglycemic_lentil_curry",
-    name: "Low Glycemic Lentil Curry",
-    image: "assets/images/lentil_curry.jpg",
-    instructions: [
-      "Sauté onions, garlic, and ginger.",
-      "Add lentils, diced tomatoes, and curry powder.",
-      "Simmer until lentils are soft and flavorful.",
-    ],
-    diets: [
-      "Low Glycemic / Blood Sugar Friendly",
-      "Vegan",
-      "High Fiber",
-      "Anti-Inflammatory",
-      "Gluten-Free",
-    ],
-    allergies: [],
-    category: "Dinner",
-    prepTime: 30,
-    video: null,
-    ingredients: [
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "lentils"),
-        quantity: 100,
-      ),
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "onion"),
-        quantity: 1,
+        quantity: 50,
       ),
       MealIngredient(
         ingredient: mockIngredients.firstWhere((i) => i.id == "tomato"),
+        quantity: 1,
+      ),
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "saffron"),
         quantity: 2,
       ),
       MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "curry_powder"),
+        ingredient: mockIngredients.firstWhere((i) => i.id == "vegetable_broth"),
+        quantity: 250,
+      ),
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "peas"),
+        quantity: 50,
+      ),
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "artichoke_hearts"),
+        quantity: 50,
+      ),
+      MealIngredient(
+        ingredient: mockIngredients.firstWhere((i) => i.id == "parsley"),
         quantity: 5,
       ),
     ],
   ),
 
-  // ----------------------------------------------------
-  // 5 SNACKS
-  // ----------------------------------------------------
-
-  // 1) Protein Shake (Snack)
+  // 10) Healthy Chia Pudding with Mixed Berries (Snack)
   Meal(
-    id: "protein_shake",
-    name: "Protein Shake",
-    image: "assets/images/protein_shake.jpg",
+    id: "chia_pudding_mixed_berries",
+    name: "Healthy Chia Pudding with Mixed Berries",
+    image: "assets/images/chia_pudding_mixed_berries.jpg",
     instructions: [
-      "Blend protein powder, water or plant milk, and ice.",
-      "Optional: add banana for extra creaminess.",
+      "Mix chia seeds with almond milk and a little honey, and refrigerate overnight.",
+      "Top with a mixture of fresh berries and a dash of vanilla extract before serving."
     ],
-    diets: ["High Protein", "Low Fat", "Nut-Free", "Low Carb"],
-    allergies: [],
+    diets: ["Vegan", "Gluten-Free", "High Fiber"],
+    allergies: ["Nuts"],
     category: "Snack",
-    prepTime: 3,
+    prepTime: 10,
     video: null,
     ingredients: [
       MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "protein_powder"),
+        ingredient: mockIngredients.firstWhere((i) => i.id == "chia_seeds"),
         quantity: 30,
       ),
       MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "plant_milk"),
+        ingredient: mockIngredients.firstWhere((i) => i.id == "almond_milk"),
         quantity: 200,
       ),
-    ],
-  ),
-
-  // 2) Paleo Apple Slices & Almond Butter (Snack)
-  Meal(
-    id: "paleo_apple_almond_butter",
-    name: "Apple Slices & Almond Butter",
-    image: "assets/images/apple_almond_butter.jpg",
-    instructions: [
-      "Slice an apple into wedges.",
-      "Serve with a side of almond butter for dipping.",
-    ],
-    diets: [
-      "Paleo",
-      "Low Glycemic / Blood Sugar Friendly",
-      "Dairy-Free",
-      "Balanced",
-    ],
-    allergies: ["Nuts"],
-    category: "Snack",
-    prepTime: 5,
-    video: null,
-    ingredients: [
       MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "apple"),
-        quantity: 1,
+        ingredient: mockIngredients.firstWhere((i) => i.id == "honey"),
+        quantity: 5,
       ),
       MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "almond_butter"),
-        quantity: 20,
-      ),
-    ],
-  ),
-
-  // 3) Low Calorie Veggie Sticks (Snack)
-  Meal(
-    id: "lowcal_veggie_sticks",
-    name: "Veggie Sticks with Dip",
-    image: "assets/images/veggie_sticks.jpg",
-    instructions: [
-      "Cut cucumbers, carrots, and celery into sticks.",
-      "Serve with a side of low-fat hummus.",
-    ],
-    diets: ["Low Calorie", "Vegan", "Nut-Free", "Soy-Free", "High Fiber"],
-    allergies: [],
-    category: "Snack",
-    prepTime: 5,
-    video: null,
-    ingredients: [
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "cucumber"),
-        quantity: 1,
-      ),
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "carrots"),
-        quantity: 1,
-      ),
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "celery"),
-        quantity: 1,
-      ),
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "hummus"),
+        ingredient: mockIngredients.firstWhere((i) => i.id == "berries"),
         quantity: 50,
       ),
-    ],
-  ),
-
-  // 4) FODMAP Friendly Rice Cakes (Snack)
-  Meal(
-    id: "fodmap_rice_cakes",
-    name: "Rice Cakes with Peanut Butter",
-    image: "assets/images/rice_cakes_pb.jpg",
-    instructions: [
-      "Spread a thin layer of peanut butter on rice cakes.",
-      "Top with sliced strawberries if desired.",
-    ],
-    diets: ["FODMAP Friendly", "Vegetarian", "Low Calorie"],
-    allergies: ["Nuts"],
-    category: "Snack",
-    prepTime: 2,
-    video: null,
-    ingredients: [
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "rice_cakes"),
-        quantity: 2,
-      ),
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "peanut_butter"),
-        quantity: 15,
-      ),
-      // Optionally, you can add strawberries if defined
-    ],
-  ),
-
-  // 5) Whole30 Celery & Tuna Boats (Snack)
-  Meal(
-    id: "whole30_celery_tuna",
-    name: "Celery & Tuna Boats",
-    image: "assets/images/celery_tuna.jpg",
-    instructions: [
-      "Mix tuna with Whole30-compliant mayo.",
-      "Spoon mixture into celery stalks.",
-    ],
-    diets: ["Whole30", "Low Carb", "High Protein", "Gluten-Free"],
-    allergies: ["Fish"],
-    category: "Snack",
-    prepTime: 5,
-    video: null,
-    ingredients: [
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "tuna"),
-        quantity: 100,
-      ),
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "celery"),
-        quantity: 2,
-      ),
-      MealIngredient(
-        ingredient: mockIngredients.firstWhere((i) => i.id == "whole30_mayo"),
-        quantity: 10,
-      ),
+      // Optionally, add vanilla if defined
     ],
   ),
 ];

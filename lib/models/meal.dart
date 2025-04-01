@@ -97,4 +97,37 @@ class Meal {
     tags: (json['tags'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
     difficulty: json['difficulty'],
   );
+
+  Meal scaledToCalories(double targetCalories) {
+    final currentCalories = calories;
+
+    if (currentCalories == 0) return this;
+
+    final scaleFactor = targetCalories / currentCalories;
+
+    final scaledIngredients =
+        ingredients.map((i) {
+          return MealIngredient(
+            ingredient: i.ingredient,
+            quantity: i.quantity * scaleFactor,
+            unit: i.unit,
+          );
+        }).toList();
+
+    return Meal(
+      id: id,
+      name: name,
+      image: image,
+      ingredients: scaledIngredients,
+      instructions: instructions,
+      diets: diets,
+      category: category,
+      allergies: allergies,
+      prepTime: prepTime,
+      cookTime: cookTime,
+      video: video,
+      tags: tags,
+      difficulty: difficulty,
+    );
+  }
 }

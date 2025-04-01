@@ -111,12 +111,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           await FirebaseAuth.instance.signOut();
                           if (!mounted) return;
                           // Navigate to Home (NavScreen) after logout.
-                          Navigator.pushReplacement(
-                            // ignore: use_build_context_synchronously
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const NavScreen(),
+                          // ignore: use_build_context_synchronously
+                          Navigator.of(context).pushAndRemoveUntil(
+                            PageRouteBuilder(
+                              transitionDuration: const Duration(
+                                milliseconds: 400,
+                              ),
+                              pageBuilder:
+                                  (context, animation, secondaryAnimation) =>
+                                      const NavScreen(),
+                              transitionsBuilder: (
+                                context,
+                                animation,
+                                secondaryAnimation,
+                                child,
+                              ) {
+                                return FadeTransition(
+                                  opacity: animation,
+                                  child: child,
+                                );
+                              },
                             ),
+                            (route) => false,
                           );
                         },
                       ),

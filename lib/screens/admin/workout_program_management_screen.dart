@@ -426,11 +426,17 @@ class _AdminWorkoutProgramManagementScreenState
             const SizedBox(height: 12),
 
             // Image preview & upload
-            if (imageUrl != null) Image.network(imageUrl!, height: 100),
+            if (imageUrl != null)
+              if (imageUrl!.startsWith('http'))
+                Image.network(imageUrl!, height: 100)
+              else
+                Image.file(File(imageUrl!), height: 100),
+
             ElevatedButton(
               onPressed: pickAndUploadImage,
               child: const Text('Upload Image'),
             ),
+
             const SizedBox(height: 12),
 
             // Add Day

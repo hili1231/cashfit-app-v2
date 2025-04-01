@@ -40,9 +40,18 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const NavScreen()),
+      Navigator.of(context).pushReplacement(
+        PageRouteBuilder(
+          transitionDuration: const Duration(milliseconds: 500),
+          pageBuilder: (_, __, ___) => const NavScreen(),
+          transitionsBuilder: (_, animation, __, child) {
+            final curved = CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeInOut,
+            );
+            return FadeTransition(opacity: curved, child: child);
+          },
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -143,7 +152,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               height: 24,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2.5,
-                                color: Colors.black,
+                                color: Colors.amber,
                               ),
                             )
                             : const Text("Login"),

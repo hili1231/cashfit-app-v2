@@ -1,15 +1,14 @@
 class WorkoutProgram {
-  final String id; // Add the ID for Firebase document reference
+  final String id;
   final String title;
   final String image;
-  final Map<String, List<String>>
-  days; // day number => list of workoutExerciseIds
+  final Map<String, List<String>> days;
   final String level;
   final String description;
   final String? userId;
 
   WorkoutProgram({
-    required this.id, // Required id for new and existing programs
+    required this.id,
     required this.title,
     required this.image,
     required this.days,
@@ -31,7 +30,7 @@ class WorkoutProgram {
 
   factory WorkoutProgram.fromMap(Map<String, dynamic> map, String id) {
     return WorkoutProgram(
-      id: id, // Pass the id when creating from Firestore data
+      id: id,
       title: map['title'] ?? '',
       image: map['image'] ?? '',
       days: Map<String, List<dynamic>>.from(
@@ -42,4 +41,18 @@ class WorkoutProgram {
       userId: map['userId'],
     );
   }
+
+  // 👇 Add these methods to fix DropdownButton equality issues
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+
+    return other is WorkoutProgram && other.id == id;
+  }
+
+  @override
+  int get hashCode => id.hashCode;
+
+  @override
+  String toString() => 'WorkoutProgram(id: $id, title: $title)';
 }

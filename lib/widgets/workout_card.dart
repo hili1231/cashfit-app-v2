@@ -112,18 +112,39 @@ class WorkoutCard extends StatelessWidget {
   }
 
   Widget _buildWorkoutImage() {
-    return Image.asset(
-      workout.image,
+    // 🔒 Fallback if the image field is empty or null-like
+    if (workout.image.isEmpty) {
+      return _fallbackImage();
+    }
+
+    // 🌐 Check if it's a network image (starts with http or https)
+    final isNetwork =
+        workout.image.startsWith('http') || workout.image.startsWith('https');
+
+    return isNetwork
+        ? Image.network(
+          workout.image,
+          height: 90,
+          width: double.infinity,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _fallbackImage(),
+        )
+        : Image.asset(
+          workout.image,
+          height: 90,
+          width: double.infinity,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _fallbackImage(),
+        );
+  }
+
+  Widget _fallbackImage() {
+    return Container(
       height: 90,
       width: double.infinity,
-      fit: BoxFit.cover,
-      errorBuilder:
-          (_, __, ___) => Container(
-            height: 90,
-            color: Colors.black,
-            alignment: Alignment.center,
-            child: const Icon(Icons.broken_image, color: Colors.white70),
-          ),
+      color: Colors.black,
+      alignment: Alignment.center,
+      child: const Icon(Icons.fitness_center, color: Colors.amber),
     );
   }
 }

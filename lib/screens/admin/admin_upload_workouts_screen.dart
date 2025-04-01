@@ -20,7 +20,7 @@ class AdminExerciseManagementScreenState
   final FirebaseStorage storage = FirebaseStorage.instance;
 
   List<Exercise> exercises = [];
-  List<Exercise> filteredExercises = []; // <--- New: for search filtering
+  List<Exercise> filteredExercises = [];
 
   String? selectedExerciseId;
   String? imageUrl, videoUrl, category;
@@ -94,7 +94,6 @@ class AdminExerciseManagementScreenState
   void initState() {
     super.initState();
     loadExercises();
-    // Whenever the search field changes, we’ll update the filtered list
     searchController.addListener(_updateFilteredExercises);
   }
 
@@ -110,36 +109,36 @@ class AdminExerciseManagementScreenState
     if (!mounted) return;
     setState(() {
       exercises =
-          snapshot.docs.map((doc) => Exercise.fromMap(doc.data())).toList();
-      // By default, filtered list = full list
+          snapshot.docs
+              .map((doc) => Exercise.fromMap(doc.data()))
+              .where((ex) => ex.id.isNotEmpty)
+              .toList();
       filteredExercises = [...exercises];
     });
   }
 
-  // <--- Called whenever user types in search box
   void _updateFilteredExercises() {
     final query = searchController.text.trim().toLowerCase();
     setState(() {
       if (query.isEmpty) {
-        // No search? Show all
-        filteredExercises = exercises;
+        filteredExercises = [...exercises];
       } else {
-        // Filter by name containing the query
         filteredExercises =
-            exercises.where((ex) {
-              return ex.name.toLowerCase().contains(query);
-            }).toList();
+            exercises
+                .where((ex) => ex.name.toLowerCase().contains(query))
+                .toList();
       }
 
-      // If the currently selected exercise is no longer in the filtered list,
-      // we can clear it or keep it as-is
-      if (selectedExerciseId != null) {
-        final stillExists = filteredExercises.any(
-          (e) => e.id == selectedExerciseId,
-        );
-        if (!stillExists) {
-          selectedExerciseId = null;
-        }
+      if (selectedExerciseId != null &&
+          !filteredExercises.any((e) => e.id == selectedExerciseId)) {
+        selectedExerciseId = null;
+        nameController.clear();
+        instructionsController.clear();
+        category = null;
+        muscleGroups.clear();
+        injuryRisks.clear();
+        imageUrl = null;
+        videoUrl = null;
       }
     });
   }
@@ -147,9 +146,9 @@ class AdminExerciseManagementScreenState
   Future<String?> uploadFile(XFile file) async {
     try {
       String fileName = file.name;
-      Reference storageRef = storage.ref().child('uploads/$fileName');
-      UploadTask uploadTask = storageRef.putFile(File(file.path));
-      TaskSnapshot snapshot = await uploadTask.whenComplete(() {});
+      final storageRef = storage.ref().child('uploads/$fileName');
+      final uploadTask = storageRef.putFile(File(file.path));
+      final snapshot = await uploadTask.whenComplete(() {});
       return await snapshot.ref.getDownloadURL();
     } catch (e) {
       return null;
@@ -170,32 +169,7 @@ class AdminExerciseManagementScreenState
       return;
     }
 
-    // Generate a slug-like ID from the name
-    final normalizedId = name
-        .toLowerCase()
-        .replaceAll(RegExp(r'\s+'), '_')
-        .replaceAll(RegExp(r'[^a-z0-9_]+'), '');
-
-    // Check for duplicates only when creating
-    if (exerciseId == null) {
-      final existing =
-          await firestore.collection('exercises').doc(normalizedId).get();
-
-      if (!mounted) return; // ✅ Ensure context is still valid
-
-      if (existing.exists) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("An exercise with this name already exists."),
-          ),
-        );
-        return;
-      }
-    }
-
-    final docId = exerciseId ?? normalizedId;
-
-    await firestore.collection('exercises').doc(docId).set({
+    final data = {
       'name': name,
       'instructions': instructions,
       'image': imageUrl,
@@ -203,20 +177,27 @@ class AdminExerciseManagementScreenState
       'category': category,
       'muscleGroups': muscleGroups,
       'injuryRisks': injuryRisks,
-    });
+    };
+
+    if (exerciseId != null) {
+      await firestore.collection('exercises').doc(exerciseId).update(data);
+    } else {
+      final docRef = await firestore.collection('exercises').add(data);
+      await docRef.update({'id': docRef.id});
+    }
 
     if (!mounted) return;
     await loadExercises();
     nameController.clear();
     instructionsController.clear();
+
     setState(() {
       selectedExerciseId = null;
       category = null;
-      muscleGroups = [];
-      injuryRisks = [];
+      muscleGroups.clear();
+      injuryRisks.clear();
       imageUrl = null;
     });
-    if (!mounted) return; // ✅ Safe use of context
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Exercise saved successfully!')),
@@ -227,10 +208,11 @@ class AdminExerciseManagementScreenState
     await firestore.collection('exercises').doc(exerciseId).delete();
     if (!mounted) return;
     setState(() {
-      exercises.removeWhere((exercise) => exercise.id == exerciseId);
-      filteredExercises.removeWhere((exercise) => exercise.id == exerciseId);
+      exercises.removeWhere((e) => e.id == exerciseId);
+      filteredExercises.removeWhere((e) => e.id == exerciseId);
       selectedExerciseId = null;
     });
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Exercise deleted successfully!')),
     );
@@ -238,11 +220,16 @@ class AdminExerciseManagementScreenState
 
   Future<void> uploadExercisesFromLocal() async {
     for (final ex in exerciseLibrary) {
-      await firestore.collection('exercises').doc(ex.id).set(ex.toMap());
+      final map = ex.toMap();
+      map['id'] =
+          map['id'] != null && map['id'].toString().isNotEmpty
+              ? map['id']
+              : ex.name.toLowerCase().replaceAll(' ', '_');
+      await firestore.collection('exercises').doc(map['id']).set(map);
     }
+
     if (!mounted) return;
     await loadExercises();
-    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Exercises uploaded from local data')),
     );
@@ -250,9 +237,7 @@ class AdminExerciseManagementScreenState
 
   Future<void> pickAndUploadImageOrVideo() async {
     final picker = ImagePicker();
-    final XFile? pickedFile = await picker.pickImage(
-      source: ImageSource.gallery,
-    );
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
     if (pickedFile != null) {
       final url = await uploadFile(pickedFile);
       if (url != null) {
@@ -278,7 +263,7 @@ class AdminExerciseManagementScreenState
                 return FilterChip(
                   label: Text(item),
                   selected: selected,
-                  onSelected: (val) {
+                  onSelected: (_) {
                     setState(() {
                       selected
                           ? selectedList.remove(item)
@@ -302,7 +287,7 @@ class AdminExerciseManagementScreenState
         backgroundColor: Colors.black,
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16),
         child: ListView(
           children: [
             const Text('Add/Edit Exercise', style: TextStyle(fontSize: 20)),
@@ -326,15 +311,14 @@ class AdminExerciseManagementScreenState
               onChanged: (val) => setState(() => category = val),
               decoration: const InputDecoration(labelText: 'Category *'),
             ),
-
             const SizedBox(height: 10),
             _buildChips(
               allMuscleGroups,
               muscleGroups,
-              "Select Muscle Groups *",
+              'Select Muscle Groups *',
             ),
             const SizedBox(height: 10),
-            _buildChips(allInjuries, injuryRisks, "Injury Risks (Optional)"),
+            _buildChips(allInjuries, injuryRisks, 'Injury Risks (Optional)'),
             const SizedBox(height: 10),
             ElevatedButton(
               onPressed: pickAndUploadImageOrVideo,
@@ -345,14 +329,11 @@ class AdminExerciseManagementScreenState
               onPressed: () async => await createOrEditExercise(),
               child: const Text('Save New Exercise'),
             ),
-
             const Divider(height: 40),
             const Text(
               'Edit Existing Exercise',
               style: TextStyle(fontSize: 20),
             ),
-
-            // <--- New: Search box to filter the dropdown
             TextField(
               controller: searchController,
               decoration: const InputDecoration(
@@ -361,18 +342,21 @@ class AdminExerciseManagementScreenState
               ),
             ),
             const SizedBox(height: 10),
-
             DropdownButton<String>(
-              hint: const Text("Select Exercise to Edit"),
-              value: selectedExerciseId,
-              isExpanded: true, // Let it expand horizontally
+              hint: const Text('Select Exercise to Edit'),
+              value:
+                  filteredExercises.any((e) => e.id == selectedExerciseId)
+                      ? selectedExerciseId
+                      : null,
+              isExpanded: true,
               onChanged: (newValue) {
-                setState(() {
-                  selectedExerciseId = newValue;
-                  if (newValue != null) {
-                    final ex = filteredExercises.firstWhere(
-                      (e) => e.id == newValue,
-                    );
+                final exists = filteredExercises.any((e) => e.id == newValue);
+                if (exists && newValue != null) {
+                  final ex = filteredExercises.firstWhere(
+                    (e) => e.id == newValue,
+                  );
+                  setState(() {
+                    selectedExerciseId = newValue;
                     nameController.text = ex.name;
                     instructionsController.text = ex.instructions;
                     imageUrl = ex.image;
@@ -380,16 +364,20 @@ class AdminExerciseManagementScreenState
                     category = ex.category;
                     muscleGroups = List.from(ex.muscleGroups);
                     injuryRisks = List.from(ex.injuryRisks);
-                  }
-                });
+                  });
+                } else {
+                  setState(() => selectedExerciseId = null);
+                }
               },
               items:
-                  filteredExercises.map((e) {
-                    return DropdownMenuItem<String>(
-                      value: e.id,
-                      child: Text(e.name),
-                    );
-                  }).toList(),
+                  filteredExercises
+                      .map(
+                        (e) => DropdownMenuItem<String>(
+                          value: e.id,
+                          child: Text(e.name),
+                        ),
+                      )
+                      .toList(),
             ),
             const SizedBox(height: 10),
             ElevatedButton(
@@ -401,7 +389,6 @@ class AdminExerciseManagementScreenState
               child: const Text('Save Edited Exercise'),
             ),
             const Divider(height: 40),
-
             const Text('Delete Exercise', style: TextStyle(fontSize: 20)),
             ElevatedButton(
               onPressed: () async {
@@ -412,7 +399,6 @@ class AdminExerciseManagementScreenState
               child: const Text('Delete Selected Exercise'),
             ),
             const Divider(height: 40),
-
             ElevatedButton(
               onPressed: uploadExercisesFromLocal,
               child: const Text('Upload Exercises from Local Data'),
