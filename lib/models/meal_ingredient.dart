@@ -33,17 +33,17 @@ class MealIngredient {
   double get sodium => _scale(ingredient.sodium);
   double get zinc => _scale(ingredient.zinc);
 
-  Map<String, dynamic> toJson() => {
-    'ingredient': ingredient.toJson(),
+  Map<String, dynamic> toMap() => {
+    'ingredient': ingredient.toMap(),
     'quantity': quantity,
     'unit': unit,
   };
 
-  factory MealIngredient.fromJson(Map<String, dynamic> json) {
+  factory MealIngredient.fromMap(Map<String, dynamic> map) {
     return MealIngredient(
-      ingredient: Ingredient.fromJson(json['ingredient']),
-      quantity: (json['quantity'] ?? 0).toDouble(),
-      unit: json['unit'] ?? 'g',
+      ingredient: Ingredient.fromMap(map['ingredient'] as Map<String, dynamic>),
+      quantity: (map['quantity'] as num?)?.toDouble() ?? 0.0,
+      unit: map['unit'] ?? 'g',
     );
   }
 }

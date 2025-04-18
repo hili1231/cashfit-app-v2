@@ -1,49 +1,112 @@
-import '../../auth/login_screen.dart';
-import '../../data/user_data.dart';
-import '../../screens/upgrade_to_premium_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import '../../data/side_hustle_data.dart';
+import 'package:provider/provider.dart';
+import '../../auth/login_screen.dart';
+import '../../screens/upgrade_to_premium_screen.dart';
 import '../../models/side_hustle.dart';
 import '../nav_screen.dart';
 import 'side_hustle_detail_screen.dart';
+import '../../providers/user_provider.dart';
 import '../../theme.dart';
 
 class SideHustleScreen extends StatelessWidget {
   const SideHustleScreen({super.key});
 
+  Future<List<SideHustle>> _fetchSideHustles() async {
+    // Ensure Firestore operations run on the main thread
+    return await Future.microtask(() async {
+      final snapshot =
+          await FirebaseFirestore.instance.collection('sideHustles').get();
+      return snapshot.docs
+          .map((doc) => SideHustle.fromMap(doc.data()..['id'] = doc.id))
+          .toList();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Container(
-        decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
-        child: SafeArea(
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final userProvider = Provider.of<UserProvider>(context);
+    final user = FirebaseAuth.instance.currentUser;
+
+    return Container(
+      decoration: AppTheme.backgroundGradient(
+        colorScheme,
+      ), // Add gradient background
+      child: Scaffold(
+        backgroundColor:
+            Colors.transparent, // Make Scaffold background transparent
+        body: SafeArea(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Screen Title
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                child: Center(
-                  child: Text(
-                    "SIDE HUSTLES",
-                    style: AppTheme.headline.copyWith(
-                      fontSize: 22,
-                      color: Colors.white70,
-                      letterSpacing: 1.5,
-                    ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                child: Text(
+                  "SIDE HUSTLES", // Updated title to match other screens
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
                   ),
                 ),
               ),
               // List of Hustles
               Expanded(
-                child: ListView.builder(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: sideHustleData.length,
-                  itemBuilder: (context, index) {
-                    final hustle = sideHustleData[index];
-                    return _buildHustleCard(context, hustle);
+                child: FutureBuilder<List<SideHustle>>(
+                  future: _fetchSideHustles(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return Center(
+                        child: CircularProgressIndicator(
+                          color: colorScheme.primary,
+                        ),
+                      );
+                    }
+                    if (snapshot.hasError) {
+                      return Center(
+                        child: Text(
+                          "Error: ${snapshot.error}",
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      );
+                    }
+                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                      return Center(
+                        child: Text(
+                          "No side hustles found",
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      );
+                    }
+
+                    final sideHustles = snapshot.data!;
+                    return ListView.builder(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: sideHustles.length,
+                      itemBuilder: (context, index) {
+                        final hustle = sideHustles[index];
+                        return _buildHustleCard(
+                          context,
+                          theme,
+                          colorScheme,
+                          hustle,
+                          user,
+                          userProvider,
+                        );
+                      },
+                    );
                   },
                 ),
               ),
@@ -54,38 +117,44 @@ class SideHustleScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildHustleCard(BuildContext context, SideHustle hustle) {
+  Widget _buildHustleCard(
+    BuildContext context,
+    ThemeData theme,
+    ColorScheme colorScheme,
+    SideHustle hustle,
+    User? user,
+    UserProvider userProvider,
+  ) {
     final navState = context.findAncestorStateOfType<NavScreenState>();
-    final user = firebaseUser;
 
     // Calculate participants/spots left
     final totalParticipants = hustle.participants.length;
     final maxP = hustle.maxParticipants ?? 0;
     final spotsLeft = maxP > 0 ? (maxP - totalParticipants) : 0;
 
-    return InkWell(
-      onTap: () {
-        // If not logged in => go to login
-        if (user == null) {
-          navState?.setDetailScreen(const LoginScreen());
-          return;
-        }
+    return Card(
+      color: colorScheme.surfaceContainer,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      margin: const EdgeInsets.only(bottom: 14),
+      elevation: 1,
+      child: InkWell(
+        onTap: () {
+          // If not logged in => go to login
+          if (user == null) {
+            navState?.setDetailScreen(const LoginScreen());
+            return;
+          }
 
-        // If logged in but not premium => upgrade screen
-        if (currentUser?.isPremium != true) {
-          navState?.setDetailScreen(const UpgradeToPremierScreen());
-          return;
-        }
+          // If logged in but not premium => upgrade screen
+          if (!userProvider.currentUser!.isPremiumActive()) {
+            navState?.setDetailScreen(const UpgradeToPremierScreen());
+            return;
+          }
 
-        // If premium => side hustle detail
-        navState?.setDetailScreen(SideHustleDetailScreen(hustle: hustle));
-      },
-      child: Card(
-        color: Colors.grey[900],
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        margin: const EdgeInsets.only(bottom: 14),
-        elevation: 3,
-        shadowColor: Colors.black87,
+          // If premium => side hustle detail
+          navState?.setDetailScreen(SideHustleDetailScreen(hustle: hustle));
+        },
+        borderRadius: BorderRadius.circular(15),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -95,14 +164,13 @@ class SideHustleScreen extends StatelessWidget {
                 topLeft: Radius.circular(15),
                 topRight: Radius.circular(15),
               ),
-              // If your sideHustleData thumbnails are local asset paths,
-              // you might want to use Image.asset, else Image.network:
               child: Image.asset(
                 hustle.thumbnail,
                 width: double.infinity,
                 height: 160,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => _buildPlaceholderImage(),
+                errorBuilder:
+                    (_, __, ___) => _buildPlaceholderImage(colorScheme),
               ),
             ),
             Padding(
@@ -113,9 +181,9 @@ class SideHustleScreen extends StatelessWidget {
                   // Title
                   Text(
                     hustle.title,
-                    style: AppTheme.headline.copyWith(
-                      fontSize: 18,
-                      color: Colors.white70,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: colorScheme.onSurface,
+                      fontWeight: FontWeight.bold,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -125,7 +193,9 @@ class SideHustleScreen extends StatelessWidget {
                   // Description
                   Text(
                     hustle.description,
-                    style: AppTheme.smallText.copyWith(color: Colors.white70),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurface,
+                    ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -134,26 +204,17 @@ class SideHustleScreen extends StatelessWidget {
                   // Spots left or participants
                   Row(
                     children: [
-                      const Icon(Icons.people, color: Colors.amber, size: 16),
+                      Icon(Icons.people, color: colorScheme.primary, size: 16),
                       const SizedBox(width: 5),
-                      if (maxP > 0)
-                        Text(
-                          "$spotsLeft spots left",
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontWeight: FontWeight.w500,
-                            fontSize: 14,
-                          ),
-                        )
-                      else
-                        Text(
-                          "$spotsLeft spots left",
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontWeight: FontWeight.w500,
-                            fontSize: 14,
-                          ),
+                      Text(
+                        maxP > 0
+                            ? "$spotsLeft spots left"
+                            : "$totalParticipants participants",
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w500,
                         ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 6),
@@ -161,32 +222,24 @@ class SideHustleScreen extends StatelessWidget {
                   // Prize row + arrow
                   Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.monetization_on,
-                        color: Colors.amber,
+                        color: colorScheme.primary,
                         size: 16,
                       ),
                       const SizedBox(width: 5),
                       Text(
                         "\$${hustle.reward} prize",
-                        style: const TextStyle(
-                          color: Colors.amber,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.primary,
                           fontWeight: FontWeight.bold,
-                          fontSize: 14,
                         ),
                       ),
                       const Spacer(),
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[800],
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.arrow_forward_ios,
-                          color: Colors.white70,
-                          size: 16,
-                        ),
+                      Icon(
+                        Icons.arrow_forward_ios,
+                        color: colorScheme.onSurfaceVariant,
+                        size: 16,
                       ),
                     ],
                   ),
@@ -199,19 +252,24 @@ class SideHustleScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildPlaceholderImage() {
-    return Container(
-      height: 160,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.grey[800],
-        borderRadius: const BorderRadius.only(
+  Widget _buildPlaceholderImage(ColorScheme colorScheme) {
+    return Card(
+      color: colorScheme.surfaceContainer,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.only(
           topLeft: Radius.circular(15),
           topRight: Radius.circular(15),
         ),
       ),
-      alignment: Alignment.center,
-      child: const Icon(Icons.business_center, size: 60, color: Colors.amber),
+      child: SizedBox(
+        height: 160,
+        width: double.infinity,
+        child: Icon(
+          Icons.business_center,
+          size: 60,
+          color: colorScheme.onSurfaceVariant,
+        ),
+      ),
     );
   }
 }

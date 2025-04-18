@@ -1,14 +1,14 @@
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../data/user_data.dart';
-import '../../screens/side_hustle/side_hustle_progress_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../models/side_hustle.dart';
 import '../nav_screen.dart';
 import 'side_hustle_screen.dart';
-import '../../theme.dart';
 import '../upgrade_to_premium_screen.dart';
 import '../../auth/login_screen.dart';
+import '../../providers/user_provider.dart';
+import 'side_hustle_progress_screen.dart';
 
 class SideHustleDetailScreen extends StatefulWidget {
   final SideHustle hustle;
@@ -37,6 +37,7 @@ class _SideHustleDetailScreenState extends State<SideHustleDetailScreen> {
 
     if (firebaseCurrentUser == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
         final navState = context.findAncestorStateOfType<NavScreenState>();
         if (navState != null) {
           navState.setDetailScreen(const LoginScreen());
@@ -50,18 +51,29 @@ class _SideHustleDetailScreenState extends State<SideHustleDetailScreen> {
       return;
     }
 
-    await loadUserFromFirestore(firebaseCurrentUser!.uid);
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    if (userProvider.currentUser == null) {
+      await userProvider.loadUserData(firebaseCurrentUser!.uid);
+    }
 
-    if (currentUser != null) {
-      controllers['name'] = TextEditingController(text: currentUser!.name);
-      controllers['email'] = TextEditingController(text: currentUser!.email);
+    if (userProvider.currentUser != null) {
+      controllers['name'] = TextEditingController(
+        text: userProvider.currentUser!.name,
+      );
+      controllers['email'] = TextEditingController(
+        text: userProvider.currentUser!.email,
+      );
+      hasJoined = userProvider.currentUser!.joinedSideHustles.contains(
+        widget.hustle.id,
+      );
     }
 
     setState(() => isLoading = false);
   }
 
   Future<void> _joinHustle() async {
-    final isPremium = currentUser?.isPremium ?? false;
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final isPremium = userProvider.currentUser?.isPremiumActive() ?? false;
     if (!isPremium) {
       if (mounted) {
         Navigator.push(
@@ -73,14 +85,16 @@ class _SideHustleDetailScreenState extends State<SideHustleDetailScreen> {
     }
 
     setState(() => isJoining = true);
-    final userId = currentUser?.id;
+    final userId = userProvider.currentUser?.id;
     if (userId == null) return;
 
     try {
-      if (!currentUser!.joinedSideHustles.contains(widget.hustle.id)) {
-        currentUser!.joinedSideHustles.add(widget.hustle.id);
+      if (!userProvider.currentUser!.joinedSideHustles.contains(
+        widget.hustle.id,
+      )) {
+        userProvider.currentUser!.joinedSideHustles.add(widget.hustle.id);
         await FirebaseFirestore.instance.collection('users').doc(userId).update(
-          {'joinedSideHustles': currentUser!.joinedSideHustles},
+          {'joinedSideHustles': userProvider.currentUser!.joinedSideHustles},
         );
       }
 
@@ -100,14 +114,38 @@ class _SideHustleDetailScreenState extends State<SideHustleDetailScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Joined Side Hustle successfully!")),
+          SnackBar(
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            content: Text(
+              "Joined Side Hustle successfully!",
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onPrimary,
+              ),
+            ),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Join failed: $e")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Theme.of(context).colorScheme.error,
+            content: Text(
+              "Join failed: $e",
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onError,
+              ),
+            ),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
       }
     }
 
@@ -116,199 +154,206 @@ class _SideHustleDetailScreenState extends State<SideHustleDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final userProvider = Provider.of<UserProvider>(context);
+
     if (isLoading || firebaseCurrentUser == null) {
-      return const Scaffold(
-        backgroundColor: Colors.black,
-        body: Center(child: CircularProgressIndicator(color: Colors.amber)),
+      return Scaffold(
+        backgroundColor: colorScheme.surface,
+        body: Center(
+          child: CircularProgressIndicator(color: colorScheme.primary),
+        ),
       );
     }
 
-    final isPremium = currentUser?.isPremium ?? false;
+    final isPremium = userProvider.currentUser?.isPremiumActive() ?? false;
     if (!isPremium) {
       return Scaffold(
         appBar: AppBar(
-          title: Text(widget.hustle.title),
-          backgroundColor: Colors.black,
-        ),
-        body: Container(
-          decoration: const BoxDecoration(
-            gradient: AppTheme.backgroundGradient,
-          ),
-          child: Center(
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const UpgradeToPremierScreen(),
-                  ),
-                );
-              },
-              child: const Text("Upgrade to Premium to Join Side Hustle"),
+          title: Text(
+            widget.hustle.title,
+            style: theme.textTheme.titleLarge?.copyWith(
+              color: colorScheme.onSurface,
             ),
+          ),
+          backgroundColor: colorScheme.surface,
+          elevation: 2,
+        ),
+        backgroundColor: colorScheme.surface,
+        body: Center(
+          child: ElevatedButton(
+            style: theme.elevatedButtonTheme.style?.copyWith(
+              backgroundColor: WidgetStateProperty.all(colorScheme.primary),
+              foregroundColor: WidgetStateProperty.all(colorScheme.onPrimary),
+            ),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const UpgradeToPremierScreen(),
+                ),
+              );
+            },
+            child: const Text("Upgrade to Premium to Join Side Hustle"),
           ),
         ),
       );
     }
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: colorScheme.surface,
       body: Stack(
         children: [
-          Container(
-            decoration: const BoxDecoration(
-              gradient: AppTheme.backgroundGradient,
-            ),
+          SingleChildScrollView(
             child: SafeArea(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.only(bottom: 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 50),
-                    ClipRRect(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Card(
+                    elevation: 4,
+                    margin: const EdgeInsets.all(16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    child: ClipRRect(
                       borderRadius: BorderRadius.circular(15),
                       child: Image.asset(
                         widget.hustle.thumbnail,
                         width: double.infinity,
                         height: 220,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _buildPlaceholderImage(),
+                        errorBuilder:
+                            (_, __, ___) => _buildPlaceholderImage(colorScheme),
                       ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.hustle.title,
-                            style: const TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white70,
-                            ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.hustle.title,
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            color: colorScheme.onSurface,
+                            fontWeight: FontWeight.bold,
                           ),
-                          const SizedBox(height: 12),
-                          Text(
-                            widget.hustle.description,
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 16,
-                            ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          widget.hustle.description,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: colorScheme.onSurface,
                           ),
-                          const SizedBox(height: 20),
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.monetization_on,
-                                color: Colors.amber,
-                                size: 22,
+                        ),
+                        const SizedBox(height: 20),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.monetization_on,
+                              color: colorScheme.primary,
+                              size: 22,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              "Prize: \$${widget.hustle.reward}",
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                color: colorScheme.primary,
+                                fontWeight: FontWeight.bold,
                               ),
-                              const SizedBox(width: 6),
-                              Text(
-                                "Prize: \$${widget.hustle.reward}",
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.amber,
-                                ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          "Video Requirement:",
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: colorScheme.onSurface,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          widget.hustle.videoRequirement,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          "${widget.hustle.participants.length} participants have joined",
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            style: theme.elevatedButtonTheme.style?.copyWith(
+                              backgroundColor: WidgetStateProperty.all(
+                                colorScheme.primary,
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-                          const Text(
-                            "Video Requirement:",
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white70,
-                            ),
-                          ),
-                          const SizedBox(height: 5),
-                          Text(
-                            widget.hustle.videoRequirement,
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 16,
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          Text(
-                            "${widget.hustle.participants.length} participants have joined",
-                            style: const TextStyle(
-                              color: Colors.white54,
-                              fontSize: 15,
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.amber,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 14,
-                                ),
-                                elevation: 3,
+                              foregroundColor: WidgetStateProperty.all(
+                                colorScheme.onPrimary,
                               ),
-                              onPressed:
-                                  isJoining
-                                      ? null
-                                      : () {
-                                        if (hasJoined) {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder:
-                                                  (_) =>
-                                                      SideHustleProgressScreen(
-                                                        hustle: widget.hustle,
-                                                      ),
-                                            ),
-                                          );
-                                        } else {
-                                          _joinHustle();
-                                        }
-                                      },
-                              icon:
-                                  isJoining
-                                      ? const SizedBox.shrink()
-                                      : const Icon(
-                                        Icons.videocam,
-                                        color: Colors.black,
+                              padding: WidgetStateProperty.all(
+                                const EdgeInsets.symmetric(vertical: 14),
+                              ),
+                            ),
+                            onPressed:
+                                isJoining
+                                    ? null
+                                    : () {
+                                      if (hasJoined) {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder:
+                                                (_) => SideHustleProgressScreen(
+                                                  hustle: widget.hustle,
+                                                ),
+                                          ),
+                                        );
+                                      } else {
+                                        _joinHustle();
+                                      }
+                                    },
+                            icon:
+                                isJoining
+                                    ? const SizedBox.shrink()
+                                    : Icon(
+                                      Icons.videocam,
+                                      color: colorScheme.onPrimary,
+                                    ),
+                            label:
+                                isJoining
+                                    ? SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        color: colorScheme.onPrimary,
+                                        strokeWidth: 2,
                                       ),
-                              label:
-                                  isJoining
-                                      ? const SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                          color: Colors.black,
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                      : Text(
-                                        hasJoined
-                                            ? "View Progress"
-                                            : "Join Side Hustle",
-                                        style: const TextStyle(
-                                          color: Colors.black,
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                            ),
+                                    )
+                                    : Text(
+                                      hasJoined
+                                          ? "View Progress"
+                                          : "Join Side Hustle",
+                                      style: theme.textTheme.labelLarge
+                                          ?.copyWith(
+                                            color: colorScheme.onPrimary,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                    ),
                           ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(height: 20),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -316,9 +361,13 @@ class _SideHustleDetailScreenState extends State<SideHustleDetailScreen> {
             top: 16,
             left: 16,
             child: SafeArea(
-              child: InkWell(
-                borderRadius: BorderRadius.circular(50),
-                onTap: () {
+              child: IconButton(
+                icon: Icon(
+                  Icons.arrow_back,
+                  color: colorScheme.onSurface,
+                  size: 24,
+                ),
+                onPressed: () {
                   final navState =
                       context.findAncestorStateOfType<NavScreenState>();
                   if (navState != null) {
@@ -327,18 +376,6 @@ class _SideHustleDetailScreenState extends State<SideHustleDetailScreen> {
                     Navigator.pop(context);
                   }
                 },
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.black87,
-                  ),
-                  child: const Icon(
-                    Icons.arrow_back,
-                    color: Colors.white70,
-                    size: 24,
-                  ),
-                ),
               ),
             ),
           ),
@@ -347,14 +384,18 @@ class _SideHustleDetailScreenState extends State<SideHustleDetailScreen> {
     );
   }
 
-  Widget _buildPlaceholderImage() => Container(
-    width: double.infinity,
-    height: 220,
-    decoration: BoxDecoration(
-      color: Colors.grey[800],
-      borderRadius: BorderRadius.circular(15),
-    ),
-    alignment: Alignment.center,
-    child: const Icon(Icons.broken_image, size: 50, color: Colors.white70),
-  );
+  Widget _buildPlaceholderImage(ColorScheme colorScheme) {
+    return Card(
+      color: colorScheme.surfaceContainer,
+      child: SizedBox(
+        width: double.infinity,
+        height: 220,
+        child: Icon(
+          Icons.broken_image,
+          size: 50,
+          color: colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
 }

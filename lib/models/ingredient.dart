@@ -57,8 +57,8 @@ class Ingredient {
     this.glycemicIndex,
   });
 
-  /// 🧾 For Firestore/JSON
-  Map<String, dynamic> toJson() => {
+  /// 🧾 For Firestore
+  Map<String, dynamic> toMap() => {
     'id': id,
     'name': name,
     'calories': calories,
@@ -83,29 +83,29 @@ class Ingredient {
     if (glycemicIndex != null) 'glycemicIndex': glycemicIndex,
   };
 
-  /// 🔄 From Firestore/JSON
-  factory Ingredient.fromJson(Map<String, dynamic> json) => Ingredient(
-    id: json['id'],
-    name: json['name'],
-    calories: (json['calories'] ?? 0).toDouble(),
-    protein: (json['protein'] ?? 0).toDouble(),
-    carbs: (json['carbs'] ?? 0).toDouble(),
-    fat: (json['fat'] ?? 0).toDouble(),
-    fiber: (json['fiber'] ?? 0).toDouble(),
-    sugar: (json['sugar'] ?? 0).toDouble(),
-    saturatedFat: (json['saturatedFat'] ?? 0).toDouble(),
-    cholesterol: (json['cholesterol'] ?? 0).toDouble(),
-    vitaminA: (json['vitaminA'] ?? 0).toDouble(),
-    vitaminC: (json['vitaminC'] ?? 0).toDouble(),
-    vitaminD: (json['vitaminD'] ?? 0).toDouble(),
-    vitaminK: (json['vitaminK'] ?? 0).toDouble(),
-    vitaminB12: (json['vitaminB12'] ?? 0).toDouble(),
-    iron: (json['iron'] ?? 0).toDouble(),
-    calcium: (json['calcium'] ?? 0).toDouble(),
-    potassium: (json['potassium'] ?? 0).toDouble(),
-    magnesium: (json['magnesium'] ?? 0).toDouble(),
-    sodium: (json['sodium'] ?? 0).toDouble(),
-    zinc: (json['zinc'] ?? 0).toDouble(),
-    glycemicIndex: json['glycemicIndex'],
+  /// 🔄 From Firestore
+  factory Ingredient.fromMap(Map<String, dynamic> map) => Ingredient(
+    id: map['id'] ?? '',
+    name: map['name'] ?? '',
+    calories: (map['calories'] as num?)?.toDouble() ?? 0.0,
+    protein: (map['protein'] as num?)?.toDouble() ?? 0.0,
+    carbs: (map['carbs'] as num?)?.toDouble() ?? 0.0,
+    fat: (map['fat'] as num?)?.toDouble() ?? 0.0,
+    fiber: (map['fiber'] as num?)?.toDouble() ?? 0.0,
+    sugar: (map['sugar'] as num?)?.toDouble() ?? 0.0,
+    saturatedFat: (map['saturatedFat'] as num?)?.toDouble() ?? 0.0,
+    cholesterol: (map['cholesterol'] as num?)?.toDouble() ?? 0.0,
+    vitaminA: (map['vitaminA'] as num?)?.toDouble() ?? 0.0,
+    vitaminC: (map['vitaminC'] as num?)?.toDouble() ?? 0.0,
+    vitaminD: (map['vitaminD'] as num?)?.toDouble() ?? 0.0,
+    vitaminK: (map['vitaminK'] as num?)?.toDouble() ?? 0.0,
+    vitaminB12: (map['vitaminB12'] as num?)?.toDouble() ?? 0.0,
+    iron: (map['iron'] as num?)?.toDouble() ?? 0.0,
+    calcium: (map['calcium'] as num?)?.toDouble() ?? 0.0,
+    potassium: (map['potassium'] as num?)?.toDouble() ?? 0.0,
+    magnesium: (map['magnesium'] as num?)?.toDouble() ?? 0.0,
+    sodium: (map['sodium'] as num?)?.toDouble() ?? 0.0,
+    zinc: (map['zinc'] as num?)?.toDouble() ?? 0.0,
+    glycemicIndex: (map['glycemicIndex'] as num?)?.toInt(),
   );
 }

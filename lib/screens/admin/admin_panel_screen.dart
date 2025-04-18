@@ -1,12 +1,12 @@
+import 'package:cashfit/screens/admin/admin_dashboard_screen.dart';
+import 'package:cashfit/screens/admin/admin_manage_meals_csv_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'admin_upload_challenges_screen.dart';
 import 'admin_upload_ingredients_screen.dart';
 import 'admin_create_meal_screen.dart';
 import 'admin_side_hustle_screen.dart';
 import 'admin_meal_plan_creator_screen.dart';
-import 'admin_upload_workouts_screen.dart';
-import 'workout_exercise_management_screen.dart';
+import 'admin_exercise_management_screen.dart';
 import 'workout_program_management_screen.dart';
 
 class AdminPanelScreen extends StatelessWidget {
@@ -29,12 +29,6 @@ class AdminPanelScreen extends StatelessWidget {
                 "Admin Panel",
                 style: GoogleFonts.oswald(color: Colors.white, fontSize: 24),
               ),
-            ),
-            _buildNavTile(
-              context,
-              "Manage Challenges",
-              Icons.flag,
-              const AdminUploadChallengesScreen(),
             ),
             _buildNavTile(
               context,
@@ -62,15 +56,21 @@ class AdminPanelScreen extends StatelessWidget {
             ),
             _buildNavTile(
               context,
-              "Create exercise",
+              "Upload CSV",
               Icons.menu_book,
-              const AdminExerciseManagementScreen(),
+              const AdminManageMealsScreen(),
             ),
             _buildNavTile(
               context,
-              "Create workout exercises",
+              "Admin",
               Icons.menu_book,
-              const AdminWorkoutExerciseManagementScreen(),
+              const AdminDashboardScreen(),
+            ),
+            _buildNavTile(
+              context,
+              "Create exercise",
+              Icons.menu_book,
+              const AdminExerciseManagementScreen(),
             ),
             _buildNavTile(
               context,

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/side_hustle.dart';
 import '../screens/side_hustle/side_hustle_detail_screen.dart';
+import '../theme.dart';
 
 class SideHustleCard extends StatelessWidget {
   final SideHustle hustle;
@@ -10,145 +11,145 @@ class SideHustleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent, // Ensures ripple effect works correctly
-      child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => SideHustleDetailScreen(hustle: hustle),
-            ),
-          );
-        },
-        borderRadius: BorderRadius.circular(12),
-        splashColor: Colors.white24, // Soft ripple effect
-        child: Card(
-          color: Colors.black, // Black background to match workout cards
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          elevation: 4,
-          // Subtle white glow
-          shadowColor: Colors.white70.withAlpha(25),
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Padding(
-            padding: const EdgeInsets.all(14.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Side Hustle Image
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: _buildHustleImage(),
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return AnimatedCard(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: SizedBox(
+        width: 160,
+        height: 220,
+        child: GestureDetector(
+          onTap:
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => SideHustleDetailScreen(hustle: hustle),
                 ),
-                const SizedBox(height: 12),
-                // Title
-                Text(
+              ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(12),
+                  topRight: Radius.circular(12),
+                ),
+                child: _buildHustleImage(context),
+              ),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Text(
                   hustle.title,
-                  style: GoogleFonts.oswald(
-                    fontSize: 20,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: colorScheme.onSurface,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white70,
-                    letterSpacing: 1.2,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 6),
-                // Description (Truncated)
-                Text(
-                  hustle.description,
-                  style: GoogleFonts.oswald(
-                    color: Colors.white70,
-                    fontSize: 14,
+              ),
+              const SizedBox(height: 4),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Text(
+                  "\$${hustle.reward} prize",
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
                   ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 12),
-                // Reward Info & "Start Now" Button
-                Row(
-                  children: [
-                    Icon(Icons.monetization_on, color: Colors.amber, size: 20),
-                    const SizedBox(width: 6),
-                    Text(
-                      "\$${hustle.reward} Prize",
-                      style: GoogleFonts.oswald(
-                        color: Colors.amber,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
+              ),
+              const Spacer(),
+              Padding(
+                padding: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
+                child: FilledButton(
+                  onPressed:
+                      () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder:
+                              (_) => SideHustleDetailScreen(hustle: hustle),
+                        ),
                       ),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: colorScheme.primary,
+                    foregroundColor: colorScheme.onPrimary,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 6,
+                      horizontal: 12,
                     ),
-                    const Spacer(),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder:
-                                (context) =>
-                                    SideHustleDetailScreen(hustle: hustle),
-                          ),
-                        );
-                      },
-                      icon: const Icon(
-                        Icons.play_arrow,
-                        color: Colors.black,
-                        size: 20,
-                      ),
-                      label: Text(
-                        "Start Now",
-                        style: GoogleFonts.oswald(
-                          color: Colors.black,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.amber, // Gold button
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 10,
-                        ),
-                        elevation: 2,
-                      ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                  ],
+                  ),
+                  child: Text(
+                    "View Hustle",
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: colorScheme.onPrimary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  /// Builds the Hustle Image with error handling.
-  Widget _buildHustleImage() {
-    return Image.asset(
-      hustle.thumbnail,
-      fit: BoxFit.cover,
-      height: 150,
-      width: double.infinity,
-      errorBuilder: (_, __, ___) => _buildPlaceholderImage(),
-    );
-  }
+  Widget _buildHustleImage(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final imageUrl = hustle.thumbnail.trim();
 
-  /// Placeholder image if no image is available.
-  Widget _buildPlaceholderImage() {
-    return Container(
-      height: 150,
+    if (imageUrl.isEmpty) {
+      return Container(
+        height: 90,
+        width: double.infinity,
+        color: colorScheme.surfaceContainer,
+        alignment: Alignment.center,
+        child: Icon(
+          Icons.business_center,
+          size: 40,
+          color: colorScheme.primary,
+        ),
+      );
+    }
+
+    return CachedNetworkImage(
+      imageUrl: imageUrl,
+      height: 90,
       width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.grey[850],
-        borderRadius: BorderRadius.circular(12),
-      ),
-      alignment: Alignment.center,
-      child: const Icon(Icons.business_center, size: 40, color: Colors.grey),
+      fit: BoxFit.cover,
+      fadeInDuration: const Duration(milliseconds: 200),
+      placeholder:
+          (context, url) => Container(
+            height: 90,
+            width: double.infinity,
+            color: colorScheme.surfaceContainer,
+            alignment: Alignment.center,
+            child: Icon(
+              Icons.business_center,
+              size: 40,
+              color: colorScheme.primary,
+            ),
+          ),
+      errorWidget:
+          (context, url, error) => Container(
+            height: 90,
+            width: double.infinity,
+            color: colorScheme.surfaceContainer,
+            alignment: Alignment.center,
+            child: Icon(
+              Icons.business_center,
+              size: 40,
+              color: colorScheme.primary,
+            ),
+          ),
+      memCacheWidth: 320,
+      maxWidthDiskCache: 320,
     );
   }
 }

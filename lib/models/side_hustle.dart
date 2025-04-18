@@ -1,4 +1,4 @@
-import '../../models/progress_video.dart';
+import 'progress_video.dart';
 
 class SideHustle {
   final String id;
@@ -7,7 +7,6 @@ class SideHustle {
   final int reward;
   final String videoRequirement;
   final String thumbnail;
-
   final Map<String, List<ProgressVideo>> progressVideos;
   final List<String> participants;
   final List<String> winners;

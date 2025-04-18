@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
 import '../auth/login_screen.dart';
-import '../data/user_data.dart';
-import '../theme.dart';
+import '../providers/user_provider.dart';
+import '../services/auth_service.dart';
 import './admin/admin_panel_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -13,57 +13,111 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool isLoading = true;
-
   @override
   void initState() {
     super.initState();
-    _loadUserData();
+
+    // Check if the user is logged in using UserProvider synchronously
+    _checkUserLogin();
   }
 
-  Future<void> _loadUserData() async {
-    if (firebaseUser != null && firebaseUser!.uid.isNotEmpty) {
-      await loadUserFromFirestore(firebaseUser!.uid);
+  void _checkUserLogin() {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    if (!userProvider.isLoggedIn || userProvider.currentUser == null) {
+      // Navigate immediately without async gap
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+        );
+      });
     }
+  }
+
+  Future<void> _handleLogout() async {
+    await AuthService.instance.signOut();
     if (!mounted) return;
-    setState(() {
-      isLoading = false;
-    });
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading) {
-      return const Scaffold(
-        backgroundColor: Colors.black,
-        body: Center(child: CircularProgressIndicator(color: Colors.amber)),
+    final userProvider = Provider.of<UserProvider>(context);
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    if (userProvider.isLoading) {
+      return Scaffold(
+        backgroundColor: colorScheme.surface,
+        body: Center(
+          child: CircularProgressIndicator(color: colorScheme.primary),
+        ),
       );
     }
 
+    if (userProvider.errorMessage != null) {
+      return Scaffold(
+        backgroundColor: colorScheme.surface,
+        body: Center(
+          child: Text(
+            userProvider.errorMessage!,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.error,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (!userProvider.isLoggedIn || userProvider.currentUser == null) {
+      // This case is already handled in initState, but added for safety
+      return const SizedBox.shrink();
+    }
+
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
-        title: const Text("Settings"),
-        backgroundColor: Colors.black,
+        backgroundColor: colorScheme.surface,
+        title: Text(
+          "Settings",
+          style: theme.textTheme.titleLarge?.copyWith(
+            color: colorScheme.onSurface,
+          ),
+        ),
         elevation: 0,
       ),
-      body: Container(
-        decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            const Divider(color: Colors.white38),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Divider(color: colorScheme.outline),
 
-            // ✅ Admin Panel (safe with loaded currentUser)
-            if (currentUser?.isAdmin == true)
-              ListTile(
-                leading: const Icon(
+          // Admin Panel (for admin users)
+          if (userProvider.currentUser!.isAdmin)
+            Card(
+              elevation: 1,
+              color: colorScheme.surfaceContainer,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: ListTile(
+                leading: Icon(
                   Icons.admin_panel_settings,
-                  color: Colors.amber,
+                  color: colorScheme.primary,
                 ),
-                title: const Text(
+                title: Text(
                   "Admin Panel",
-                  style: TextStyle(color: Colors.amber, fontSize: 16),
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: colorScheme.primary,
+                  ),
+                ),
+                trailing: Icon(
+                  Icons.arrow_forward_ios,
+                  color: colorScheme.onSurfaceVariant,
+                  size: 16,
                 ),
                 onTap: () {
                   Navigator.push(
@@ -72,28 +126,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   );
                 },
               ),
-
-            if (currentUser?.isAdmin == true)
-              const Divider(color: Colors.white38),
-
-            // Logout
-            ListTile(
-              leading: const Icon(Icons.logout, color: Colors.red),
-              title: const Text(
-                "Logout",
-                style: TextStyle(color: Colors.red, fontSize: 16),
-              ),
-              onTap: () async {
-                await FirebaseAuth.instance.signOut();
-                if (!context.mounted) return;
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (_) => const LoginScreen()),
-                );
-              },
             ),
-          ],
-        ),
+
+          if (userProvider.currentUser!.isAdmin)
+            Divider(color: colorScheme.outline),
+
+          // Logout
+          Card(
+            elevation: 1,
+            color: colorScheme.surfaceContainer,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: ListTile(
+              leading: Icon(Icons.logout, color: colorScheme.error),
+              title: Text(
+                "Logout",
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: colorScheme.error,
+                ),
+              ),
+              trailing: Icon(
+                Icons.arrow_forward_ios,
+                color: colorScheme.onSurfaceVariant,
+                size: 16,
+              ),
+              onTap: _handleLogout,
+            ),
+          ),
+        ],
       ),
     );
   }

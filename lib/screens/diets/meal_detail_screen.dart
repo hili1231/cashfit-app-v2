@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:video_player/video_player.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../models/meal.dart';
 import '../../models/meal_day.dart';
 import '../../models/meal_plan.dart';
 import '../nav_screen.dart';
 import 'diet_day_detail_screen.dart';
-import '../../theme.dart';
 
 class MealDetailScreen extends StatefulWidget {
   final MealPlan plan;
@@ -26,20 +25,36 @@ class MealDetailScreen extends StatefulWidget {
 
 class MealDetailScreenState extends State<MealDetailScreen> {
   VideoPlayerController? _videoController;
+  late Meal _cachedMeal;
+  late ColorScheme colorScheme; // Define colorScheme as a class-level variable
 
   bool get isVideo => widget.meal.image.toLowerCase().endsWith('.mp4');
 
   @override
   void initState() {
     super.initState();
-    // If the meal image is actually a video file, we set up the VideoPlayer.
+    // Cache the meal data once on initialization
+    _cachedMeal = widget.meal;
+
+    // Initialize colorScheme in initState
+    colorScheme = Theme.of(context).colorScheme;
+
+    // Initialize video if applicable
     if (isVideo) {
-      _videoController = VideoPlayerController.asset(widget.meal.image)
-        ..initialize().then((_) {
-          setState(() {});
-          _videoController?.setLooping(true);
-          _videoController?.play();
-        });
+      _videoController = VideoPlayerController.networkUrl(
+          Uri.parse(_cachedMeal.image), // Use networkUrl with Uri
+        )
+        ..initialize()
+            .then((_) {
+              if (!mounted) return; // Guard context usage
+              setState(() {});
+              _videoController?.setLooping(true);
+              _videoController?.play();
+            })
+            .catchError((error) {
+              // Removed print statement; consider using a logging framework in production
+              // e.g., logger.e('Video initialization error: $error');
+            });
     }
   }
 
@@ -51,149 +66,169 @@ class MealDetailScreenState extends State<MealDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    // Note: We already have colorScheme at class level, but let's keep it here for consistency
+    // with other methods that expect it as a parameter
+    final colorScheme = this.colorScheme;
+
     return Scaffold(
-      // Transparent background to match your gradient usage.
-      backgroundColor: Colors.transparent,
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
         title: Text(
-          widget.meal.name.toUpperCase(),
-          style: GoogleFonts.oswald(
-            fontSize: 22,
+          _cachedMeal.name.toUpperCase(),
+          style: theme.textTheme.titleLarge?.copyWith(
+            color: colorScheme.onSurface,
             fontWeight: FontWeight.bold,
-            color: Colors.white70,
-            letterSpacing: 1.2,
+            fontSize: 22,
           ),
         ),
         centerTitle: true,
-        backgroundColor: Colors.black,
+        backgroundColor: colorScheme.surface,
         elevation: 2,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white70),
+          icon: Icon(Icons.arrow_back, color: colorScheme.onSurface),
           onPressed: () {
-            // If we have a NavScreen, go back to the DietDayDetailScreen.
             final navState = context.findAncestorStateOfType<NavScreenState>();
             if (navState != null) {
               navState.setDetailScreen(
                 DietDayDetailScreen(plan: widget.plan, day: widget.day),
               );
             } else {
-              // Otherwise, pop this screen from the stack.
               Navigator.pop(context);
             }
           },
         ),
       ),
-      body: Container(
-        decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Either show video if isVideo == true, otherwise show an image.
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: isVideo ? _buildVideoPlayer() : _buildImage(),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: isVideo ? _buildVideoPlayer() : _buildImage(colorScheme),
+            ),
+            const SizedBox(height: 16),
+            _buildInfoRow(
+              Icons.local_fire_department,
+              "${_cachedMeal.calories.round()} Calories",
+              colorScheme.primary,
+              theme,
+              colorScheme,
+            ),
+            const SizedBox(height: 20),
+            _buildSectionTitle("Ingredients", theme, colorScheme),
+            ..._cachedMeal.ingredients.map(
+              (ingredientLine) => _buildBulletText(
+                "${ingredientLine.quantity} ${ingredientLine.unit} ${ingredientLine.ingredient.name}",
+                theme,
+                colorScheme,
               ),
-              const SizedBox(height: 16),
-
-              // Basic meal info row (Calories, etc.)
-              _buildInfoRow(
-                Icons.local_fire_department,
-                "${widget.meal.calories.round()} Calories",
-                Colors.amber,
-              ),
-              const SizedBox(height: 20),
-
-              // Ingredient list
-              _buildSectionTitle("Ingredients"),
-              ...widget.meal.ingredients.map(
-                (ingredientLine) => _buildBulletText(
-                  "${ingredientLine.quantity} ${ingredientLine.unit} ${ingredientLine.ingredient.name}",
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // Instructions
-              _buildSectionTitle("Instructions"),
-              ...widget.meal.instructions.map(
-                (instruction) => _buildBulletText(instruction),
-              ),
-              const SizedBox(height: 30),
-            ],
-          ),
+            ),
+            const SizedBox(height: 20),
+            _buildSectionTitle("Instructions", theme, colorScheme),
+            ..._cachedMeal.instructions.map(
+              (instruction) =>
+                  _buildBulletText(instruction, theme, colorScheme),
+            ),
+            const SizedBox(height: 30),
+          ],
         ),
       ),
     );
   }
 
   Widget _buildVideoPlayer() {
-    // If the video is initialized, show it; otherwise show a placeholder.
     if (_videoController != null && _videoController!.value.isInitialized) {
       return AspectRatio(
         aspectRatio: _videoController!.value.aspectRatio,
         child: VideoPlayer(_videoController!),
       );
     } else {
-      return _buildPlaceholderImage();
+      return _buildPlaceholderImage(colorScheme);
     }
   }
 
-  Widget _buildImage() {
-    // If meal.image is non-empty and not a video, show it as an asset image.
-    return widget.meal.image.isNotEmpty
-        ? Image.asset(
-          widget.meal.image,
-          width: double.infinity,
-          height: 220,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _buildPlaceholderImage(),
-        )
-        : _buildPlaceholderImage();
+  Widget _buildImage(ColorScheme colorScheme) {
+    return CachedNetworkImage(
+      imageUrl:
+          _cachedMeal.image.isNotEmpty
+              ? _cachedMeal.image
+              : 'assets/images/placeholder.jpg',
+      width: double.infinity,
+      height: 220,
+      fit: BoxFit.cover,
+      placeholder: (context, url) => _buildPlaceholderImage(colorScheme),
+      errorWidget: (context, url, error) => _buildPlaceholderImage(colorScheme),
+      fadeInDuration: const Duration(milliseconds: 200),
+    );
   }
 
-  Widget _buildInfoRow(IconData icon, String text, Color color) {
+  Widget _buildInfoRow(
+    IconData icon,
+    String text,
+    Color color,
+    ThemeData theme,
+    ColorScheme colorScheme,
+  ) {
     return Row(
       children: [
         Icon(icon, color: color, size: 22),
         const SizedBox(width: 8),
         Text(
           text,
-          style: TextStyle(
-            fontSize: 16,
+          style: theme.textTheme.bodyLarge?.copyWith(
             color: color,
             fontWeight: FontWeight.bold,
+            fontSize: 16,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildSectionTitle(String title) {
+  Widget _buildSectionTitle(
+    String title,
+    ThemeData theme,
+    ColorScheme colorScheme,
+  ) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Text(
         title.toUpperCase(),
-        style: const TextStyle(
+        style: theme.textTheme.titleMedium?.copyWith(
+          color: colorScheme.onSurface,
           fontSize: 18,
           fontWeight: FontWeight.bold,
-          color: Colors.white70,
         ),
       ),
     );
   }
 
-  Widget _buildBulletText(String text) {
+  Widget _buildBulletText(
+    String text,
+    ThemeData theme,
+    ColorScheme colorScheme,
+  ) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("• ", style: TextStyle(color: Colors.amber, fontSize: 16)),
+          Text(
+            "• ",
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: colorScheme.primary,
+              fontSize: 16,
+            ),
+          ),
           Expanded(
             child: Text(
               text,
-              style: const TextStyle(color: Colors.white70, fontSize: 16),
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: colorScheme.onSurface,
+                fontSize: 16,
+              ),
             ),
           ),
         ],
@@ -201,16 +236,16 @@ class MealDetailScreenState extends State<MealDetailScreen> {
     );
   }
 
-  Widget _buildPlaceholderImage() {
+  Widget _buildPlaceholderImage(ColorScheme colorScheme) {
     return Container(
       height: 220,
       width: double.infinity,
       decoration: BoxDecoration(
-        color: Colors.grey[800],
+        color: colorScheme.surfaceContainer,
         borderRadius: BorderRadius.circular(12),
       ),
       alignment: Alignment.center,
-      child: const Icon(Icons.fastfood, color: Colors.amber, size: 50),
+      child: Icon(Icons.fastfood, color: colorScheme.primary, size: 50),
     );
   }
 }

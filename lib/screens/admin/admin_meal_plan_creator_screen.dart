@@ -32,7 +32,7 @@ class _AdminCreateMealPlanScreenState extends State<AdminCreateMealPlanScreen> {
   Future<void> _fetchMeals() async {
     final snapshot = await FirebaseFirestore.instance.collection('meals').get();
     setState(() {
-      allMeals = snapshot.docs.map((doc) => Meal.fromJson(doc.data())).toList();
+      allMeals = snapshot.docs.map((doc) => Meal.fromMap(doc.data())).toList();
     });
   }
 
@@ -62,7 +62,7 @@ class _AdminCreateMealPlanScreenState extends State<AdminCreateMealPlanScreen> {
     await FirebaseFirestore.instance
         .collection("mealPlans")
         .doc(plan.id)
-        .set(plan.toJson());
+        .set(plan.toMap()); // Changed to toMap()
     if (!mounted) return;
     ScaffoldMessenger.of(
       context,
@@ -76,7 +76,7 @@ class _AdminCreateMealPlanScreenState extends State<AdminCreateMealPlanScreen> {
       await FirebaseFirestore.instance
           .collection("mealPlans")
           .doc(plan.id)
-          .set(plan.toJson());
+          .set(plan.toMap()); // Changed to toMap()
     }
 
     if (!mounted) return;

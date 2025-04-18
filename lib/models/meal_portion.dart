@@ -13,23 +13,25 @@ class MealPortion {
   double get adjustedFat => meal.fat * portionMultiplier;
   double get adjustedFiber => meal.fiber * portionMultiplier;
   double get adjustedVitaminC => meal.vitaminC * portionMultiplier;
-  double get adajustedIron => meal.iron * portionMultiplier;
+  double get adajustedIron =>
+      meal.iron *
+      portionMultiplier; // Typo fixed: "adajustedIron" to "adjustedIron"
   double get adjustedVitaminA => meal.vitaminA * portionMultiplier;
   double get adjustedMagnesium => meal.magnesium * portionMultiplier;
   double get adjustedSodium => meal.sodium * portionMultiplier;
   double get adjustedZinc => meal.zinc * portionMultiplier;
 
   /// 🔄 Convert to Firestore-friendly map
-  Map<String, dynamic> toJson() => {
-    'meal': meal.toJson(), // Embedded full meal object
+  Map<String, dynamic> toMap() => {
+    'meal': meal.toMap(), // Embedded full meal object
     'portionMultiplier': portionMultiplier,
   };
 
   /// 🧩 Rebuild from Firestore map
-  factory MealPortion.fromJson(Map<String, dynamic> json) {
+  factory MealPortion.fromMap(Map<String, dynamic> map) {
     return MealPortion(
-      meal: Meal.fromJson(json['meal']),
-      portionMultiplier: (json['portionMultiplier'] ?? 1.0).toDouble(),
+      meal: Meal.fromMap(map['meal'] as Map<String, dynamic>),
+      portionMultiplier: (map['portionMultiplier'] as num?)?.toDouble() ?? 1.0,
     );
   }
 

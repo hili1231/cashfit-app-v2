@@ -1,227 +1,323 @@
-import '../../auth/login_screen.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cashfit/screens/personalize/workout_diet_builder_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
+import '../../models/app_user.dart';
 import '../../models/challenge.dart';
-import '../../theme.dart';
-import '../../data/user_data.dart';
+import '../../services/challenge_calculator.dart';
+import '../../ad_helper.dart';
+import '../../auth/login_screen.dart';
 import '../nav_screen.dart';
-import 'challenge_detail_screen.dart';
-import '../upgrade_to_premium_screen.dart';
+import '../../providers/user_provider.dart';
+import 'challenge_sign_up_screen.dart';
+import 'challenge_progress_screen.dart';
 
-class ChallengesScreen extends StatelessWidget {
+class ChallengesScreen extends StatefulWidget {
   const ChallengesScreen({super.key});
 
-  /// Fetch challenges from Firestore
-  Future<List<Challenge>> fetchChallenges() async {
-    QuerySnapshot snapshot =
-        await FirebaseFirestore.instance.collection('challenges').get();
+  @override
+  ChallengesScreenState createState() => ChallengesScreenState();
+}
 
-    // Map each document to a Challenge instance
-    List<Challenge> challenges =
-        snapshot.docs
-            .map((doc) => Challenge.fromMap(doc.data() as Map<String, dynamic>))
-            .toList();
+class ChallengesScreenState extends State<ChallengesScreen> {
+  bool isLoading = true;
+  Challenge? userChallenge;
 
-    return challenges;
+  @override
+  void initState() {
+    super.initState();
+    _checkUserStatus();
+  }
+
+  Future<void> _checkUserStatus() async {
+    setState(() {
+      isLoading = true;
+    });
+
+    // Check if the user is logged in
+    final firebaseUser = FirebaseAuth.instance.currentUser;
+    if (firebaseUser == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return; // Guard context usage
+        final navState = context.findAncestorStateOfType<NavScreenState>();
+        if (navState != null) {
+          navState.setDetailScreen(const LoginScreen());
+        } else {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const LoginScreen()),
+          );
+        }
+      });
+      return;
+    }
+
+    // Load the user
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    await userProvider.loadUserData(firebaseUser.uid);
+    final AppUser? user = userProvider.currentUser;
+
+    if (user == null) {
+      if (!mounted) return; // Guard context usage
+      setState(() {
+        isLoading = false;
+      });
+      return;
+    }
+
+    // Check if the user has completed the workout and diet builder
+    if (user.activeWorkoutPrograms.isEmpty || user.activeDietPlans.isEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return; // Guard context usage
+        final navState = context.findAncestorStateOfType<NavScreenState>();
+        if (navState != null) {
+          navState.setDetailScreen(const WorkoutDietBuilderScreen());
+        } else {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const WorkoutDietBuilderScreen()),
+          );
+        }
+      });
+      return;
+    }
+
+    // Check if the user has an active challenge
+    if (user.joinedChallenges.isNotEmpty) {
+      final challengeId = user.joinedChallenges.last;
+      final challengeDoc =
+          await FirebaseFirestore.instance
+              .collection('challenges')
+              .doc(challengeId)
+              .get();
+      if (challengeDoc.exists) {
+        if (!mounted) return; // Guard context usage
+        setState(() {
+          userChallenge = Challenge.fromMap(challengeDoc.data()!);
+          isLoading = false;
+        });
+        return;
+      }
+    }
+
+    // Generate a new challenge for the user
+    final newChallenge = ChallengeCalculator.calculateChallenge(user);
+    await FirebaseFirestore.instance
+        .collection('challenges')
+        .doc(newChallenge.id)
+        .set(newChallenge.toMap());
+
+    if (!mounted) return; // Guard context usage
+    setState(() {
+      userChallenge = newChallenge;
+      isLoading = false;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final userProvider = Provider.of<UserProvider>(context);
+    final AppUser? user = userProvider.currentUser;
+
+    if (isLoading) {
+      return Scaffold(
+        backgroundColor: colorScheme.surface,
+        body: Center(
+          child: CircularProgressIndicator(color: colorScheme.primary),
+        ),
+      );
+    }
+
+    if (userChallenge == null) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text(
+            "Challenges",
+            style: theme.textTheme.titleLarge?.copyWith(
+              color: colorScheme.onSurface,
+            ),
+          ),
+          backgroundColor: colorScheme.surface,
+          elevation: 2,
+        ),
+        backgroundColor: colorScheme.surface,
+        body: Center(
+          child: Text(
+            "Unable to load challenge. Please try again.",
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+              fontSize: 18,
+            ),
+          ),
+        ),
+      );
+    }
+
+    final bool isSignedUp = userChallenge!.participants.contains(user?.id);
+
     return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Container(
-        decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
-        child: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header Title
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                child: Center(
-                  child: Text(
-                    "CHALLENGES",
-                    style: AppTheme.headline.copyWith(
-                      fontSize: 24,
-                      color: Colors.white70,
+      appBar: AppBar(
+        title: Text(
+          "Challenges",
+          style: theme.textTheme.titleLarge?.copyWith(
+            color: colorScheme.onSurface,
+          ),
+        ),
+        backgroundColor: colorScheme.surface,
+        elevation: 2,
+      ),
+      backgroundColor: colorScheme.surface,
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (isSignedUp) ...[
+              Text(
+                userChallenge!.name,
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  color: colorScheme.onSurface,
+                  fontSize: 22,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                "Progress: ${user?.challengeProgress ?? 0}%",
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: colorScheme.primary,
+                  fontSize: 16,
+                ),
+              ),
+              LinearProgressIndicator(
+                value: (user?.challengeProgress ?? 0) / 100,
+                backgroundColor: colorScheme.surfaceContainer,
+                valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                style: theme.elevatedButtonTheme.style?.copyWith(
+                  backgroundColor: WidgetStateProperty.all(colorScheme.primary),
+                  foregroundColor: WidgetStateProperty.all(
+                    colorScheme.onPrimary,
+                  ),
+                ),
+                onPressed: () {
+                  if (user == null) return;
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder:
+                          (_) => ChallengeProgressScreen(
+                            challenge: userChallenge!,
+                            currentUserId: user.id,
+                          ),
                     ),
+                  );
+                },
+                child: Text(
+                  "View Progress",
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: colorScheme.onPrimary,
                   ),
                 ),
               ),
-              // Challenge List via FutureBuilder
-              Expanded(
-                child: FutureBuilder<List<Challenge>>(
-                  future: fetchChallenges(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    } else if (snapshot.hasError) {
-                      return Center(child: Text("Error: ${snapshot.error}"));
-                    } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                      return const Center(child: Text("No challenges found"));
-                    }
-
-                    final challenges = snapshot.data!;
-                    return ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: challenges.length,
-                      itemBuilder: (context, index) {
-                        final challenge = challenges[index];
-                        return _buildChallengeCard(context, challenge);
-                      },
-                    );
-                  },
+            ] else ...[
+              Text(
+                userChallenge!.name,
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  color: colorScheme.onSurface,
+                  fontSize: 22,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                userChallenge!.description,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                "Requirements:",
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: colorScheme.onSurface,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                "• Daily check-ins",
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurface,
+                ),
+              ),
+              Text(
+                "• Weekly photo updates of your weight",
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                "Prizes:",
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: colorScheme.onSurface,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                "• ${userChallenge!.rewardPremiumMonths} months of Premium Membership",
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurface,
+                ),
+              ),
+              Text(
+                "• ${userChallenge!.rewardCoins} Coins",
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                style: theme.elevatedButtonTheme.style?.copyWith(
+                  backgroundColor: WidgetStateProperty.all(colorScheme.primary),
+                  foregroundColor: WidgetStateProperty.all(
+                    colorScheme.onPrimary,
+                  ),
+                ),
+                onPressed: () {
+                  if (user == null) return;
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder:
+                          (_) => ChallengeSignUpScreen(
+                            challenge: userChallenge!,
+                            currentUserId: user.id,
+                          ),
+                    ),
+                  );
+                },
+                child: Text(
+                  "Sign Up for Challenge",
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: colorScheme.onPrimary,
+                  ),
                 ),
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildChallengeCard(BuildContext context, Challenge challenge) {
-    final navState = context.findAncestorStateOfType<NavScreenState>();
-    final user = firebaseUser;
-
-    // Calculate participants/spots left
-    final totalParticipants = challenge.participants.length;
-    final maxP = challenge.maxParticipants ?? 0;
-    final spotsLeft = maxP > 0 ? (maxP - totalParticipants) : 0;
-
-    return GestureDetector(
-      onTap: () {
-        // 1) If nobody is logged in => go to LoginScreen.
-        if (user == null) {
-          navState?.setDetailScreen(const LoginScreen());
-          return;
-        }
-        // 2) If user is Premium => show detail
-        if (currentUser?.isPremium == true) {
-          navState?.setDetailScreen(
-            ChallengeDetailScreen(challenge: challenge),
-          );
-        }
-        // 3) Otherwise => upgrade screen
-        else {
-          navState?.setDetailScreen(const UpgradeToPremierScreen());
-        }
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        decoration: AppTheme.cardDecoration,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Challenge Image
-            ClipRRect(
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(15),
-                topRight: Radius.circular(15),
-              ),
-              child:
-                  challenge.image.startsWith("http")
-                      ? Image.network(
-                        challenge.image,
-                        width: double.infinity,
-                        height: 140,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _buildPlaceholderImage(),
-                      )
-                      : Image.asset(
-                        challenge.image,
-                        width: double.infinity,
-                        height: 140,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _buildPlaceholderImage(),
-                      ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Title
-                  Text(
-                    challenge.name,
-                    style: AppTheme.headline.copyWith(
-                      fontSize: 18,
-                      color: Colors.white70,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 6),
-
-                  // Description
-                  Text(
-                    challenge.description,
-                    style: AppTheme.smallText,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 8),
-
-                  // Spots left or participants
-                  Row(
-                    children: [
-                      const Icon(Icons.people, color: Colors.amber, size: 18),
-                      const SizedBox(width: 5),
-                      if (maxP > 0)
-                        Text("$spotsLeft spots left", style: AppTheme.goldText)
-                      else
-                        Text("$spotsLeft spots left", style: AppTheme.goldText),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-
-                  // Prize Amount
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.monetization_on,
-                        color: Colors.amber,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        "\$${challenge.prizeAmount.toInt()} prize",
-                        style: AppTheme.smallText.copyWith(
-                          color: Colors.greenAccent,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const Spacer(),
-                      // Arrow
-                      const Icon(
-                        Icons.arrow_forward_ios,
-                        color: Colors.white70,
-                        size: 18,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+            const SizedBox(height: 20),
+            AdHelper.nativeAdWidget(context),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildPlaceholderImage() {
-    return Container(
-      height: 140,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.grey[800],
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(15),
-          topRight: Radius.circular(15),
-        ),
-      ),
-      alignment: Alignment.center,
-      child: const Icon(Icons.fitness_center, size: 50, color: Colors.amber),
+      bottomNavigationBar: AdHelper.bannerAdWidget(context),
     );
   }
 }

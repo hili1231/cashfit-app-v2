@@ -1,189 +1,178 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/meal_plan.dart';
-import 'meal_plan_screen.dart';
-import '../nav_screen.dart';
+import '../../widgets/meal_card.dart';
 import '../../theme.dart';
 
 class DietSelectorScreen extends StatefulWidget {
   const DietSelectorScreen({super.key});
+
+  /// Static cache so we don't re-fetch every time
+  static List<MealPlan>? _cachedMealPlans;
 
   @override
   State<DietSelectorScreen> createState() => _DietSelectorScreenState();
 }
 
 class _DietSelectorScreenState extends State<DietSelectorScreen> {
-  List<MealPlan> mealPlans = [];
-  bool isLoading = true;
+  late Future<List<MealPlan>> _fetchFuture;
 
   @override
   void initState() {
     super.initState();
-    _fetchMealPlans();
+    // If cached data is present, use that immediately
+    if (DietSelectorScreen._cachedMealPlans != null) {
+      _fetchFuture = Future.value(DietSelectorScreen._cachedMealPlans);
+    } else {
+      // Otherwise fetch from Firestore and store in static cache
+      _fetchFuture = _fetchMealPlans().then((plans) {
+        DietSelectorScreen._cachedMealPlans = plans;
+        return plans;
+      });
+    }
   }
 
-  Future<void> _fetchMealPlans() async {
+  Future<List<MealPlan>> _fetchMealPlans() async {
     final snapshot =
         await FirebaseFirestore.instance.collection('mealPlans').get();
-    final plans =
-        snapshot.docs.map((doc) => MealPlan.fromJson(doc.data())).toList();
-    setState(() {
-      mealPlans = plans;
-      isLoading = false;
-    });
+    return snapshot.docs.map((doc) => MealPlan.fromMap(doc.data())).toList();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Container(
-        decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
-        child:
-            isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 12),
-                      Text(
-                        "MEAL PLANS",
-                        style: GoogleFonts.oswald(
-                          color: Colors.white70,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        height: 180,
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          physics: const BouncingScrollPhysics(),
-                          itemCount: mealPlans.length,
-                          itemBuilder: (context, index) {
-                            return _buildMealPlanCard(
-                              context,
-                              mealPlans[index],
-                            );
-                          },
-                        ),
-                      ),
-                    ],
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Container(
+      decoration: AppTheme.backgroundGradient(
+        colorScheme,
+      ), // Add gradient background
+      child: Scaffold(
+        backgroundColor:
+            Colors.transparent, // Make Scaffold background transparent
+        body: FutureBuilder<List<MealPlan>>(
+          future: _fetchFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return Center(
+                child: CircularProgressIndicator(color: colorScheme.primary),
+              );
+            }
+            if (snapshot.hasError) {
+              return Center(
+                child: Text(
+                  "Error: ${snapshot.error}",
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
                   ),
                 ),
-      ),
-    );
-  }
-
-  Widget _buildMealPlanCard(BuildContext context, MealPlan plan) {
-    return GestureDetector(
-      onTap: () => _navigateToPlan(context, plan),
-      child: Container(
-        width: 160,
-        margin: const EdgeInsets.only(right: 8),
-        decoration: BoxDecoration(
-          color: Colors.black,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipRRect(
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(10),
-                topRight: Radius.circular(10),
-              ),
-              child: SizedBox(
-                width: 160,
-                height: 90,
-                child: Image.asset(
-                  plan.days.isNotEmpty
-                      ? plan.days.first.breakfast?.meal.image ?? ''
-                      : '',
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => _buildPlaceholderImage(90),
+              );
+            }
+            if (!snapshot.hasData || snapshot.data!.isEmpty) {
+              return Center(
+                child: Text(
+                  "No meal plans found",
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                 ),
+              );
+            }
+
+            // If we reach here, we have meal plans (either from cache or Firestore)
+            final mealPlans = snapshot.data!;
+
+            // Categorize meal plans by type
+            final Map<String, List<MealPlan>> categorizedPlans = {};
+            for (var plan in mealPlans) {
+              final category = plan.type?.trim().toLowerCase() ?? 'general';
+              if (!categorizedPlans.containsKey(category)) {
+                categorizedPlans[category] = [];
+              }
+              categorizedPlans[category]!.add(plan);
+            }
+
+            // Convert categories to a list for display, with titles capitalized
+            final categories =
+                categorizedPlans.keys.toList()
+                  ..sort(); // Sort categories alphabetically
+            final capitalizedCategories =
+                categories.map((category) {
+                  return category[0].toUpperCase() + category.substring(1);
+                }).toList();
+
+            return SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+              physics: const BouncingScrollPhysics(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 12),
+                  Text(
+                    "MEAL PLANS",
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      color: colorScheme.onSurface,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 20,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Display each category as a section
+                  ...capitalizedCategories.asMap().entries.map((entry) {
+                    final category = entry.value;
+                    final plans = categorizedPlans[category.toLowerCase()]!;
+                    return _buildCategorySection(
+                      theme,
+                      colorScheme,
+                      category,
+                      plans,
+                    );
+                  }),
+                ],
               ),
-            ),
-            const SizedBox(height: 4),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text(
-                plan.planName.toUpperCase(),
-                style: GoogleFonts.oswald(
-                  color: Colors.white70,
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              child: _buildTabButton(
-                label: "VIEW PLAN",
-                onTap: () => _navigateToPlan(context, plan),
-              ),
-            ),
-          ],
+            );
+          },
         ),
       ),
     );
   }
 
-  void _navigateToPlan(BuildContext context, MealPlan plan) {
-    final navState = context.findAncestorStateOfType<NavScreenState>();
-    if (navState != null) {
-      navState.setDetailScreen(MealPlanScreen(selectedPlan: plan));
-    } else {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => MealPlanScreen(selectedPlan: plan),
-        ),
-      );
-    }
-  }
-
-  Widget _buildPlaceholderImage(double size) {
-    return Container(
-      height: size,
-      width: size,
-      decoration: BoxDecoration(
-        color: Colors.grey[800],
-        borderRadius: BorderRadius.circular(8),
-      ),
-      alignment: Alignment.center,
-      child: const Icon(Icons.fastfood, size: 30, color: Colors.white70),
-    );
-  }
-
-  Widget _buildTabButton({required String label, required VoidCallback onTap}) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(8),
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-        decoration: BoxDecoration(
-          color: const Color.fromARGB(255, 33, 33, 33),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          label.toUpperCase(),
-          style: GoogleFonts.oswald(
-            fontSize: 12,
+  Widget _buildCategorySection(
+    ThemeData theme,
+    ColorScheme colorScheme,
+    String category,
+    List<MealPlan> plans,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          category,
+          style: theme.textTheme.titleMedium?.copyWith(
+            color: colorScheme.onSurface,
             fontWeight: FontWeight.bold,
-            color: Colors.white70,
           ),
         ),
-      ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 240, // Enough space for MealPlanCard
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            itemCount: plans.length,
+            itemBuilder: (context, index) {
+              final plan = plans[index];
+              return Padding(
+                padding: const EdgeInsets.only(
+                  right: 14,
+                ), // Space between cards
+                child: MealPlanCard(mealPlan: plan),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 20),
+      ],
     );
   }
 }

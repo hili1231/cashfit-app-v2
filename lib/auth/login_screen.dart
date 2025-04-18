@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../auth/auth_service.dart';
-import '../theme.dart';
+import 'package:provider/provider.dart';
+import '../services/auth_service.dart';
 import '../screens/nav_screen.dart';
 import '../auth/register_screen.dart';
-import '../data/user_data.dart'; // For currentUser
+import '../providers/user_provider.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -21,48 +21,109 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool isLoading = false;
   bool obscurePassword = true;
+  String errorMessage = '';
 
   Future<void> login() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => isLoading = true);
+    // Store UserProvider before async operation
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+
+    setState(() {
+      isLoading = true;
+      errorMessage = '';
+    });
 
     try {
-      // Sign in with Firebase Auth
-      final User? user = await auth.signIn(
+      final user = await auth.signIn(
         emailController.text.trim(),
         passwordController.text.trim(),
       );
 
-      // Load extended AppUser from Firestore into global currentUser.
       if (user != null) {
-        currentUser = await auth.getAppUser(user.uid);
+        await userProvider.loadUserData(user.uid); // Use stored userProvider
+        if (mounted) {
+          // Guard context usage with mounted check
+          Navigator.of(context).pushReplacement(
+            PageRouteBuilder(
+              transitionDuration: const Duration(milliseconds: 500),
+              pageBuilder: (_, __, ___) => const NavScreen(),
+              transitionsBuilder: (_, animation, __, child) {
+                final curved = CurvedAnimation(
+                  parent: animation,
+                  curve: Curves.easeInOut,
+                );
+                return FadeTransition(opacity: curved, child: child);
+              },
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          errorMessage = e.toString();
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
+    }
+  }
+
+  Future<void> signInWithSocial(String provider) async {
+    // Store UserProvider before async operation
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+
+    setState(() {
+      isLoading = true;
+      errorMessage = '';
+    });
+
+    try {
+      User? user;
+      switch (provider) {
+        case 'google':
+          user = await auth.signInWithGoogle();
+          break;
+        case 'apple':
+          user = await auth.signInWithApple();
+          break;
+        case 'facebook':
+          user = await auth.signInWithFacebook();
+          break;
       }
 
-      if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          transitionDuration: const Duration(milliseconds: 500),
-          pageBuilder: (_, __, ___) => const NavScreen(),
-          transitionsBuilder: (_, animation, __, child) {
-            final curved = CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeInOut,
-            );
-            return FadeTransition(opacity: curved, child: child);
-          },
-        ),
-      );
+      if (user != null) {
+        await userProvider.loadUserData(user.uid); // Use stored userProvider
+        if (mounted) {
+          // Guard context usage with mounted check
+          Navigator.of(context).pushReplacement(
+            PageRouteBuilder(
+              transitionDuration: const Duration(milliseconds: 500),
+              pageBuilder: (_, __, ___) => const NavScreen(),
+              transitionsBuilder: (_, animation, __, child) {
+                final curved = CurvedAnimation(
+                  parent: animation,
+                  curve: Curves.easeInOut,
+                );
+                return FadeTransition(opacity: curved, child: child);
+              },
+            ),
+          );
+        }
+      }
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString()),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      if (mounted) {
+        setState(() {
+          errorMessage = e.toString();
+        });
+      }
     } finally {
-      if (mounted) setState(() => isLoading = false);
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
     }
   }
 
@@ -75,106 +136,199 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          backgroundColor: Colors.black,
-          elevation: 0,
-          centerTitle: true,
-          title: const Text(
-            "Login",
-            style: TextStyle(
-              color: Colors.white70,
-              fontWeight: FontWeight.bold,
-              fontSize: 20,
-            ),
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Scaffold(
+      backgroundColor: colorScheme.surface,
+      appBar: AppBar(
+        backgroundColor: colorScheme.surface,
+        elevation: 2,
+        centerTitle: true,
+        title: Text(
+          "Login",
+          style: theme.textTheme.titleLarge?.copyWith(
+            color: colorScheme.onSurface,
+            fontWeight: FontWeight.bold,
           ),
         ),
-        body: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const SizedBox(height: 30),
-                  // Email field
-                  TextFormField(
-                    controller: emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    validator: (v) {
-                      if (v == null || v.isEmpty) return "Enter email";
-                      if (!v.contains('@')) return "Invalid email format";
-                      return null;
-                    },
-                    style: const TextStyle(color: Colors.white70),
-                    decoration: const InputDecoration(
-                      labelText: "Email",
-                      labelStyle: TextStyle(color: Colors.white54),
+      ),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 30),
+                TextFormField(
+                  controller: emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return "Enter email";
+                    if (!v.contains('@')) return "Invalid email format";
+                    return null;
+                  },
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: colorScheme.onSurface,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: "Email",
+                    labelStyle: theme.textTheme.bodyLarge?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                    filled: true,
+                    fillColor: colorScheme.surfaceContainer,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: colorScheme.outline),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: colorScheme.outline),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: colorScheme.primary),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  // Password field
-                  TextFormField(
-                    controller: passwordController,
-                    obscureText: obscurePassword,
-                    validator:
-                        (v) => v == null || v.isEmpty ? "Enter password" : null,
-                    style: const TextStyle(color: Colors.white70),
-                    decoration: InputDecoration(
-                      labelText: "Password",
-                      labelStyle: const TextStyle(color: Colors.white54),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          obscurePassword
-                              ? Icons.visibility_off
-                              : Icons.visibility,
-                          color: Colors.white38,
-                        ),
-                        onPressed: () {
-                          setState(() => obscurePassword = !obscurePassword);
-                        },
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: passwordController,
+                  obscureText: obscurePassword,
+                  validator:
+                      (v) => v == null || v.isEmpty ? "Enter password" : null,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: colorScheme.onSurface,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: "Password",
+                    labelStyle: theme.textTheme.bodyLarge?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                    filled: true,
+                    fillColor: colorScheme.surfaceContainer,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: colorScheme.outline),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: colorScheme.outline),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: colorScheme.primary),
+                    ),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        obscurePassword
+                            ? Icons.visibility_off
+                            : Icons.visibility,
+                        color: colorScheme.onSurfaceVariant,
                       ),
+                      onPressed: () {
+                        setState(() => obscurePassword = !obscurePassword);
+                      },
                     ),
                   ),
-                  const SizedBox(height: 30),
-                  // Login button
-                  ElevatedButton(
-                    style: AppTheme.buttonStyle,
-                    onPressed: isLoading ? null : login,
-                    child:
-                        isLoading
-                            ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.5,
-                                color: Colors.amber,
-                              ),
-                            )
-                            : const Text("Login"),
+                ),
+                const SizedBox(height: 20),
+                if (errorMessage.isNotEmpty)
+                  Text(
+                    errorMessage,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.error,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 20),
-                  // Register link
-                  TextButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const RegisterScreen(),
-                        ),
-                      );
-                    },
-                    child: const Text(
-                      "Register Here",
-                      style: TextStyle(color: Colors.amber),
+                const SizedBox(height: 10),
+                ElevatedButton(
+                  style: theme.elevatedButtonTheme.style?.copyWith(
+                    backgroundColor: WidgetStateProperty.all(
+                      colorScheme.primary,
+                    ),
+                    foregroundColor: WidgetStateProperty.all(
+                      colorScheme.onPrimary,
                     ),
                   ),
-                ],
-              ),
+                  onPressed: isLoading ? null : login,
+                  child:
+                      isLoading
+                          ? SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: colorScheme.onPrimary,
+                            ),
+                          )
+                          : Text(
+                            "Login",
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              color: colorScheme.onPrimary,
+                            ),
+                          ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  "Or sign in with",
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        Icons.g_mobiledata,
+                        color: colorScheme.onSurface,
+                        size: 40,
+                      ),
+                      onPressed:
+                          isLoading ? null : () => signInWithSocial('google'),
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        Icons.apple,
+                        color: colorScheme.onSurface,
+                        size: 40,
+                      ),
+                      onPressed:
+                          isLoading ? null : () => signInWithSocial('apple'),
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        Icons.facebook,
+                        color: colorScheme.onSurface,
+                        size: 40,
+                      ),
+                      onPressed:
+                          isLoading ? null : () => signInWithSocial('facebook'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                    );
+                  },
+                  child: Text(
+                    "Register Here",
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),

@@ -1,10 +1,26 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
 import '../auth/login_screen.dart';
-import '../data/user_data.dart';
-import '../theme.dart';
+import '../providers/user_provider.dart';
+import '../services/auth_service.dart';
 import './settings_screen.dart';
-import '../screens/nav_screen.dart';
+import 'rewards/points_conversion_screen.dart';
+import 'nav_screen.dart';
+import '../theme.dart';
+
+class _Badge {
+  final String name;
+  final String earnedImagePath;
+  final String unearnedImagePath;
+
+  _Badge({
+    required this.name,
+    required this.earnedImagePath,
+    required this.unearnedImagePath,
+  });
+}
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -15,39 +31,66 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final Map<String, TextEditingController> controllers = {};
-  bool isLoading = true;
-  User? firebaseCurrentUser;
+  bool _notificationsEnabled = true;
+  TimeOfDay _dailyReminderTime = const TimeOfDay(hour: 8, minute: 0);
+  TimeOfDay _weeklyReminderTime = const TimeOfDay(hour: 9, minute: 0);
+  bool _isSaving = false;
+  File? _selectedImage;
+
+  // Define possible badges with their earned and unearned image paths
+  final List<_Badge> _possibleBadges = [
+    _Badge(
+      name: "Beginner",
+      earnedImagePath: "assets/images/badge_beginner.png",
+      unearnedImagePath: "assets/images/badge_beginner_unearned.png",
+    ),
+    _Badge(
+      name: "Fitness Guru",
+      earnedImagePath: "assets/images/badge_fitness_guru.png",
+      unearnedImagePath: "assets/images/badge_fitness_guru_unearned.png",
+    ),
+    _Badge(
+      name: "Streak King",
+      earnedImagePath: "assets/images/badge_streak_king.png",
+      unearnedImagePath: "assets/images/badge_streak_king_unearned.png",
+    ),
+    _Badge(
+      name: "Nutrition Pro",
+      earnedImagePath: "assets/images/badge_nutrition_pro.png",
+      unearnedImagePath: "assets/images/badge_nutrition_pro_unearned.png",
+    ),
+  ];
 
   @override
   void initState() {
     super.initState();
-    _checkAuthAndLoadUser();
+    _initializeControllers();
   }
 
-  Future<void> _checkAuthAndLoadUser() async {
-    // Get the current Firebase user.
-    firebaseCurrentUser = FirebaseAuth.instance.currentUser;
-    // If no user is logged in, navigate to Login.
-    if (firebaseCurrentUser == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const LoginScreen()),
+  void _initializeControllers() {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    if (userProvider.currentUser != null) {
+      controllers['name'] = TextEditingController(
+        text: userProvider.currentUser!.name,
+      );
+      controllers['email'] = TextEditingController(
+        text: userProvider.currentUser!.email,
+      );
+      _notificationsEnabled = userProvider.currentUser!.notificationsEnabled;
+      if (userProvider.currentUser!.dailyReminderTime != null) {
+        final parts = userProvider.currentUser!.dailyReminderTime!.split(':');
+        _dailyReminderTime = TimeOfDay(
+          hour: int.parse(parts[0]),
+          minute: int.parse(parts[1]),
         );
-      });
-      return;
-    }
-    // Load extended user data into the global currentUser.
-    await loadUserFromFirestore(firebaseCurrentUser!.uid);
-    // Initialize controllers if currentUser is loaded.
-    if (currentUser != null) {
-      controllers['name'] = TextEditingController(text: currentUser!.name);
-      controllers['email'] = TextEditingController(text: currentUser!.email);
-    }
-    if (mounted) {
-      setState(() {
-        isLoading = false;
-      });
+      }
+      if (userProvider.currentUser!.weeklyReminderTime != null) {
+        final parts = userProvider.currentUser!.weeklyReminderTime!.split(':');
+        _weeklyReminderTime = TimeOfDay(
+          hour: int.parse(parts[0]),
+          minute: int.parse(parts[1]),
+        );
+      }
     }
   }
 
@@ -59,154 +102,812 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
+  Future<void> _saveNotificationPreferences() async {
+    setState(() {
+      _isSaving = true;
+    });
+
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    try {
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      if (userProvider.currentUser != null) {
+        await AuthService.instance
+            .updateUserFields(userProvider.currentUser!.id, {
+              'notificationsEnabled': _notificationsEnabled,
+              'dailyReminderTime':
+                  "${_dailyReminderTime.hour}:${_dailyReminderTime.minute}",
+              'weeklyReminderTime':
+                  "${_weeklyReminderTime.hour}:${_weeklyReminderTime.minute}",
+            });
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: colorScheme.primary,
+          content: Text(
+            "Notification preferences saved successfully",
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onPrimary,
+            ),
+          ),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: colorScheme.error,
+          content: Text(
+            "Failed to save preferences: $e",
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onError,
+            ),
+          ),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _selectTime(BuildContext context, bool isDaily) async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: isDaily ? _dailyReminderTime : _weeklyReminderTime,
+    );
+    if (picked != null && mounted) {
+      setState(() {
+        if (isDaily) {
+          _dailyReminderTime = picked;
+        } else {
+          _weeklyReminderTime = picked;
+        }
+      });
+    }
+  }
+
+  Future<void> _handleLogout() async {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    try {
+      await AuthService.instance.signOut();
+
+      if (!mounted) return;
+
+      Navigator.of(context).pushAndRemoveUntil(
+        PageRouteBuilder(
+          transitionDuration: const Duration(milliseconds: 400),
+          pageBuilder:
+              (context, animation, secondaryAnimation) => const NavScreen(),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+        ),
+        (route) => false,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: colorScheme.primary,
+            content: Text(
+              "Logged out successfully",
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onPrimary,
+              ),
+            ),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: colorScheme.error,
+          content: Text(
+            "Failed to log out: $e",
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onError,
+            ),
+          ),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
+    }
+  }
+
+  Future<void> _selectDefaultAvatar(BuildContext context) async {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    const List<String> defaultAvatars = [
+      'assets/images/default_avatar_1.png',
+      'assets/images/default_avatar_2.png',
+      'assets/images/default_avatar_3.png',
+    ];
+
+    await showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            backgroundColor: colorScheme.surface,
+            title: Text(
+              "Select Default Avatar",
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: colorScheme.onSurface,
+              ),
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Display the current avatar
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16.0),
+                    child: Column(
+                      children: [
+                        Text(
+                          "Current Avatar",
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurface,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        CircleAvatar(
+                          radius: 40,
+                          backgroundColor: colorScheme.primary,
+                          child: CircleAvatar(
+                            radius: 35,
+                            backgroundColor: colorScheme.surface,
+                            backgroundImage:
+                                (userProvider.currentUser?.avatar != null &&
+                                        userProvider
+                                            .currentUser!
+                                            .avatar
+                                            .isNotEmpty)
+                                    ? (userProvider.currentUser!.avatar
+                                            .startsWith('http')
+                                        ? NetworkImage(
+                                          userProvider.currentUser!.avatar,
+                                        )
+                                        : AssetImage(
+                                          userProvider.currentUser!.avatar,
+                                        ))
+                                    : const AssetImage(
+                                          'assets/images/default_avatar_1.png',
+                                        )
+                                        as ImageProvider,
+                            onBackgroundImageError: (_, __) {},
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // List of default avatars
+                  ...defaultAvatars.map((avatarPath) {
+                    return ListTile(
+                      leading: CircleAvatar(
+                        radius: 20,
+                        backgroundImage: AssetImage(avatarPath),
+                      ),
+                      title: Text(
+                        avatarPath.split('/').last.replaceFirst('.png', ''),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurface,
+                        ),
+                      ),
+                      onTap: () async {
+                        try {
+                          await userProvider.updateAvatar(avatarPath);
+                          if (mounted) {
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                backgroundColor: colorScheme.primary,
+                                content: Text(
+                                  "Avatar updated successfully",
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: colorScheme.onPrimary,
+                                  ),
+                                ),
+                                behavior: SnackBarBehavior.floating,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                backgroundColor: colorScheme.error,
+                                content: Text(
+                                  "Failed to update avatar: $e",
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: colorScheme.onError,
+                                  ),
+                                ),
+                                behavior: SnackBarBehavior.floating,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            );
+                          }
+                        }
+                      },
+                    );
+                  }),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(
+                  "Cancel",
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+              ),
+            ],
+          ),
+    );
+  }
+
+  Future<void> _uploadCustomAvatar() async {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+
+    if (pickedFile == null) return;
+
+    setState(() {
+      _selectedImage = File(pickedFile.path);
+    });
+
+    try {
+      await userProvider.uploadCustomAvatar(_selectedImage!);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: colorScheme.primary,
+            content: Text(
+              "Avatar uploaded successfully",
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onPrimary,
+              ),
+            ),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: colorScheme.error,
+            content: Text(
+              "Failed to upload avatar: $e",
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onError,
+              ),
+            ),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _selectedImage = null;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    // If loading or if Firebase user is not available, show a loading screen.
-    if (isLoading || FirebaseAuth.instance.currentUser == null) {
-      return const Scaffold(
-        backgroundColor: Colors.black,
-        body: Center(child: CircularProgressIndicator(color: Colors.amber)),
+    final userProvider = Provider.of<UserProvider>(context);
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    if (userProvider.isLoading) {
+      return Container(
+        decoration: AppTheme.backgroundGradient(colorScheme),
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          body: Center(
+            child: CircularProgressIndicator(color: colorScheme.primary),
+          ),
+        ),
       );
     }
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Stack(
-        children: [
-          Container(
-            decoration: const BoxDecoration(
-              gradient: AppTheme.backgroundGradient,
+    if (userProvider.errorMessage != null) {
+      return Container(
+        decoration: AppTheme.backgroundGradient(colorScheme),
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          body: Center(
+            child: Text(
+              userProvider.errorMessage!,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colorScheme.error,
+              ),
             ),
-            child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 20),
-                      _buildAvatar(),
-                      const SizedBox(height: 20),
-                      _buildEditableField('name', controllers['name']!),
-                      _buildEditableField('email', controllers['email']!),
-                      const SizedBox(height: 30),
-                      _buildListTile(
-                        icon: Icons.settings,
-                        title: "Settings",
-                        color: Colors.white70,
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const SettingsScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                      _buildListTile(
-                        icon: Icons.logout,
-                        title: "Logout",
-                        color: Colors.red,
-                        onTap: () async {
-                          // Sign out the user.
-                          await FirebaseAuth.instance.signOut();
-                          if (!mounted) return;
-                          // Navigate to Home (NavScreen) after logout.
-                          // ignore: use_build_context_synchronously
-                          Navigator.of(context).pushAndRemoveUntil(
-                            PageRouteBuilder(
-                              transitionDuration: const Duration(
-                                milliseconds: 400,
+          ),
+        ),
+      );
+    }
+
+    if (!userProvider.isLoggedIn || userProvider.currentUser == null) {
+      return const LoginScreen();
+    }
+
+    return Container(
+      decoration: AppTheme.backgroundGradient(colorScheme),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildAvatar(context),
+                const SizedBox(height: 20),
+                _buildEditableField(context, 'name', controllers['name']!),
+                _buildEditableField(context, 'email', controllers['email']!),
+                const SizedBox(height: 30),
+                Card(
+                  elevation: 1,
+                  color: colorScheme.surfaceContainer,
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Achievements",
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: colorScheme.onSurface,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: ListTile(
+                                leading: Icon(
+                                  Icons.monetization_on,
+                                  color: colorScheme.primary,
+                                  size: 20,
+                                ),
+                                title: Text(
+                                  "Points: ${userProvider.currentUser!.points ?? 0}",
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: colorScheme.onSurface,
+                                  ),
+                                ),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder:
+                                          (context) =>
+                                              const PointsConversionScreen(),
+                                    ),
+                                  );
+                                },
                               ),
-                              pageBuilder:
-                                  (context, animation, secondaryAnimation) =>
-                                      const NavScreen(),
-                              transitionsBuilder: (
-                                context,
-                                animation,
-                                secondaryAnimation,
-                                child,
-                              ) {
-                                return FadeTransition(
-                                  opacity: animation,
-                                  child: child,
-                                );
-                              },
                             ),
-                            (route) => false,
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          // Back Button in ProfileScreen
-          Positioned(
-            top: 16,
-            left: 16,
-            child: SafeArea(
-              child: InkWell(
-                borderRadius: BorderRadius.circular(50),
-                onTap: () {
-                  Navigator.pushReplacement(
-                    context,
-                    PageRouteBuilder(
-                      transitionDuration: const Duration(milliseconds: 300),
-                      pageBuilder: (_, __, ___) => const NavScreen(),
-                      transitionsBuilder: (_, animation, __, child) {
-                        return FadeTransition(opacity: animation, child: child);
-                      },
+                            Padding(
+                              padding: const EdgeInsets.only(right: 16.0),
+                              child: Text(
+                                "Streak: ${userProvider.currentUser!.streak ?? 0} days",
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: colorScheme.onSurface,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(left: 16.0),
+                              child: Text(
+                                "Balance: \$${(userProvider.currentUser!.balance ?? 0.0).toStringAsFixed(2)}",
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: colorScheme.onSurface,
+                                ),
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.only(right: 16.0),
+                              child: ElevatedButton(
+                                style: theme.elevatedButtonTheme.style
+                                    ?.copyWith(
+                                      backgroundColor: WidgetStateProperty.all(
+                                        colorScheme.primary,
+                                      ),
+                                      foregroundColor: WidgetStateProperty.all(
+                                        colorScheme.onPrimary,
+                                      ),
+                                    ),
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder:
+                                          (context) =>
+                                              const PointsConversionScreen(),
+                                    ),
+                                  );
+                                },
+                                child: const Text("Points to Cash"),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          "Badges",
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: colorScheme.onSurface,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 4,
+                                crossAxisSpacing: 8.0,
+                                mainAxisSpacing: 8.0,
+                                childAspectRatio: 1.0,
+                              ),
+                          itemCount: _possibleBadges.length,
+                          itemBuilder: (context, index) {
+                            final badge = _possibleBadges[index];
+                            final userBadges =
+                                userProvider.currentUser!.badges ?? [];
+                            final hasBadge = userBadges.contains(badge.name);
+
+                            return Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color:
+                                          hasBadge
+                                              ? colorScheme.primary
+                                              : Colors.transparent,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  child: ClipOval(
+                                    child: Image.asset(
+                                      hasBadge
+                                          ? badge.earnedImagePath
+                                          : badge.unearnedImagePath,
+                                      width: 48,
+                                      height: 48,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  badge.name,
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color:
+                                        hasBadge
+                                            ? colorScheme.onSurface
+                                            : colorScheme.onSurfaceVariant,
+                                    fontSize: 10,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ],
                     ),
-                  );
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.black87,
                   ),
-                  child: const Icon(Icons.arrow_back, color: Colors.white70),
+                ),
+                const SizedBox(height: 10),
+                Card(
+                  elevation: 1,
+                  color: colorScheme.surfaceContainer,
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Notification Settings",
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: colorScheme.onSurface,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Card(
+                          elevation: 0,
+                          color: colorScheme.surfaceContainer,
+                          child: SwitchListTile(
+                            title: Text(
+                              "Enable Notifications",
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                color: colorScheme.onSurface,
+                              ),
+                            ),
+                            value: _notificationsEnabled,
+                            onChanged: (value) {
+                              setState(() {
+                                _notificationsEnabled = value;
+                              });
+                            },
+                            activeColor: colorScheme.primary,
+                          ),
+                        ),
+                        Card(
+                          elevation: 0,
+                          color: colorScheme.surfaceContainer,
+                          child: ListTile(
+                            title: Text(
+                              "Daily Check-In Reminder",
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                color: colorScheme.onSurface,
+                              ),
+                            ),
+                            subtitle: Text(
+                              _dailyReminderTime.format(context),
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            trailing: Icon(
+                              Icons.arrow_forward_ios,
+                              color: colorScheme.onSurfaceVariant,
+                              size: 16,
+                            ),
+                            onTap: () => _selectTime(context, true),
+                          ),
+                        ),
+                        Card(
+                          elevation: 0,
+                          color: colorScheme.surfaceContainer,
+                          child: ListTile(
+                            title: Text(
+                              "Weekly Photo Update Reminder",
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                color: colorScheme.onSurface,
+                              ),
+                            ),
+                            subtitle: Text(
+                              _weeklyReminderTime.format(context),
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            trailing: Icon(
+                              Icons.arrow_forward_ios,
+                              color: colorScheme.onSurfaceVariant,
+                              size: 16,
+                            ),
+                            onTap: () => _selectTime(context, false),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: ElevatedButton(
+                            style: theme.elevatedButtonTheme.style?.copyWith(
+                              backgroundColor: WidgetStateProperty.all(
+                                colorScheme.primary,
+                              ),
+                              foregroundColor: WidgetStateProperty.all(
+                                colorScheme.onPrimary,
+                              ),
+                            ),
+                            onPressed:
+                                _isSaving ? null : _saveNotificationPreferences,
+                            child:
+                                _isSaving
+                                    ? CircularProgressIndicator(
+                                      color: colorScheme.onPrimary,
+                                    )
+                                    : const Text("Save"),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _buildListTile(
+                  icon: Icons.settings,
+                  title: "Settings",
+                  color: colorScheme.onSurface,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                    );
+                  },
+                ),
+                _buildListTile(
+                  icon: Icons.logout,
+                  title: "Logout",
+                  color: colorScheme.error,
+                  onTap: _handleLogout,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAvatar(BuildContext context) {
+    final userProvider = Provider.of<UserProvider>(context);
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    final imageUrl = userProvider.currentUser?.avatar;
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        CircleAvatar(
+          radius: 55,
+          backgroundColor: colorScheme.primary,
+          child: CircleAvatar(
+            radius: 50,
+            backgroundColor: colorScheme.surface,
+            backgroundImage:
+                (imageUrl != null && imageUrl.isNotEmpty)
+                    ? (imageUrl.startsWith('http')
+                            ? NetworkImage(imageUrl)
+                            : AssetImage(imageUrl))
+                        as ImageProvider
+                    : const AssetImage('assets/images/default_avatar_1.png')
+                        as ImageProvider,
+            onBackgroundImageError: (exception, stackTrace) {},
+          ),
+        ),
+        const SizedBox(width: 16),
+        Column(
+          children: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: colorScheme.primary,
+                foregroundColor: colorScheme.onPrimary,
+                minimumSize: const Size(0, 36),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              onPressed: () => _selectDefaultAvatar(context),
+              child: Text(
+                "Change Avatar",
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: colorScheme.onPrimary,
                 ),
               ),
             ),
-          ),
-        ],
-      ),
+            const SizedBox(height: 8),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: colorScheme.primary,
+                foregroundColor: colorScheme.onPrimary,
+                minimumSize: const Size(0, 36),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              onPressed: _uploadCustomAvatar,
+              child: Text(
+                "Upload Avatar",
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: colorScheme.onPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
-  Widget _buildAvatar() {
-    final imageUrl = firebaseUser?.photoURL ?? currentUser?.avatar;
-    return CircleAvatar(
-      radius: 55,
-      backgroundColor: Colors.amber,
-      child: CircleAvatar(
-        radius: 50,
-        backgroundImage:
-            (imageUrl != null && imageUrl.isNotEmpty)
-                ? NetworkImage(imageUrl)
-                : const AssetImage('assets/images/default_avatar.png')
-                    as ImageProvider,
-        onBackgroundImageError: (_, __) {},
-      ),
-    );
-  }
+  Widget _buildEditableField(
+    BuildContext context,
+    String key,
+    TextEditingController controller,
+  ) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
-  Widget _buildEditableField(String key, TextEditingController controller) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: TextField(
         controller: controller,
         readOnly: true,
-        style: const TextStyle(color: Colors.white70),
+        style: theme.textTheme.bodyLarge?.copyWith(
+          color: colorScheme.onSurface,
+        ),
         decoration: InputDecoration(
           labelText: key.toUpperCase(),
-          labelStyle: const TextStyle(color: Colors.white70),
+          labelStyle: theme.textTheme.labelLarge?.copyWith(
+            color: colorScheme.onSurface,
+          ),
           filled: true,
-          fillColor: Colors.grey[850],
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          fillColor: colorScheme.surfaceContainer,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: colorScheme.outline),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: colorScheme.outline),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: colorScheme.primary),
+          ),
         ),
       ),
     );
@@ -218,13 +919,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required Color color,
     required VoidCallback onTap,
   }) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Card(
-      color: Colors.grey[900],
+      color: colorScheme.surfaceContainer,
       margin: const EdgeInsets.symmetric(vertical: 8),
       child: ListTile(
         leading: Icon(icon, color: color),
-        title: Text(title, style: TextStyle(color: color, fontSize: 16)),
-        trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white54),
+        title: Text(
+          title,
+          style: theme.textTheme.bodyLarge?.copyWith(color: color),
+        ),
+        trailing: Icon(
+          Icons.arrow_forward_ios,
+          color: colorScheme.onSurfaceVariant,
+        ),
         onTap: onTap,
       ),
     );

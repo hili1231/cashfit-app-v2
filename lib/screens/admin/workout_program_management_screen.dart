@@ -4,10 +4,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-
-import '../../models/workout_exercise.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:csv/csv.dart';
 import '../../models/workout_program.dart';
-import '../../data/workout_program_data.dart'; // local samples
+import '../../models/exercise.dart';
 
 class AdminWorkoutProgramManagementScreen extends StatefulWidget {
   const AdminWorkoutProgramManagementScreen({super.key});
@@ -23,35 +23,33 @@ class _AdminWorkoutProgramManagementScreenState
   final FirebaseStorage storage = FirebaseStorage.instance;
 
   List<WorkoutProgram> workoutPrograms = [];
-  List<WorkoutExercise> workoutExercises = [];
+  List<Exercise> exercises = [];
 
-  // For selecting existing program or creating a new one
   WorkoutProgram? selectedProgram;
 
   String? imageUrl;
-  Map<String, List<String>> workoutExerciseIdsPerDay = {};
+  Map<String, List<Map<String, dynamic>>> workoutExercisesPerDay = {};
 
-  // Basic form fields
   final List<String> levels = ["Beginner", "Intermediate", "Advanced"];
   final TextEditingController createTitleController = TextEditingController();
   final TextEditingController createDescriptionController =
       TextEditingController();
   final TextEditingController createDayInputController =
       TextEditingController();
+  final TextEditingController setsController = TextEditingController();
+  final TextEditingController repsController = TextEditingController();
   String? createLevel;
 
-  // For adding day -> workout exercises
-  String? selectedWorkoutExerciseId;
+  String? selectedExerciseId;
   int dayCounter = 1;
 
   @override
   void initState() {
     super.initState();
     loadWorkoutPrograms();
-    loadWorkoutExercises();
+    loadExercises();
   }
 
-  /// Load existing workout programs from Firestore
   Future<void> loadWorkoutPrograms() async {
     final snapshot = await firestore.collection('workoutPrograms').get();
     setState(() {
@@ -62,54 +60,43 @@ class _AdminWorkoutProgramManagementScreenState
     });
   }
 
-  /// Load existing workout exercises from Firestore
-  Future<void> loadWorkoutExercises() async {
-    final snapshot = await firestore.collection('workoutExercises').get();
+  Future<void> loadExercises() async {
+    final snapshot = await firestore.collection('exercises').get();
     setState(() {
-      workoutExercises =
+      exercises =
           snapshot.docs
-              .map((doc) => WorkoutExercise.fromMap(doc.id, doc.data()))
+              .map((doc) => Exercise.fromMap(doc.data()..['id'] = doc.id))
               .toList();
     });
   }
 
-  /// If we are editing existing, we show the doc's data
   void _populateForm(WorkoutProgram program) {
-    // Store the program in selectedProgram
     selectedProgram = program;
-
-    // Populate text fields
     createTitleController.text = program.title;
     createDescriptionController.text = program.description;
     createLevel = program.level;
     imageUrl = program.image;
-
-    // Build the workoutExerciseIdsPerDay map from program.days
-    workoutExerciseIdsPerDay = {};
-    program.days.forEach((dayKey, exercises) {
-      workoutExerciseIdsPerDay[dayKey] = List<String>.from(exercises);
-    });
-
-    // Set dayCounter so new days don't clash
-    // e.g. if program has days 1..5, set dayCounter = 6
-    final existingDays = program.days.keys.map(int.parse).toList()..sort();
+    workoutExercisesPerDay = Map.from(program.days);
+    final existingDays =
+        program.days.keys
+            .map((k) => int.parse(k.replaceAll('Day ', '')))
+            .toList()
+          ..sort();
     dayCounter = existingDays.isEmpty ? 1 : (existingDays.last + 1);
     setState(() {});
   }
 
-  /// Clears the form for a new program
   void _clearFormForNewProgram() {
     selectedProgram = null;
     createTitleController.clear();
     createDescriptionController.clear();
     createLevel = null;
     imageUrl = null;
-    workoutExerciseIdsPerDay.clear();
+    workoutExercisesPerDay.clear();
     dayCounter = 1;
     setState(() {});
   }
 
-  /// Upload an image to Firebase Storage
   Future<void> pickAndUploadImage() async {
     final picker = ImagePicker();
     final XFile? pickedFile = await picker.pickImage(
@@ -124,61 +111,189 @@ class _AdminWorkoutProgramManagementScreenState
     }
   }
 
+  Future<void> uploadCSVFile() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['csv'],
+    );
+    if (result != null && result.files.single.path != null) {
+      final file = File(result.files.single.path!);
+      final csvString = await file.readAsString();
+      final csvData = const CsvToListConverter().convert(csvString);
+
+      Map<String, WorkoutProgram> programsMap = {};
+
+      // Parse CSV rows (skip header)
+      for (int i = 1; i < csvData.length; i++) {
+        final row = csvData[i];
+        final programId = row[0].toString();
+        final programTitle = row[1].toString();
+        final programImage = row[2].toString();
+        final programLevel = row[3].toString();
+        final programDescription = row[4].toString();
+        final programUserId =
+            row[5].toString().isEmpty ? null : row[5].toString();
+        final dayStr = row[6].toString();
+        final dayNumber =
+            int.tryParse(dayStr.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+        final exerciseId = row[7].toString();
+        final sets = int.tryParse(row[8].toString()) ?? 0;
+        final reps = row[9].toString();
+
+        // Initialize program if not already in map
+        if (!programsMap.containsKey(programId)) {
+          programsMap[programId] = WorkoutProgram(
+            id: programId,
+            title: programTitle,
+            image: programImage,
+            days: {},
+            level: programLevel,
+            description: programDescription,
+            userId: programUserId,
+          );
+        }
+
+        // Add exercise to day
+        final dayKey = 'Day $dayNumber';
+        programsMap[programId]!.days[dayKey] =
+            programsMap[programId]!.days[dayKey] ?? [];
+        programsMap[programId]!.days[dayKey]!.add({
+          'exerciseId': exerciseId,
+          'sets': sets,
+          'reps': reps,
+        });
+      }
+
+      // Process each program
+      for (var program in programsMap.values) {
+        final extendedDays = await _extendToOneMonth(
+          program.title,
+          program.days,
+        );
+        await firestore.collection('workoutPrograms').doc(program.id).set({
+          'title': program.title,
+          'image': program.image,
+          'days': extendedDays,
+          'level': program.level,
+          'description': program.description,
+          if (program.userId != null) 'userId': program.userId,
+        }, SetOptions(merge: true));
+      }
+
+      await loadWorkoutPrograms();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('✅ CSV Uploaded and Programs Processed!')),
+      );
+    }
+  }
+
+  Future<Map<String, List<Map<String, dynamic>>>> _extendToOneMonth(
+    String programTitle,
+    Map<String, List<Map<String, dynamic>>> originalDays,
+  ) async {
+    final daysInMonth = 30;
+    final RegExp numberRegExp = RegExp(r'\d+');
+    final String? numberMatch = numberRegExp.firstMatch(programTitle)?.group(0);
+    final workoutDaysPerWeek = int.parse(
+      numberMatch ?? '3',
+    ); // Default to 3 if no number
+    final originalDayCount = originalDays.length;
+    final restExerciseId = await _getRestExerciseId();
+
+    Map<String, List<Map<String, dynamic>>> extendedDays = {};
+    int workoutDayIndex = 0;
+
+    // Define workout day offsets (1-based: 1 = Monday, 7 = Sunday)
+    List<int> workoutDayOffsets;
+    switch (workoutDaysPerWeek) {
+      case 3:
+        workoutDayOffsets = [1, 3, 5]; // Mon, Wed, Fri
+        break;
+      case 4:
+        workoutDayOffsets = [1, 3, 5, 6]; // Mon, Wed, Fri, Sat
+        break;
+      case 5:
+        workoutDayOffsets = [1, 2, 3, 4, 5]; // Mon-Fri
+        break;
+      case 6:
+        workoutDayOffsets = [1, 2, 3, 4, 5, 6]; // Mon-Sat
+        break;
+      default:
+        workoutDayOffsets = List.generate(
+          workoutDaysPerWeek,
+          (i) => i + 1,
+        ); // Consecutive days
+    }
+
+    for (int day = 1; day <= daysInMonth; day++) {
+      final weekDay = (day - 1) % 7 + 1; // 1 = Monday, 7 = Sunday
+      if (workoutDayOffsets.contains(weekDay)) {
+        // Workout day
+        final sourceDay = 'Day ${((workoutDayIndex % originalDayCount) + 1)}';
+        extendedDays['Day $day'] = List.from(originalDays[sourceDay] ?? []);
+        workoutDayIndex++;
+      } else {
+        // Rest day
+        extendedDays['Day $day'] = [
+          {'exerciseId': restExerciseId, 'sets': 0, 'reps': '0'},
+        ];
+      }
+    }
+
+    return extendedDays;
+  }
+
+  Future<String> _getRestExerciseId() async {
+    final snapshot =
+        await firestore
+            .collection('exercises')
+            .where('name', isEqualTo: 'rest_sets_0_reps_0')
+            .get();
+    if (snapshot.docs.isNotEmpty) {
+      return snapshot.docs.first.id;
+    }
+    return 'rest_sets_0_reps_0'; // Fallback
+  }
+
   void showError(String message) {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  /// Create a brand-new workout program in Firestore (with doc ID = title+timestamp)
   Future<void> createWorkoutProgram() async {
     final title = createTitleController.text.trim();
     final desc = createDescriptionController.text.trim();
 
-    if (title.isEmpty) {
-      showError("Title is required.");
-      return;
-    }
-    if (desc.isEmpty) {
-      showError("Description is required.");
-      return;
-    }
-    if (createLevel == null || createLevel!.isEmpty) {
-      showError("Level is required.");
-      return;
-    }
-    if (workoutExerciseIdsPerDay.isEmpty) {
-      showError("Please add at least one day with exercises.");
-      return;
-    }
-    if (imageUrl == null || imageUrl!.isEmpty) {
-      showError("Please upload an image.");
+    if (title.isEmpty ||
+        desc.isEmpty ||
+        createLevel == null ||
+        workoutExercisesPerDay.isEmpty ||
+        imageUrl == null) {
+      showError("All fields are required.");
       return;
     }
 
-    // Build doc ID from "title + timestamp"
     final sanitizedTitle = title.replaceAll(' ', '_');
     final nowStr = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
     final docId = '${sanitizedTitle}_$nowStr';
 
-    // Save in Firestore
+    final extendedDays = await _extendToOneMonth(title, workoutExercisesPerDay);
+
     await firestore.collection('workoutPrograms').doc(docId).set({
       'title': title,
       'image': imageUrl,
-      'days': workoutExerciseIdsPerDay,
+      'days': extendedDays,
       'level': createLevel,
       'description': desc,
     });
 
-    // Reload & reset
     await loadWorkoutPrograms();
     _clearFormForNewProgram();
-
     if (!mounted) return;
     showError('✅ Workout Program created!');
   }
 
-  /// Update an existing workout program's doc
   Future<void> updateExistingProgram() async {
     if (selectedProgram == null) {
       showError("No existing program selected.");
@@ -188,34 +303,22 @@ class _AdminWorkoutProgramManagementScreenState
     final title = createTitleController.text.trim();
     final desc = createDescriptionController.text.trim();
 
-    if (title.isEmpty) {
-      showError("Title is required.");
-      return;
-    }
-    if (desc.isEmpty) {
-      showError("Description is required.");
-      return;
-    }
-    if (createLevel == null || createLevel!.isEmpty) {
-      showError("Level is required.");
-      return;
-    }
-    if (workoutExerciseIdsPerDay.isEmpty) {
-      showError("Please add at least one day with exercises.");
-      return;
-    }
-    if (imageUrl == null || imageUrl!.isEmpty) {
-      showError("Please upload an image.");
+    if (title.isEmpty ||
+        desc.isEmpty ||
+        createLevel == null ||
+        workoutExercisesPerDay.isEmpty ||
+        imageUrl == null) {
+      showError("All fields are required.");
       return;
     }
 
-    // Use the doc ID from selectedProgram!.id
     final docId = selectedProgram!.id;
+    final extendedDays = await _extendToOneMonth(title, workoutExercisesPerDay);
 
     await firestore.collection('workoutPrograms').doc(docId).update({
       'title': title,
       'image': imageUrl,
-      'days': workoutExerciseIdsPerDay,
+      'days': extendedDays,
       'level': createLevel,
       'description': desc,
     });
@@ -225,42 +328,37 @@ class _AdminWorkoutProgramManagementScreenState
     showError('✅ Workout Program updated!');
   }
 
-  /// Add a new day to the schedule
   void addNewDay() {
-    workoutExerciseIdsPerDay[dayCounter.toString()] = [];
+    workoutExercisesPerDay['Day $dayCounter'] = [];
     dayCounter++;
     setState(() {});
   }
 
-  /// Add a workout exercise ID to a specified day
   void addWorkoutExerciseToDay(String dayInput) {
     final day = int.tryParse(dayInput);
-    if (day == null || selectedWorkoutExerciseId == null) {
-      showError("Please select a valid day and exercise.");
+    final sets = int.tryParse(setsController.text);
+    final reps = repsController.text.trim();
+    if (day == null ||
+        selectedExerciseId == null ||
+        sets == null ||
+        reps.isEmpty) {
+      showError("Please provide valid day, exercise, sets, and reps.");
       return;
     }
-    final dayKey = day.toString();
-    workoutExerciseIdsPerDay.putIfAbsent(dayKey, () => []);
-    workoutExerciseIdsPerDay[dayKey]!.add(selectedWorkoutExerciseId!);
+    final dayKey = 'Day $day';
+    workoutExercisesPerDay.putIfAbsent(dayKey, () => []);
+    workoutExercisesPerDay[dayKey]!.add({
+      'exerciseId': selectedExerciseId!,
+      'sets': sets,
+      'reps': reps,
+    });
+    setsController.clear();
+    repsController.clear();
     setState(() {});
   }
 
-  /// Upload local sample programs
-  Future<void> _uploadSampleWorkoutPrograms() async {
-    for (final program in workoutProgramSamples) {
-      await firestore
-          .collection('workoutPrograms')
-          .doc(program.id)
-          .set(program.toMap());
-    }
-    if (!mounted) return;
-    showError('✅ Sample workout programs uploaded!');
-    await loadWorkoutPrograms();
-  }
-
-  /// Build the UI for each day
   Widget buildDaySection(String day) {
-    final items = workoutExerciseIdsPerDay[day] ?? [];
+    final items = workoutExercisesPerDay[day] ?? [];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -269,7 +367,7 @@ class _AdminWorkoutProgramManagementScreenState
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'Day $day',
+              day,
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 18,
@@ -278,7 +376,7 @@ class _AdminWorkoutProgramManagementScreenState
             ),
             TextButton(
               onPressed: () {
-                workoutExerciseIdsPerDay.remove(day);
+                workoutExercisesPerDay.remove(day);
                 setState(() {});
               },
               child: const Text(
@@ -288,12 +386,12 @@ class _AdminWorkoutProgramManagementScreenState
             ),
           ],
         ),
-        ...items.map((id) {
+        ...items.map((config) {
           return Row(
             children: [
               Expanded(
                 child: Text(
-                  id,
+                  "${config['exerciseId']} - ${config['sets']} sets, ${config['reps']} reps",
                   style: const TextStyle(color: Colors.white70),
                   overflow: TextOverflow.ellipsis,
                   maxLines: 1,
@@ -302,7 +400,7 @@ class _AdminWorkoutProgramManagementScreenState
               IconButton(
                 icon: const Icon(Icons.delete, color: Colors.red),
                 onPressed: () {
-                  workoutExerciseIdsPerDay[day]?.remove(id);
+                  workoutExercisesPerDay[day]?.remove(config);
                   setState(() {});
                 },
               ),
@@ -314,7 +412,6 @@ class _AdminWorkoutProgramManagementScreenState
     );
   }
 
-  /// Standard input decoration
   InputDecoration _inputDecoration(String label) => InputDecoration(
     labelText: label,
     labelStyle: const TextStyle(color: Colors.white70),
@@ -323,7 +420,6 @@ class _AdminWorkoutProgramManagementScreenState
     border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
   );
 
-  /// Section title
   Widget sectionTitle(String title) => Padding(
     padding: const EdgeInsets.only(top: 24, bottom: 12),
     child: Text(
@@ -349,7 +445,6 @@ class _AdminWorkoutProgramManagementScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // (NEW) Dropdown to select an existing program or "New Program"
             DropdownButtonFormField<WorkoutProgram?>(
               value: selectedProgram,
               dropdownColor: Colors.grey[850],
@@ -376,39 +471,30 @@ class _AdminWorkoutProgramManagementScreenState
               ],
               onChanged: (val) {
                 if (val == null) {
-                  // "New Program" => clear form
                   _clearFormForNewProgram();
                 } else {
-                  // Existing => populate form
                   _populateForm(val);
                 }
               },
             ),
             const SizedBox(height: 16),
-
             sectionTitle(
               selectedProgram == null
                   ? 'Create Program'
                   : 'Edit Program: ${selectedProgram!.title}',
             ),
-
-            // Title
             TextField(
               controller: createTitleController,
               style: const TextStyle(color: Colors.white),
               decoration: _inputDecoration('Title *'),
             ),
             const SizedBox(height: 12),
-
-            // Description
             TextField(
               controller: createDescriptionController,
               style: const TextStyle(color: Colors.white),
               decoration: _inputDecoration('Description *'),
             ),
             const SizedBox(height: 12),
-
-            // Level
             DropdownButtonFormField<String>(
               value: createLevel,
               isExpanded: true,
@@ -424,91 +510,81 @@ class _AdminWorkoutProgramManagementScreenState
               onChanged: (val) => setState(() => createLevel = val),
             ),
             const SizedBox(height: 12),
-
-            // Image preview & upload
             if (imageUrl != null)
               if (imageUrl!.startsWith('http'))
                 Image.network(imageUrl!, height: 100)
               else
                 Image.file(File(imageUrl!), height: 100),
-
             ElevatedButton(
               onPressed: pickAndUploadImage,
               child: const Text('Upload Image'),
             ),
-
             const SizedBox(height: 12),
-
-            // Add Day
+            ElevatedButton(
+              onPressed: uploadCSVFile,
+              child: const Text('Upload CSV'),
+            ),
+            const SizedBox(height: 12),
             ElevatedButton(onPressed: addNewDay, child: const Text('Add Day')),
             const SizedBox(height: 12),
-
-            // Dropdown for selecting which workout exercise ID to add
             DropdownButtonFormField<String>(
-              value: selectedWorkoutExerciseId,
+              value: selectedExerciseId,
               isExpanded: true,
               dropdownColor: Colors.grey[850],
               style: const TextStyle(color: Colors.white),
-              decoration: _inputDecoration('Workout Exercise ID'),
+              decoration: _inputDecoration('Exercise'),
               items:
-                  workoutExercises.map((we) {
+                  exercises.map((e) {
                     return DropdownMenuItem(
-                      value: we.id,
+                      value: e.id,
                       child: Text(
-                        we.id,
+                        e.name,
                         style: const TextStyle(color: Colors.white),
                       ),
                     );
                   }).toList(),
-              onChanged:
-                  (val) => setState(() => selectedWorkoutExerciseId = val),
+              onChanged: (val) => setState(() => selectedExerciseId = val),
             ),
             const SizedBox(height: 12),
-
-            // Day number input
             TextField(
               controller: createDayInputController,
               style: const TextStyle(color: Colors.white),
               decoration: _inputDecoration('Day Number'),
+              keyboardType: TextInputType.number,
             ),
             const SizedBox(height: 12),
-
-            // Add selected exercise to the given day
+            TextField(
+              controller: setsController,
+              style: const TextStyle(color: Colors.white),
+              decoration: _inputDecoration('Sets'),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: repsController,
+              style: const TextStyle(color: Colors.white),
+              decoration: _inputDecoration('Reps'),
+            ),
+            const SizedBox(height: 12),
             ElevatedButton(
               onPressed:
                   () => addWorkoutExerciseToDay(createDayInputController.text),
               child: const Text('Add to Day'),
             ),
-
-            // Render day sections
-            ...workoutExerciseIdsPerDay.keys.map(buildDaySection),
-
+            ...workoutExercisesPerDay.keys.map(buildDaySection),
             const SizedBox(height: 20),
-
-            // If selectedProgram == null => "Create Program"
-            // else => "Update Program"
-            if (selectedProgram == null) ...[
+            if (selectedProgram == null)
               ElevatedButton(
                 onPressed: createWorkoutProgram,
                 child: const Text('Create Program'),
-              ),
-            ] else ...[
+              )
+            else
               ElevatedButton(
                 onPressed: updateExistingProgram,
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
                 child: const Text('Update Program'),
               ),
-            ],
             const SizedBox(height: 20),
-
-            // Button to upload sample workouts from local data
-            ElevatedButton(
-              onPressed: _uploadSampleWorkoutPrograms,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.grey[800],
-              ),
-              child: const Text('Upload Sample Workout Programs'),
-            ),
           ],
         ),
       ),

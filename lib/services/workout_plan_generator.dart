@@ -1,35 +1,48 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cashfit/utils/workout_generator.dart' as generator;
+
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../models/workout_program.dart';
-import '../../data/user_data.dart';
+import '../../providers/user_provider.dart';
 
-Future<WorkoutProgram?> generatePersonalizedWorkoutPlan() async {
-  if (currentUser == null) return null; // Return null if there's no user
+/// Generates a personalized workout plan for the current user by calling WorkoutGenerator.
+Future<WorkoutProgram?> generatePersonalizedWorkoutPlan({
+  required BuildContext context,
+  required int totalDays,
+  required int workoutFrequency,
+  required List<String> availableDays,
+  required List<String> preferredWorkoutTimes,
+  Function(double)? onProgress,
+}) async {
+  try {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final user = userProvider.currentUser;
 
-  final String userLevel = currentUser!.experienceLevel;
+    if (user == null) {
+      throw Exception("User not found. Please ensure you are logged in.");
+    }
 
-  // Fetch workout programs from Firebase
-  final snapshot =
-      await FirebaseFirestore.instance
-          .collection('workoutPrograms')
-          .where('level', isEqualTo: userLevel)
-          .get();
+    // Validate input parameters
+    if (totalDays <= 0 || workoutFrequency <= 0) {
+      throw Exception(
+        "Total days and workout frequency must be positive integers.",
+      );
+    }
+    if (availableDays.isEmpty) {
+      throw Exception("At least one available day must be specified.");
+    }
 
-  if (snapshot.docs.isEmpty) {
-    return null; // No workout programs found for the user level
+    // Call WorkoutGenerator to generate a fully personalized workout program
+    return await generator.WorkoutGenerator.generateWorkoutProgram(
+      context: context,
+      totalDays: totalDays,
+      workoutFrequency: workoutFrequency,
+      availableDays: availableDays,
+      preferredWorkoutTimes: preferredWorkoutTimes,
+      onProgress: onProgress,
+      user: user,
+    );
+  } catch (e) {
+    throw Exception("Failed to generate personalized workout plan: $e");
   }
-
-  // Get the first matching workout program
-  final programData = snapshot.docs.first.data();
-  final match = WorkoutProgram.fromMap(programData, programData['id']);
-
-  // Return the personalized workout program with updated exercises
-  return WorkoutProgram(
-    id: match.id, // Add the required 'id' parameter
-    title: "${match.title} (Personalized)",
-    image: match.image,
-    days: {}, // Provide an empty map or a valid Map<String, List<String>> value
-    level: match.level,
-    description:
-        "Customized for your goal, experience, and weekly schedule. Based on ${match.title}.",
-  );
 }

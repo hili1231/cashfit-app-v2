@@ -63,11 +63,11 @@ class Meal {
 
   int get totalTime => prepTime + (cookTime ?? 0);
 
-  Map<String, dynamic> toJson() => {
+  Map<String, dynamic> toMap() => {
     'id': id,
     'name': name,
     'image': image,
-    'ingredients': ingredients.map((e) => e.toJson()).toList(),
+    'ingredients': ingredients.map((e) => e.toMap()).toList(),
     'instructions': instructions,
     'diets': diets,
     'category': category,
@@ -79,23 +79,23 @@ class Meal {
     if (difficulty != null) 'difficulty': difficulty,
   };
 
-  factory Meal.fromJson(Map<String, dynamic> json) => Meal(
-    id: json['id'] ?? '',
-    name: json['name'] ?? '',
-    image: json['image'] ?? '',
+  factory Meal.fromMap(Map<String, dynamic> map) => Meal(
+    id: map['id'] ?? '',
+    name: map['name'] ?? '',
+    image: map['image'] ?? '',
     ingredients:
-        (json['ingredients'] as List<dynamic>? ?? [])
-            .map((e) => MealIngredient.fromJson(e))
+        (map['ingredients'] as List<dynamic>? ?? [])
+            .map((e) => MealIngredient.fromMap(e as Map<String, dynamic>))
             .toList(),
-    instructions: List<String>.from(json['instructions'] ?? []),
-    diets: List<String>.from(json['diets'] ?? []),
-    category: json['category'] ?? '',
-    allergies: List<String>.from(json['allergies'] ?? []),
-    prepTime: json['prepTime'] ?? 0,
-    cookTime: json['cookTime'],
-    video: json['video'],
-    tags: (json['tags'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
-    difficulty: json['difficulty'],
+    instructions: List<String>.from(map['instructions'] ?? []),
+    diets: List<String>.from(map['diets'] ?? []),
+    category: map['category'] ?? '',
+    allergies: List<String>.from(map['allergies'] ?? []),
+    prepTime: (map['prepTime'] as num?)?.toInt() ?? 0,
+    cookTime: (map['cookTime'] as num?)?.toInt(),
+    video: map['video'] as String?,
+    tags: (map['tags'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
+    difficulty: map['difficulty'] as String?,
   );
 
   Meal scaledToCalories(double targetCalories) {

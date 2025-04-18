@@ -13,19 +13,19 @@ class DietCategory {
   });
 
   /// Serialize for Firebase
-  Map<String, dynamic> toJson() => {
+  Map<String, dynamic> toMap() => {
     'dietName': dietName,
     'image': image,
-    'plans': plans.map((plan) => plan.toJson()).toList(),
+    'plans': plans.map((plan) => plan.toMap()).toList(),
   };
 
   /// Deserialize from Firebase
-  factory DietCategory.fromJson(Map<String, dynamic> json) => DietCategory(
-    dietName: json['dietName'] ?? '',
-    image: json['image'] ?? '',
+  factory DietCategory.fromMap(Map<String, dynamic> map) => DietCategory(
+    dietName: map['dietName'] ?? '',
+    image: map['image'] ?? '',
     plans:
-        (json['plans'] as List<dynamic>? ?? [])
-            .map((planJson) => MealPlan.fromJson(planJson))
+        (map['plans'] as List<dynamic>? ?? [])
+            .map((planMap) => MealPlan.fromMap(planMap as Map<String, dynamic>))
             .toList(),
   );
 

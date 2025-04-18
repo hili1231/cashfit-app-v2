@@ -38,33 +38,44 @@ class MealDay {
   }
 
   /// Convert to Firebase-compatible Map
-  Map<String, dynamic> toJson() => {
+  Map<String, dynamic> toMap() => {
     "dayNumber": dayNumber,
-    "breakfast": breakfast?.toJson(),
-    "snack1": snack1?.toJson(),
-    "lunch": lunch?.toJson(),
-    "snack2": snack2?.toJson(),
-    "dinner": dinner?.toJson(),
-    "snack3": snack3?.toJson(),
+    if (breakfast != null) "breakfast": breakfast!.toMap(),
+    if (snack1 != null) "snack1": snack1!.toMap(),
+    if (lunch != null) "lunch": lunch!.toMap(),
+    if (snack2 != null) "snack2": snack2!.toMap(),
+    if (dinner != null) "dinner": dinner!.toMap(),
+    if (snack3 != null) "snack3": snack3!.toMap(),
   };
 
   /// Create from Firebase snapshot
-  factory MealDay.fromJson(Map<String, dynamic> json) {
+  factory MealDay.fromMap(Map<String, dynamic> map) {
     return MealDay(
-      dayNumber: json["dayNumber"] ?? 1,
+      dayNumber: map["dayNumber"] ?? 1,
       breakfast:
-          json["breakfast"] != null
-              ? MealPortion.fromJson(json["breakfast"])
+          map["breakfast"] != null
+              ? MealPortion.fromMap(map["breakfast"] as Map<String, dynamic>)
               : null,
       snack1:
-          json["snack1"] != null ? MealPortion.fromJson(json["snack1"]) : null,
-      lunch: json["lunch"] != null ? MealPortion.fromJson(json["lunch"]) : null,
+          map["snack1"] != null
+              ? MealPortion.fromMap(map["snack1"] as Map<String, dynamic>)
+              : null,
+      lunch:
+          map["lunch"] != null
+              ? MealPortion.fromMap(map["lunch"] as Map<String, dynamic>)
+              : null,
       snack2:
-          json["snack2"] != null ? MealPortion.fromJson(json["snack2"]) : null,
+          map["snack2"] != null
+              ? MealPortion.fromMap(map["snack2"] as Map<String, dynamic>)
+              : null,
       dinner:
-          json["dinner"] != null ? MealPortion.fromJson(json["dinner"]) : null,
+          map["dinner"] != null
+              ? MealPortion.fromMap(map["dinner"] as Map<String, dynamic>)
+              : null,
       snack3:
-          json["snack3"] != null ? MealPortion.fromJson(json["snack3"]) : null,
+          map["snack3"] != null
+              ? MealPortion.fromMap(map["snack3"] as Map<String, dynamic>)
+              : null,
     );
   }
 

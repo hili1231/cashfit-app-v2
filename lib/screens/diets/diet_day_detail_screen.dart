@@ -1,17 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../models/meal_day.dart';
 import '../../models/meal.dart';
 import '../../models/meal_plan.dart';
 import '../../models/meal_portion.dart';
-
 import '../nav_screen.dart';
 import 'meal_plan_screen.dart';
 import 'meal_detail_screen.dart';
-import '../../theme.dart';
 
 class DietDayDetailScreen extends StatefulWidget {
   final MealPlan plan;
@@ -24,75 +21,74 @@ class DietDayDetailScreen extends StatefulWidget {
 }
 
 class _DietDayDetailScreenState extends State<DietDayDetailScreen> {
-  late MealDay _day;
-  late MealPlan _plan;
+  late MealDay _cachedDay;
+  late MealPlan _cachedPlan;
   bool _isCustom = false;
 
   @override
   void initState() {
     super.initState();
-    _day = widget.day;
-    _plan = widget.plan;
+    // Cache the plan and day data once on initialization
+    _cachedDay = widget.day;
+    _cachedPlan = widget.plan;
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
-        backgroundColor: Colors.black,
+        backgroundColor: colorScheme.surface,
         elevation: 2,
         centerTitle: true,
         title: Text(
-          "Day ${_day.dayNumber}",
-          style: GoogleFonts.oswald(
-            fontSize: 22,
+          "Day ${_cachedDay.dayNumber}",
+          style: theme.textTheme.titleLarge?.copyWith(
+            color: colorScheme.onSurface,
             fontWeight: FontWeight.bold,
-            color: Colors.white70,
-            letterSpacing: 1.2,
+            fontSize: 22,
           ),
         ),
-        leading: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Container(
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.black87,
-            ),
-            child: IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white70),
-              onPressed: () {
-                final navState =
-                    context.findAncestorStateOfType<NavScreenState>();
-                if (navState != null) {
-                  navState.setDetailScreen(MealPlanScreen(selectedPlan: _plan));
-                } else {
-                  Navigator.pop(context);
-                }
-              },
-            ),
-          ),
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: colorScheme.onSurface),
+          onPressed: () {
+            final navState = context.findAncestorStateOfType<NavScreenState>();
+            if (navState != null) {
+              navState.setDetailScreen(
+                MealPlanScreen(selectedPlan: _cachedPlan),
+              );
+            } else {
+              Navigator.pop(context);
+            }
+          },
         ),
         actions: [
           if (_isCustom)
             IconButton(
-              icon: const Icon(Icons.save_alt),
+              icon: Icon(Icons.save_alt, color: colorScheme.onSurface),
               onPressed: () async {
                 final user = FirebaseAuth.instance.currentUser;
                 if (!mounted) return;
 
                 if (user == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
+                    SnackBar(
+                      content: const Text(
                         "⚠ You must be logged in to save custom plans",
                       ),
+                      backgroundColor: colorScheme.error,
                     ),
                   );
                   return;
                 }
 
-                final customPlan = _plan.copyWith(
+                // Store ScaffoldMessenger before async operation
+                final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+                final customPlan = _cachedPlan.copyWith(
                   id:
                       "custom_${user.uid}_${DateTime.now().millisecondsSinceEpoch}",
                   userId: user.uid,
@@ -101,13 +97,15 @@ class _DietDayDetailScreenState extends State<DietDayDetailScreen> {
                 await FirebaseFirestore.instance
                     .collection("mealPlans")
                     .doc(customPlan.id)
-                    .set(customPlan.toJson());
+                    .set(customPlan.toMap());
 
                 if (!mounted) return;
 
-                // ignore: use_build_context_synchronously
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("✅ Custom meal plan saved!")),
+                scaffoldMessenger.showSnackBar(
+                  SnackBar(
+                    content: const Text("✅ Custom meal plan saved!"),
+                    backgroundColor: colorScheme.primary,
+                  ),
                 );
 
                 setState(() => _isCustom = false);
@@ -115,34 +113,35 @@ class _DietDayDetailScreenState extends State<DietDayDetailScreen> {
             ),
         ],
       ),
-      body: Container(
-        decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: _buildMealsList(context),
-          ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: _buildMealsList(context, theme, colorScheme),
         ),
       ),
     );
   }
 
-  List<Widget> _buildMealsList(BuildContext context) {
+  List<Widget> _buildMealsList(
+    BuildContext context,
+    ThemeData theme,
+    ColorScheme colorScheme,
+  ) {
     final meals = [
-      {"portion": _day.breakfast, "type": "Breakfast"},
-      {"portion": _day.snack1, "type": "Snack1"},
-      {"portion": _day.lunch, "type": "Lunch"},
-      {"portion": _day.snack2, "type": "Snack2"},
-      {"portion": _day.dinner, "type": "Dinner"},
-      {"portion": _day.snack3, "type": "Snack3"},
+      {"portion": _cachedDay.breakfast, "type": "Breakfast"},
+      {"portion": _cachedDay.snack1, "type": "Snack1"},
+      {"portion": _cachedDay.lunch, "type": "Lunch"},
+      {"portion": _cachedDay.snack2, "type": "Snack2"},
+      {"portion": _cachedDay.dinner, "type": "Dinner"},
+      {"portion": _cachedDay.snack3, "type": "Snack3"},
     ];
 
     // Only return cards for non-null meal portions
     return meals.where((m) => m['portion'] != null).map((obj) {
       final portion = obj["portion"] as MealPortion;
       final type = obj["type"] as String;
-      return _buildMealCard(context, portion, type);
+      return _buildMealCard(context, portion, type, theme, colorScheme);
     }).toList();
   }
 
@@ -150,43 +149,43 @@ class _DietDayDetailScreenState extends State<DietDayDetailScreen> {
     BuildContext context,
     MealPortion portion,
     String mealType,
+    ThemeData theme,
+    ColorScheme colorScheme,
   ) {
     final meal = portion.meal;
 
-    return Container(
+    return Card(
+      color: colorScheme.surfaceContainer,
       margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.black,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      // The entire container is wrapped in InkWell
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      elevation: 1,
       child: InkWell(
-        // 1) Tapping anywhere on the container -> open MealDetailScreen
         onTap: () => _navigateToMealDetail(context, meal),
         borderRadius: BorderRadius.circular(10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Meal Image
             ClipRRect(
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(10),
                 topRight: Radius.circular(10),
               ),
-              child:
-                  meal.image.isNotEmpty
-                      ? Image.asset(
-                        meal.image,
-                        width: double.infinity,
-                        height: 200,
-                        fit: BoxFit.cover,
-                        errorBuilder:
-                            (_, __, ___) => _buildPlaceholderImage(200),
-                      )
-                      : _buildPlaceholderImage(200),
+              child: CachedNetworkImage(
+                imageUrl:
+                    meal.image.isNotEmpty
+                        ? meal.image
+                        : 'assets/images/placeholder.jpg',
+                width: double.infinity,
+                height: 200,
+                fit: BoxFit.cover,
+                placeholder:
+                    (context, url) => _buildPlaceholderImage(200, colorScheme),
+                errorWidget:
+                    (context, url, error) =>
+                        _buildPlaceholderImage(200, colorScheme),
+                fadeInDuration: const Duration(milliseconds: 200),
+              ),
             ),
-
-            // Meal Info
             Padding(
               padding: const EdgeInsets.all(8),
               child: Column(
@@ -194,8 +193,8 @@ class _DietDayDetailScreenState extends State<DietDayDetailScreen> {
                 children: [
                   Text(
                     mealType.toUpperCase(),
-                    style: GoogleFonts.oswald(
-                      color: Colors.white70,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: colorScheme.onSurface,
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),
@@ -203,10 +202,10 @@ class _DietDayDetailScreenState extends State<DietDayDetailScreen> {
                   const SizedBox(height: 4),
                   Text(
                     meal.name,
-                    style: GoogleFonts.oswald(
-                      color: Colors.white70,
-                      fontSize: 14,
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: colorScheme.onSurface,
                       fontWeight: FontWeight.bold,
+                      fontSize: 14,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -214,33 +213,34 @@ class _DietDayDetailScreenState extends State<DietDayDetailScreen> {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.local_fire_department,
-                        color: Colors.amber,
+                        color: colorScheme.primary,
                         size: 14,
                       ),
                       const SizedBox(width: 4),
                       Text(
                         "${meal.calories.round()} Cal",
-                        style: GoogleFonts.oswald(
-                          color: Colors.amber,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.primary,
                           fontSize: 12,
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
-
-                  // 2) The Replace button is separate, does not affect the rest of the onTap
-                  //Align(
-                  //  alignment: Alignment.centerLeft,
-                  //  child: _buildReplaceButton(
-                  //    context: context,
-                  //    meal: meal,
-                  //    mealType: mealType,
-                  //    portion: portion,
-                  //  ),
-                  //),
+                  // Uncomment if you want to re-enable the Replace button
+                  /*
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: _buildReplaceButton(
+                      context: context,
+                      meal: meal,
+                      mealType: mealType,
+                      portion: portion,
+                    ),
+                  ),
+                  */
                 ],
               ),
             ),
@@ -250,110 +250,41 @@ class _DietDayDetailScreenState extends State<DietDayDetailScreen> {
     );
   }
 
-  //Widget _buildReplaceButton({
-  //  required BuildContext context,
-  //  required Meal meal,
-  //  required String mealType,
-  //  required MealPortion portion,
-  //}) {
-  //  return InkWell(
-  //    borderRadius: BorderRadius.circular(8),
-  //    onTap: () async {
-  //      // Show bottom sheet to pick replacements
-  //      final replacements =
-  //          mealData
-  //              .where((m) => m.category == meal.category && m.id != meal.id)
-  //              .toList();
-  //      final Meal? selected = await showModalBottomSheet<Meal>(
-  //        context: context,
-  //        backgroundColor: Colors.grey[900],
-  //        shape: const RoundedRectangleBorder(
-  //          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-  //        ),
-  //        builder: (_) => _buildReplacementModal(context, replacements),
-  //      );
-  //      if (selected != null) {
-  //        setState(() {
-  //          // Swap the meal for the day
-  //          _day = _day.swapMeal(
-  //            mealType.toLowerCase(),
-  //            selected,
-  //            portion.portionMultiplier,
-  //          );
-  //          // Update plan with new day
-  //          _plan = _plan.copyWith(
-  //            days:
-  //                _plan.days.map((d) {
-  //                  return d.dayNumber == _day.dayNumber ? _day : d;
-  //                }).toList(),
-  //          );
-  //          _isCustom = true;
-  //        });
-  //      }
-  //    },
-  //    child: Container(
-  //      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-  //      decoration: BoxDecoration(
-  //        color: const Color.fromARGB(255, 33, 33, 33),
-  //        borderRadius: BorderRadius.circular(8),
-  //      ),
-  //      child: Text(
-  //        "Replace",
-  //        style: GoogleFonts.oswald(
-  //          fontSize: 12,
-  //          fontWeight: FontWeight.bold,
-  //          color: Colors.white70,
-  //        ),
-  //      ),
-  //    ),
-  //  );
-  //}
-  //
-  //Widget _buildReplacementModal(BuildContext context, List<Meal> options) {
-  //  return ListView.builder(
-  //    itemCount: options.length,
-  //    itemBuilder: (_, i) {
-  //      final m = options[i];
-  //      return ListTile(
-  //        leading: CircleAvatar(backgroundImage: AssetImage(m.image)),
-  //        title: Text(m.name, style: const TextStyle(color: Colors.white70)),
-  //        subtitle: Text(
-  //          '${m.calories.round()} cal',
-  //          style: const TextStyle(color: Colors.amber),
-  //        ),
-  //        onTap: () => Navigator.pop(context, m),
-  //      );
-  //    },
-  //  );
-  //}
-
-  /// Navigate to MealDetailScreen, ignoring "Replace" logic
   void _navigateToMealDetail(BuildContext context, Meal meal) {
     final navState = context.findAncestorStateOfType<NavScreenState>();
     if (navState != null) {
       navState.setDetailScreen(
-        MealDetailScreen(plan: _plan, day: _day, meal: meal),
+        MealDetailScreen(plan: _cachedPlan, day: _cachedDay, meal: meal),
       );
     } else {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => MealDetailScreen(plan: _plan, day: _day, meal: meal),
+          builder:
+              (_) => MealDetailScreen(
+                plan: _cachedPlan,
+                day: _cachedDay,
+                meal: meal,
+              ),
         ),
       );
     }
   }
 
-  Widget _buildPlaceholderImage(double size) {
+  Widget _buildPlaceholderImage(double size, ColorScheme colorScheme) {
     return Container(
       height: size,
       width: double.infinity,
       decoration: BoxDecoration(
-        color: Colors.grey[800],
+        color: colorScheme.surfaceContainer,
         borderRadius: BorderRadius.circular(8),
       ),
       alignment: Alignment.center,
-      child: const Icon(Icons.fastfood, size: 30, color: Colors.white70),
+      child: Icon(
+        Icons.fastfood,
+        size: 30,
+        color: colorScheme.onSurfaceVariant,
+      ),
     );
   }
 }

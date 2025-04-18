@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../theme.dart'; // ✅ Import theme
 
 class SelectionButton extends StatelessWidget {
   final String text;
@@ -15,16 +14,24 @@ class SelectionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10.0),
       child: ElevatedButton.icon(
         onPressed: onTap,
-        icon: Icon(icon, color: Colors.black), // ✅ Icon in button
+        icon: Icon(icon), // Color is inherited from foregroundColor
         label: Text(
           text,
-          style: AppTheme.headline.copyWith(color: Colors.black, fontSize: 16),
+          style: theme.textTheme.labelLarge?.copyWith(
+            fontWeight: FontWeight.bold, // Optional: Add bold for emphasis
+          ),
         ),
-        style: AppTheme.buttonStyle, // ✅ Use centralized button style
+        style: theme.elevatedButtonTheme.style?.copyWith(
+          backgroundColor: WidgetStateProperty.all(colorScheme.primary),
+          foregroundColor: WidgetStateProperty.all(colorScheme.onPrimary),
+        ),
       ),
     );
   }

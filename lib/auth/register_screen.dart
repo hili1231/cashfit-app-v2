@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import '../data/user_data.dart';
-import '../models/app_user.dart';
-import '../theme.dart';
+import 'package:provider/provider.dart';
+import '../services/auth_service.dart';
 import '../screens/nav_screen.dart';
+import '../providers/user_provider.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -19,11 +18,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final passwordController = TextEditingController();
 
   final _formKey = GlobalKey<FormState>();
+  final AuthService auth = AuthService();
   bool isLoading = false;
   String errorMessage = '';
 
   Future<void> registerUser() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // Store userProvider before the async operation
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
 
     setState(() {
       isLoading = true;
@@ -31,75 +34,45 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
 
     try {
-      // Create Firebase Auth user
-      final credential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(
-            email: emailController.text.trim(),
-            password: passwordController.text.trim(),
-          );
-
-      final user = credential.user;
-
-      // Build extended AppUser instance
-      currentUser = AppUser(
-        id: user?.uid ?? '',
-        name: nameController.text.trim(),
-        email: emailController.text.trim(),
-        avatar: "assets/images/avatar.png",
-        workoutsCompleted: 0,
-        mealsTracked: 0,
-        gender: '',
-        age: '',
-        height: '',
-        weight: '',
-        activityLevel: '',
-        dietGoal: '',
-        dietPreference: '',
-        workoutGoal: '',
-        experienceLevel: '',
-        trainingStyle: '',
-        availableEquipment: [],
-        injuryHistory: [],
-        workoutFrequency: 0,
-        allergies: [],
-        isAdmin: false,
-        isPremium: false,
-        activeWorkoutPrograms: [],
-        activeDietPlans: [],
+      final user = await auth.signUp(
+        emailController.text.trim(),
+        passwordController.text.trim(),
+        nameController.text.trim(),
       );
 
-      // Save the user data to Firestore
-      if (currentUser != null) {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(currentUser!.id)
-            .set(currentUser!.toMap());
-      }
-
-      // Reload user data from Firestore to ensure currentUser is updated
-      await loadUserFromFirestore(currentUser!.id);
-
-      // Optionally, send email verification
-      await user?.sendEmailVerification();
-
-      if (mounted) {
-        // Navigate to NavScreen (or clear detail screen if available)
-        final navState = context.findAncestorStateOfType<NavScreenState>();
-        if (navState != null) {
-          navState.clearDetailScreen();
-        } else {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const NavScreen()),
-          );
+      if (user != null) {
+        await userProvider.loadUserData(
+          user.uid,
+        ); // Use the stored userProvider
+        if (mounted) {
+          // Guard context usage with mounted check
+          final navState = context.findAncestorStateOfType<NavScreenState>();
+          if (navState != null) {
+            navState.clearDetailScreen();
+          } else {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const NavScreen()),
+            );
+          }
         }
       }
     } on FirebaseAuthException catch (e) {
-      setState(() {
-        errorMessage = e.message ?? 'Registration failed';
-      });
+      if (mounted) {
+        setState(() {
+          errorMessage = e.message ?? 'Registration failed';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          errorMessage = e.toString();
+        });
+      }
     } finally {
-      if (mounted) setState(() => isLoading = false);
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
     }
   }
 
@@ -113,66 +86,92 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const SizedBox(height: 10),
-                    Center(
-                      child: Image.asset('assets/images/logo.png', height: 60),
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Scaffold(
+      backgroundColor: colorScheme.surface,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 10),
+                  Center(
+                    child: Image.asset('assets/images/logo.png', height: 60),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    "Create Account",
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      color: colorScheme.onSurface,
+                      fontWeight: FontWeight.bold,
                     ),
-                    const SizedBox(height: 20),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 30),
+                  _buildInputField(
+                    "Name",
+                    nameController,
+                    colorScheme: colorScheme,
+                    theme: theme,
+                  ),
+                  _buildInputField(
+                    "Email",
+                    emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    colorScheme: colorScheme,
+                    theme: theme,
+                  ),
+                  _buildInputField(
+                    "Password",
+                    passwordController,
+                    isPassword: true,
+                    colorScheme: colorScheme,
+                    theme: theme,
+                  ),
+                  const SizedBox(height: 20),
+                  if (errorMessage.isNotEmpty)
                     Text(
-                      "Create Account",
-                      style: AppTheme.headline,
+                      errorMessage,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.error,
+                      ),
                       textAlign: TextAlign.center,
                     ),
-                    const SizedBox(height: 30),
-                    _buildInputField("Name", nameController),
-                    _buildInputField(
-                      "Email",
-                      emailController,
-                      keyboardType: TextInputType.emailAddress,
-                    ),
-                    _buildInputField(
-                      "Password",
-                      passwordController,
-                      isPassword: true,
-                    ),
-                    const SizedBox(height: 20),
-                    if (errorMessage.isNotEmpty)
-                      Text(
-                        errorMessage,
-                        style: const TextStyle(color: Colors.redAccent),
-                        textAlign: TextAlign.center,
+                  const SizedBox(height: 10),
+                  ElevatedButton(
+                    style: theme.elevatedButtonTheme.style?.copyWith(
+                      backgroundColor: WidgetStateProperty.all(
+                        colorScheme.primary,
                       ),
-                    const SizedBox(height: 10),
-                    ElevatedButton(
-                      style: AppTheme.buttonStyle,
-                      onPressed: isLoading ? null : registerUser,
-                      child:
-                          isLoading
-                              ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.5,
-                                  color: Colors.black,
-                                ),
-                              )
-                              : const Text("Register"),
+                      foregroundColor: WidgetStateProperty.all(
+                        colorScheme.onPrimary,
+                      ),
                     ),
-                  ],
-                ),
+                    onPressed: isLoading ? null : registerUser,
+                    child:
+                        isLoading
+                            ? SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                color: colorScheme.onPrimary,
+                              ),
+                            )
+                            : Text(
+                              "Register",
+                              style: theme.textTheme.labelLarge?.copyWith(
+                                color: colorScheme.onPrimary,
+                              ),
+                            ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -186,6 +185,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     TextEditingController controller, {
     bool isPassword = false,
     TextInputType keyboardType = TextInputType.text,
+    required ColorScheme colorScheme,
+    required ThemeData theme,
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -207,20 +208,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
           }
           return null;
         },
-        style: const TextStyle(color: Colors.white70),
+        style: theme.textTheme.bodyLarge?.copyWith(
+          color: colorScheme.onSurface,
+        ),
         decoration: InputDecoration(
           labelText: label,
-          labelStyle: const TextStyle(color: Colors.white70),
+          labelStyle: theme.textTheme.bodyLarge?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+          ),
           filled: true,
-          fillColor: Colors.grey[850],
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          fillColor: colorScheme.surfaceContainer,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: colorScheme.outline),
+          ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Colors.grey),
+            borderSide: BorderSide(color: colorScheme.outline),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Colors.amber),
+            borderSide: BorderSide(color: colorScheme.primary),
           ),
         ),
       ),

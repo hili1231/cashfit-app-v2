@@ -5,7 +5,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart'; // for date formatting
 
 import '../../models/side_hustle.dart';
-import '../../data/side_hustle_data.dart'; // The sample data
 
 class AdminCreateSideHustleScreen extends StatefulWidget {
   const AdminCreateSideHustleScreen({super.key});
@@ -119,23 +118,6 @@ class _AdminCreateSideHustleScreenState
     if (selectedHustleId == null) {
       Navigator.pop(context);
     }
-  }
-
-  /// Upload sample side hustles from side_hustle_data.dart
-  /// using doc(hustle.id).set(...) instead of .add(...)
-  Future<void> _uploadSampleSideHustles() async {
-    for (final hustle in sideHustleData) {
-      await FirebaseFirestore.instance
-          .collection('sideHustles')
-          .doc(hustle.id) // preserve your sideHustle's ID
-          .set(hustle.toMap());
-    }
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("✅ Sample side hustles uploaded")),
-    );
-    await _loadSideHustles();
   }
 
   InputDecoration _input(String label) => InputDecoration(
@@ -301,16 +283,6 @@ class _AdminCreateSideHustleScreenState
                 ),
               ),
               const SizedBox(height: 12),
-
-              // Sample hustles
-              ElevatedButton.icon(
-                onPressed: _uploadSampleSideHustles,
-                icon: const Icon(Icons.upload_file),
-                label: const Text("Upload Sample Side Hustles"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.grey[800],
-                ),
-              ),
             ],
           ),
         ),

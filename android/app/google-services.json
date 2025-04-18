@@ -12,7 +12,20 @@
           "package_name": "com.example.cashfit"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "91877163003-6u18onf2ei4oil135h9kokda5qg8ub1p.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.cashfit",
+            "certificate_hash": "48c9beb381997757d1edf4004097b97b09c2917c"
+          }
+        },
+        {
+          "client_id": "91877163003-bg3405gdkf7g37tsv45vn8h1cftcgqbv.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyC2snE6kzrawXDNig7xW9fBovQQfQv24O4"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "91877163003-bg3405gdkf7g37tsv45vn8h1cftcgqbv.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "91877163003-qcrocp19rkkebfpvu8e85dco6ti2sbcp.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.cashfit"
+              }
+            }
+          ]
         }
       }
     }

@@ -3,12 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:intl/intl.dart'; // For name + date doc IDs
+import 'package:intl/intl.dart';
 
 import '../../models/ingredient.dart';
 import '../../models/meal.dart';
 import '../../models/meal_ingredient.dart';
-import '../../data/meal_data.dart';
 
 class AdminCreateMealScreen extends StatefulWidget {
   const AdminCreateMealScreen({super.key});
@@ -22,11 +21,11 @@ class _AdminCreateMealScreenState extends State<AdminCreateMealScreen> {
 
   final TextEditingController nameController = TextEditingController();
   final TextEditingController instructionController = TextEditingController();
-
+  Meal? selectedMeal;
+  List<Meal> meals = [];
   final List<String> instructions = [];
   final List<MealIngredient> mealIngredients = [];
 
-  // Updated lists
   final List<String> allDiets = [
     "Vegan",
     "Vegetarian",
@@ -72,18 +71,54 @@ class _AdminCreateMealScreenState extends State<AdminCreateMealScreen> {
   void initState() {
     super.initState();
     _loadIngredients();
+    _loadMeals();
   }
 
   Future<void> _loadIngredients() async {
     final snapshot =
         await FirebaseFirestore.instance.collection('ingredients').get();
+    if (!mounted) return; // Check if the widget is still mounted
     setState(() {
       allIngredients =
-          snapshot.docs.map((doc) => Ingredient.fromJson(doc.data())).toList();
+          snapshot.docs.map((doc) => Ingredient.fromMap(doc.data())).toList();
     });
   }
 
-  /// Add typed instruction to the list
+  Future<void> _loadMeals() async {
+    try {
+      final snapshot =
+          await FirebaseFirestore.instance.collection('meals').get();
+      if (!mounted) return; // Check if the widget is still mounted
+      setState(() {
+        meals = snapshot.docs.map((doc) => Meal.fromMap(doc.data())).toList();
+      });
+    } catch (e) {
+      if (!mounted) return; // Check if the widget is still mounted
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Failed to load meals: $e"),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
+  }
+
+  void _loadMealData(Meal meal) {
+    nameController.text = meal.name;
+    instructions.clear();
+    instructions.addAll(meal.instructions);
+    selectedDiets.clear();
+    selectedDiets.addAll(meal.diets);
+    selectedAllergies.clear();
+    selectedAllergies.addAll(meal.allergies);
+    mealIngredients.clear();
+    mealIngredients.addAll(meal.ingredients);
+    category = meal.category.isNotEmpty ? meal.category : 'Breakfast';
+    setState(() {
+      selectedMeal = meal;
+    });
+  }
+
   void _addInstruction() {
     if (instructionController.text.isNotEmpty) {
       setState(() {
@@ -93,7 +128,6 @@ class _AdminCreateMealScreenState extends State<AdminCreateMealScreen> {
     }
   }
 
-  /// Add chosen ingredient + quantity
   void _addIngredient(Ingredient ingredient, double quantity) {
     setState(() {
       mealIngredients.add(
@@ -102,16 +136,15 @@ class _AdminCreateMealScreenState extends State<AdminCreateMealScreen> {
     });
   }
 
-  /// Pick an image from gallery
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final image = await picker.pickImage(source: ImageSource.gallery);
+    if (!mounted) return; // Check if the widget is still mounted
     if (image != null) {
       setState(() => _selectedImage = image);
     }
   }
 
-  /// Upload picked image to Firebase Storage
   Future<String> _uploadImage(XFile image) async {
     final fileName =
         'meals/${DateTime.now().millisecondsSinceEpoch}_${image.name}';
@@ -120,26 +153,33 @@ class _AdminCreateMealScreenState extends State<AdminCreateMealScreen> {
     return await uploadTask.ref.getDownloadURL();
   }
 
-  /// Build doc ID from meal name + date/time, then save doc
   Future<void> _saveMeal() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // Store ScaffoldMessenger before async operation
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
     if (_selectedImage == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("⚠ Please select an image")));
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: const Text("⚠ Please select an image"),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
       return;
     }
 
-    // 1) Build doc ID from name + date
+    String mealId;
     final sanitizedName = nameController.text.trim().replaceAll(' ', '_');
-    final nowStr = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-    final mealId = '${sanitizedName}_$nowStr';
+    if (selectedMeal != null) {
+      mealId = selectedMeal!.id; // Use existing meal ID if editing
+    } else {
+      final nowStr = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+      mealId = '${sanitizedName}_$nowStr'; // New meal ID
+    }
 
-    // 2) Upload the image
     final uploadedUrl = await _uploadImage(_selectedImage!);
 
-    // 3) Construct the Meal object
     final newMeal = Meal(
       id: mealId,
       name: nameController.text.trim(),
@@ -152,49 +192,113 @@ class _AdminCreateMealScreenState extends State<AdminCreateMealScreen> {
       prepTime: 0,
     );
 
-    // 4) Save doc(mealId).set(...)
-    await FirebaseFirestore.instance
-        .collection('meals')
-        .doc(newMeal.id)
-        .set(newMeal.toJson());
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text("✅ Meal saved to database")));
-    Navigator.pop(context);
-  }
-
-  /// Use doc(meal.id).set(...) so Firestore ID matches meal.id
-  Future<void> _uploadSampleMeals() async {
-    for (final meal in mealData) {
-      await FirebaseFirestore.instance
-          .collection('meals')
-          .doc(meal.id)
-          .set(meal.toJson());
+    try {
+      if (selectedMeal != null) {
+        await FirebaseFirestore.instance
+            .collection('meals')
+            .doc(mealId)
+            .update(newMeal.toMap());
+        if (!mounted) return; // Check if the widget is still mounted
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: const Text("✅ Meal updated successfully"),
+            backgroundColor: Theme.of(context).colorScheme.primary,
+          ),
+        );
+      } else {
+        await FirebaseFirestore.instance
+            .collection('meals')
+            .doc(mealId)
+            .set(newMeal.toMap());
+        if (!mounted) return; // Check if the widget is still mounted
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: const Text("✅ New meal saved to database"),
+            backgroundColor: Theme.of(context).colorScheme.primary,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return; // Check if the widget is still mounted
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text("⚠️ Error saving meal: $e"),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
     }
-    if (!mounted) return;
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text("✅ Sample meals uploaded")));
+    if (!mounted) return; // Check if the widget is still mounted
+    setState(() {
+      nameController.clear();
+      instructionController.clear();
+      instructions.clear();
+      mealIngredients.clear();
+      selectedDiets.clear();
+      selectedAllergies.clear();
+      _selectedImage = null;
+      selectedMeal = null;
+    });
   }
 
-  InputDecoration _inputDecoration(String label) => InputDecoration(
+  Future<void> _uploadSampleMeals() async {
+    // Store ScaffoldMessenger before async operation
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+    // Note: mealData is not available since we removed meal_data.dart dependency
+    // This method will need to be updated or removed if sample meals are no longer needed
+    // For now, we'll keep it as a placeholder with a warning
+    scaffoldMessenger.showSnackBar(
+      const SnackBar(
+        content: Text(
+          "⚠ Sample meals upload not implemented (meal_data.dart removed)",
+        ),
+      ),
+    );
+  }
+
+  InputDecoration _inputDecoration(
+    String label,
+    ThemeData theme,
+    ColorScheme colorScheme,
+  ) => InputDecoration(
     labelText: label,
     filled: true,
-    fillColor: Colors.grey[900],
-    labelStyle: const TextStyle(color: Colors.white70),
-    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+    fillColor: colorScheme.surfaceContainer,
+    labelStyle: theme.textTheme.bodyLarge?.copyWith(
+      color: colorScheme.onSurfaceVariant,
+    ),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: BorderSide(color: colorScheme.outline),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: BorderSide(color: colorScheme.outline),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: BorderSide(color: colorScheme.primary),
+    ),
   );
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
-        title: const Text("Create Meal"),
-        backgroundColor: Colors.black,
+        title: Text(
+          "Edit Meal",
+          style: theme.textTheme.titleLarge?.copyWith(
+            color: colorScheme.onSurface,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        backgroundColor: colorScheme.surface,
+        elevation: 2,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -203,11 +307,41 @@ class _AdminCreateMealScreenState extends State<AdminCreateMealScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Select Meal
+              DropdownButtonFormField<Meal>(
+                value: selectedMeal,
+                decoration: _inputDecoration(
+                  "Select Meal to Edit",
+                  theme,
+                  colorScheme,
+                ),
+                isExpanded: true,
+                dropdownColor: colorScheme.surfaceContainer,
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: colorScheme.onSurface,
+                ),
+                items:
+                    meals.map((meal) {
+                      return DropdownMenuItem(
+                        value: meal,
+                        child: Text(meal.name),
+                      );
+                    }).toList(),
+                onChanged: (meal) {
+                  if (meal != null) {
+                    _loadMealData(meal);
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+
               // Meal Name
               TextFormField(
                 controller: nameController,
-                style: const TextStyle(color: Colors.white),
-                decoration: _inputDecoration('Meal Name'),
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: colorScheme.onSurface,
+                ),
+                decoration: _inputDecoration('Meal Name', theme, colorScheme),
                 validator:
                     (value) =>
                         (value == null || value.isEmpty) ? 'Required' : null,
@@ -217,10 +351,12 @@ class _AdminCreateMealScreenState extends State<AdminCreateMealScreen> {
               // Category
               DropdownButtonFormField(
                 value: category,
-                isExpanded: true, // fix overflow
-                decoration: _inputDecoration("Category"),
-                dropdownColor: Colors.grey[900],
-                style: const TextStyle(color: Colors.white),
+                isExpanded: true,
+                decoration: _inputDecoration("Category", theme, colorScheme),
+                dropdownColor: colorScheme.surfaceContainer,
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: colorScheme.onSurface,
+                ),
                 items:
                     ['Breakfast', 'Lunch', 'Dinner', 'Snack'].map((cat) {
                       return DropdownMenuItem(value: cat, child: Text(cat));
@@ -232,7 +368,12 @@ class _AdminCreateMealScreenState extends State<AdminCreateMealScreen> {
               const SizedBox(height: 16),
 
               // Diets
-              const Text("Diets", style: TextStyle(color: Colors.white70)),
+              Text(
+                "Diets",
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: colorScheme.onSurface,
+                ),
+              ),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -241,9 +382,11 @@ class _AdminCreateMealScreenState extends State<AdminCreateMealScreen> {
                       return FilterChip(
                         label: Text(diet),
                         selected: selectedDiets.contains(diet),
-                        labelStyle: const TextStyle(color: Colors.white),
-                        selectedColor: Colors.green,
-                        backgroundColor: Colors.grey[800],
+                        labelStyle: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurface,
+                        ),
+                        selectedColor: colorScheme.primary,
+                        backgroundColor: colorScheme.surfaceContainer,
                         onSelected: (isSelected) {
                           setState(() {
                             if (isSelected) {
@@ -259,7 +402,12 @@ class _AdminCreateMealScreenState extends State<AdminCreateMealScreen> {
               const SizedBox(height: 16),
 
               // Allergies
-              const Text("Allergies", style: TextStyle(color: Colors.white70)),
+              Text(
+                "Allergies",
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: colorScheme.onSurface,
+                ),
+              ),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -268,9 +416,11 @@ class _AdminCreateMealScreenState extends State<AdminCreateMealScreen> {
                       return FilterChip(
                         label: Text(allergy),
                         selected: selectedAllergies.contains(allergy),
-                        labelStyle: const TextStyle(color: Colors.white),
-                        selectedColor: Colors.green,
-                        backgroundColor: Colors.grey[800],
+                        labelStyle: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurface,
+                        ),
+                        selectedColor: colorScheme.primary,
+                        backgroundColor: colorScheme.surfaceContainer,
                         onSelected: (isSelected) {
                           setState(() {
                             if (isSelected) {
@@ -288,8 +438,19 @@ class _AdminCreateMealScreenState extends State<AdminCreateMealScreen> {
               // Pick Image
               ElevatedButton.icon(
                 onPressed: _pickImage,
-                icon: const Icon(Icons.image),
-                label: const Text("Choose Image"),
+                icon: Icon(Icons.image, color: colorScheme.onPrimary),
+                label: Text(
+                  "Choose Image",
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: colorScheme.onPrimary,
+                  ),
+                ),
+                style: theme.elevatedButtonTheme.style?.copyWith(
+                  backgroundColor: WidgetStateProperty.all(colorScheme.primary),
+                  foregroundColor: WidgetStateProperty.all(
+                    colorScheme.onPrimary,
+                  ),
+                ),
               ),
               if (_selectedImage != null)
                 Padding(
@@ -300,24 +461,34 @@ class _AdminCreateMealScreenState extends State<AdminCreateMealScreen> {
               const SizedBox(height: 12),
 
               // Ingredients
-              const Text(
+              Text(
                 "Ingredients",
-                style: TextStyle(color: Colors.white70),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: colorScheme.onSurface,
+                ),
               ),
               ...mealIngredients.map(
                 (mi) => Text(
                   "- ${mi.ingredient.name} (${mi.quantity}g)",
-                  style: const TextStyle(color: Colors.white),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurface,
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
 
               // Add Ingredient
               DropdownButtonFormField<Ingredient>(
-                isExpanded: true, // fix overflow
-                dropdownColor: Colors.grey[900],
-                style: const TextStyle(color: Colors.white),
-                decoration: _inputDecoration("Add Ingredient"),
+                isExpanded: true,
+                dropdownColor: colorScheme.surfaceContainer,
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: colorScheme.onSurface,
+                ),
+                decoration: _inputDecoration(
+                  "Add Ingredient",
+                  theme,
+                  colorScheme,
+                ),
                 items:
                     allIngredients.map((ing) {
                       return DropdownMenuItem(
@@ -332,16 +503,24 @@ class _AdminCreateMealScreenState extends State<AdminCreateMealScreen> {
                       context: context,
                       builder:
                           (ctx) => AlertDialog(
-                            backgroundColor: Colors.grey[900],
+                            backgroundColor: colorScheme.surface,
                             title: Text(
                               "Quantity for ${ingredient.name}",
-                              style: const TextStyle(color: Colors.white),
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                color: colorScheme.onSurface,
+                              ),
                             ),
                             content: TextField(
                               controller: qtyController,
                               keyboardType: TextInputType.number,
-                              style: const TextStyle(color: Colors.white),
-                              decoration: _inputDecoration("grams"),
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                color: colorScheme.onSurface,
+                              ),
+                              decoration: _inputDecoration(
+                                "grams",
+                                theme,
+                                colorScheme,
+                              ),
                             ),
                             actions: [
                               TextButton(
@@ -352,7 +531,12 @@ class _AdminCreateMealScreenState extends State<AdminCreateMealScreen> {
                                   _addIngredient(ingredient, qty);
                                   Navigator.pop(ctx);
                                 },
-                                child: const Text("Add"),
+                                child: Text(
+                                  "Add",
+                                  style: theme.textTheme.labelLarge?.copyWith(
+                                    color: colorScheme.primary,
+                                  ),
+                                ),
                               ),
                             ],
                           ),
@@ -364,13 +548,19 @@ class _AdminCreateMealScreenState extends State<AdminCreateMealScreen> {
               const SizedBox(height: 16),
 
               // Instructions
-              const Text(
+              Text(
                 "Instructions",
-                style: TextStyle(color: Colors.white70),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: colorScheme.onSurface,
+                ),
               ),
               ...instructions.map(
-                (i) =>
-                    Text("• $i", style: const TextStyle(color: Colors.white)),
+                (i) => Text(
+                  "• $i",
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurface,
+                  ),
+                ),
               ),
               const SizedBox(height: 8),
               Row(
@@ -378,32 +568,59 @@ class _AdminCreateMealScreenState extends State<AdminCreateMealScreen> {
                   Expanded(
                     child: TextField(
                       controller: instructionController,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: _inputDecoration("New instruction"),
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: colorScheme.onSurface,
+                      ),
+                      decoration: _inputDecoration(
+                        "New instruction",
+                        theme,
+                        colorScheme,
+                      ),
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.add, color: Colors.white),
+                    icon: Icon(Icons.add, color: colorScheme.onSurface),
                     onPressed: _addInstruction,
                   ),
                 ],
               ),
               const SizedBox(height: 20),
 
-              // Save
+              // Save Button
               ElevatedButton(
                 onPressed: _saveMeal,
-                child: const Text("Save Meal"),
+                style: theme.elevatedButtonTheme.style?.copyWith(
+                  backgroundColor: WidgetStateProperty.all(colorScheme.primary),
+                  foregroundColor: WidgetStateProperty.all(
+                    colorScheme.onPrimary,
+                  ),
+                ),
+                child: Text(
+                  "Save Edited Meal",
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: colorScheme.onPrimary,
+                  ),
+                ),
               ),
               const SizedBox(height: 12),
 
-              // Upload Sample
+              // Upload Sample (Placeholder)
               ElevatedButton.icon(
                 onPressed: _uploadSampleMeals,
-                icon: const Icon(Icons.upload_file),
-                label: const Text("Upload Sample Meals"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.grey[800],
+                icon: Icon(Icons.upload_file, color: colorScheme.onSurface),
+                label: Text(
+                  "Upload Sample Meals",
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+                style: theme.elevatedButtonTheme.style?.copyWith(
+                  backgroundColor: WidgetStateProperty.all(
+                    colorScheme.surfaceContainer,
+                  ),
+                  foregroundColor: WidgetStateProperty.all(
+                    colorScheme.onSurface,
+                  ),
                 ),
               ),
             ],

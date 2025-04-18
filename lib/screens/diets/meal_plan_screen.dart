@@ -1,116 +1,145 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../models/meal_plan.dart';
 import '../../models/meal_day.dart';
 import '../../models/meal_portion.dart';
 import 'diet_day_detail_screen.dart';
-import 'meal_detail_screen.dart'; // <--- Import your MealDetailScreen
+import 'meal_detail_screen.dart';
 import '../nav_screen.dart';
-import '../../theme.dart';
 
-class MealPlanScreen extends StatelessWidget {
+class MealPlanScreen extends StatefulWidget {
   final MealPlan selectedPlan;
 
   const MealPlanScreen({super.key, required this.selectedPlan});
 
   @override
+  State<MealPlanScreen> createState() => _MealPlanScreenState();
+}
+
+class _MealPlanScreenState extends State<MealPlanScreen> {
+  late MealPlan _cachedPlan;
+
+  @override
+  void initState() {
+    super.initState();
+    // Cache the selected plan data once on initialization
+    _cachedPlan = widget.selectedPlan;
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Container(
-        decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
-        child: Stack(
-          children: [
-            SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Top Image (Meal Plan Banner)
-                  ClipRRect(
+      backgroundColor: colorScheme.surface,
+      body: Stack(
+        children: [
+          SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top Image (Meal Plan Banner)
+                Card(
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
-                    child: Image.asset(
-                      _getPlanImage(),
-                      width: double.infinity,
-                      height: 220,
-                      fit: BoxFit.cover,
-                      errorBuilder:
-                          (_, __, ___) => _buildPlaceholderImage(height: 220),
-                    ),
                   ),
-                  const SizedBox(height: 12),
-
-                  // Description
-                  Text(
-                    selectedPlan.description,
-                    style: GoogleFonts.oswald(
-                      fontSize: 16,
-                      color: Colors.white70,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // For each day in the plan
-                  ...selectedPlan.days.map((day) {
-                    return _buildDaySection(context, day);
-                  }),
-                ],
-              ),
-            ),
-
-            // Back Button
-            Positioned(
-              top: 16,
-              left: 16,
-              child: SafeArea(
-                child: Container(
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.black87,
-                  ),
-                  child: IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.white70),
-                    onPressed: () {
-                      final navState =
-                          context.findAncestorStateOfType<NavScreenState>();
-                      if (navState != null) {
-                        navState.setDetailScreen(null);
-                      } else {
-                        Navigator.pop(context);
-                      }
-                    },
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: _buildPlanImage(colorScheme),
                   ),
                 ),
+                const SizedBox(height: 12),
+
+                // Description
+                Text(
+                  _cachedPlan.description,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // For each day in the plan
+                ..._cachedPlan.days.map(
+                  (day) => _buildDaySection(context, theme, colorScheme, day),
+                ),
+              ],
+            ),
+          ),
+
+          // Back Button
+          Positioned(
+            top: 16,
+            left: 16,
+            child: SafeArea(
+              child: IconButton(
+                icon: Icon(
+                  Icons.arrow_back,
+                  color: colorScheme.onSurface,
+                  size: 24,
+                ),
+                onPressed: () {
+                  final navState =
+                      context.findAncestorStateOfType<NavScreenState>();
+                  if (navState != null) {
+                    navState.setDetailScreen(null);
+                  } else {
+                    Navigator.pop(context);
+                  }
+                },
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildPlanImage(ColorScheme colorScheme) {
+    final imageUrl = _getPlanImage();
+    return CachedNetworkImage(
+      imageUrl:
+          imageUrl.isNotEmpty ? imageUrl : 'assets/images/placeholder.jpg',
+      width: double.infinity,
+      height: 220,
+      fit: BoxFit.cover,
+      placeholder:
+          (context, url) => _buildPlaceholderImage(colorScheme, height: 220),
+      errorWidget:
+          (context, url, error) =>
+              _buildPlaceholderImage(colorScheme, height: 220),
+      fadeInDuration: const Duration(milliseconds: 200),
     );
   }
 
   String _getPlanImage() {
     try {
-      // Attempt to grab the breakfast image from the first day if available
       final mealImage =
-          selectedPlan.days
+          _cachedPlan.days
               .firstWhere((d) => d.breakfast != null)
               .breakfast
               ?.meal
               .image ??
           '';
-      return mealImage.isNotEmpty ? mealImage : 'assets/images/placeholder.jpg';
+      return mealImage;
     } catch (_) {
-      return 'assets/images/placeholder.jpg';
+      return '';
     }
   }
 
-  Widget _buildDaySection(BuildContext context, MealDay day) {
+  Widget _buildDaySection(
+    BuildContext context,
+    ThemeData theme,
+    ColorScheme colorScheme,
+    MealDay day,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 18),
-        // Day Title + "View All"
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10),
           child: Row(
@@ -118,20 +147,26 @@ class MealPlanScreen extends StatelessWidget {
             children: [
               Text(
                 "Day ${day.dayNumber}",
-                style: GoogleFonts.oswald(
-                  fontSize: 18,
+                style: theme.textTheme.titleLarge?.copyWith(
+                  color: colorScheme.onSurface,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white70,
                 ),
               ),
-              _buildTabButton(
-                label: "View All",
-                onTap: () {
+              TextButton(
+                style: TextButton.styleFrom(
+                  backgroundColor: colorScheme.surfaceContainer,
+                  foregroundColor: colorScheme.onSurface,
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 16,
+                  ),
+                ),
+                onPressed: () {
                   final navState =
                       context.findAncestorStateOfType<NavScreenState>();
                   if (navState != null) {
                     navState.setDetailScreen(
-                      DietDayDetailScreen(plan: selectedPlan, day: day),
+                      DietDayDetailScreen(plan: _cachedPlan, day: day),
                     );
                   } else {
                     Navigator.push(
@@ -139,20 +174,25 @@ class MealPlanScreen extends StatelessWidget {
                       MaterialPageRoute(
                         builder:
                             (_) => DietDayDetailScreen(
-                              plan: selectedPlan,
+                              plan: _cachedPlan,
                               day: day,
                             ),
                       ),
                     );
                   }
                 },
+                child: Text(
+                  "View All",
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ],
           ),
         ),
         const SizedBox(height: 12),
-
-        // Horizontal Meals List
         LayoutBuilder(
           builder: (context, constraints) {
             double maxHeight = 180;
@@ -166,18 +206,15 @@ class MealPlanScreen extends StatelessWidget {
                   day.snack3,
                 ].whereType<MealPortion>().toList();
 
-            // Estimate how tall each meal card might be to size the list
             for (var mp in meals) {
               double estimatedHeight = _estimateTextHeight(
                 mp.meal.name,
-                16.0,
+                theme.textTheme.bodyLarge?.fontSize ?? 16.0,
                 2,
               );
               double totalCardHeight = 120 + estimatedHeight + 40;
-              if (totalCardHeight > maxHeight) {
-                maxHeight = totalCardHeight;
-              }
-                        }
+              if (totalCardHeight > maxHeight) maxHeight = totalCardHeight;
+            }
 
             return SizedBox(
               height: maxHeight + 10,
@@ -186,9 +223,15 @@ class MealPlanScreen extends StatelessWidget {
                 physics: const BouncingScrollPhysics(),
                 itemCount: meals.length,
                 padding: const EdgeInsets.symmetric(horizontal: 8),
-                itemBuilder: (context, index) {
-                  return _buildMealCard(context, day, meals[index], maxHeight);
-                },
+                itemBuilder:
+                    (context, index) => _buildMealCard(
+                      context,
+                      theme,
+                      colorScheme,
+                      day,
+                      meals[index],
+                      maxHeight,
+                    ),
               ),
             );
           },
@@ -200,6 +243,8 @@ class MealPlanScreen extends StatelessWidget {
 
   Widget _buildMealCard(
     BuildContext context,
+    ThemeData theme,
+    ColorScheme colorScheme,
     MealDay day,
     MealPortion mp,
     double maxHeight,
@@ -210,18 +255,16 @@ class MealPlanScreen extends StatelessWidget {
       width: 200,
       height: maxHeight,
       child: Card(
-        color: Colors.black,
+        color: colorScheme.surfaceContainer,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.only(right: 12),
-        elevation: 3,
-        shadowColor: Colors.transparent,
+        elevation: 1,
         child: InkWell(
           onTap: () {
-            // 🔑 Navigate to the *MealDetailScreen* (not the DietDayDetailScreen).
             final navState = context.findAncestorStateOfType<NavScreenState>();
             if (navState != null) {
               navState.setDetailScreen(
-                MealDetailScreen(plan: selectedPlan, day: day, meal: meal),
+                MealDetailScreen(plan: _cachedPlan, day: day, meal: meal),
               );
             } else {
               Navigator.push(
@@ -229,7 +272,7 @@ class MealPlanScreen extends StatelessWidget {
                 MaterialPageRoute(
                   builder:
                       (_) => MealDetailScreen(
-                        plan: selectedPlan,
+                        plan: _cachedPlan,
                         day: day,
                         meal: meal,
                       ),
@@ -237,26 +280,31 @@ class MealPlanScreen extends StatelessWidget {
               );
             }
           },
+          borderRadius: BorderRadius.circular(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Meal Image
               ClipRRect(
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(12),
                 ),
-                child: Image.asset(
-                  meal.image.isNotEmpty
-                      ? meal.image
-                      : 'assets/images/placeholder.jpg',
+                child: CachedNetworkImage(
+                  imageUrl:
+                      meal.image.isNotEmpty
+                          ? meal.image
+                          : 'assets/images/placeholder.jpg',
                   width: double.infinity,
                   height: 110,
                   fit: BoxFit.cover,
-                  errorBuilder:
-                      (_, __, ___) => _buildPlaceholderImage(height: 110),
+                  placeholder:
+                      (context, url) =>
+                          _buildPlaceholderImage(colorScheme, height: 110),
+                  errorWidget:
+                      (context, url, error) =>
+                          _buildPlaceholderImage(colorScheme, height: 110),
+                  fadeInDuration: const Duration(milliseconds: 200),
                 ),
               ),
-              // Meal Info
               Padding(
                 padding: const EdgeInsets.all(8),
                 child: Column(
@@ -264,9 +312,8 @@ class MealPlanScreen extends StatelessWidget {
                   children: [
                     Text(
                       meal.name,
-                      style: GoogleFonts.oswald(
-                        color: Colors.white70,
-                        fontSize: 16,
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: colorScheme.onSurface,
                         fontWeight: FontWeight.bold,
                       ),
                       maxLines: 2,
@@ -275,9 +322,8 @@ class MealPlanScreen extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       "${(meal.calories * mp.portionMultiplier).round()} Calories",
-                      style: GoogleFonts.oswald(
-                        color: Colors.amber,
-                        fontSize: 12,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.primary,
                       ),
                     ),
                   ],
@@ -291,46 +337,28 @@ class MealPlanScreen extends StatelessWidget {
   }
 
   double _estimateTextHeight(String text, double fontSize, int maxLines) {
+    final theme = Theme.of(context);
     final textPainter = TextPainter(
-      text: TextSpan(text: text, style: GoogleFonts.oswald(fontSize: fontSize)),
+      text: TextSpan(
+        text: text,
+        style: theme.textTheme.bodyLarge?.copyWith(fontSize: fontSize),
+      ),
       maxLines: maxLines,
       textDirection: TextDirection.ltr,
     )..layout(maxWidth: 150);
-
     return textPainter.height;
   }
 
-  Widget _buildPlaceholderImage({double height = 100}) {
-    return Container(
-      width: double.infinity,
-      height: height,
-      decoration: BoxDecoration(
-        color: Colors.grey[850],
-        borderRadius: BorderRadius.circular(12),
-      ),
-      alignment: Alignment.center,
-      child: const Icon(Icons.fastfood, size: 40, color: Colors.amber),
-    );
-  }
-
-  Widget _buildTabButton({required String label, required VoidCallback onTap}) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(8),
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-        decoration: BoxDecoration(
-          color: const Color.fromARGB(255, 33, 33, 33),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          label,
-          style: GoogleFonts.oswald(
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            color: Colors.white70,
-          ),
-        ),
+  Widget _buildPlaceholderImage(
+    ColorScheme colorScheme, {
+    double height = 100,
+  }) {
+    return Card(
+      color: colorScheme.surfaceContainer,
+      child: SizedBox(
+        width: double.infinity,
+        height: height,
+        child: Icon(Icons.fastfood, size: 40, color: colorScheme.primary),
       ),
     );
   }

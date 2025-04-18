@@ -35,27 +35,28 @@ class MealPlan {
   }
 
   /// 🧾 Serialize for Firestore
-  Map<String, dynamic> toJson() => {
+  Map<String, dynamic> toMap() => {
     'id': id,
     'planName': planName,
     'description': description,
     'userId': userId,
     'type': type,
-    'days': days.map((day) => day.toJson()).toList(),
+    'days': days.map((day) => day.toMap()).toList(),
   };
 
   /// 🔄 Deserialize from Firestore
-  factory MealPlan.fromJson(Map<String, dynamic> json) {
+  factory MealPlan.fromMap(Map<String, dynamic> map) {
     return MealPlan(
-      id: json['id'] ?? '',
-      planName: json['planName'] ?? '',
-      description: json['description'] ?? '',
-      userId: json['userId'],
-      type: json['type'],
+      id: map['id'] ?? '',
+      planName: map['planName'] ?? '',
+      description: map['description'] ?? '',
+      userId: map['userId'],
+      type: map['type'],
       days:
-          (json['days'] as List)
-              .map((dayJson) => MealDay.fromJson(dayJson))
-              .toList(),
+          (map['days'] as List<dynamic>?)
+              ?.map((dayMap) => MealDay.fromMap(dayMap as Map<String, dynamic>))
+              .toList() ??
+          [],
     );
   }
 

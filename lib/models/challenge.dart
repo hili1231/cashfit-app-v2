@@ -1,97 +1,82 @@
-import '../../models/donation.dart';
-import '../../models/progress_video.dart';
-
 class Challenge {
   final String id;
+  final String type; // "weight_loss", "weight_maintenance", "muscle_gain"
   final String name;
   final String description;
-
-  // Instead of storing just an int, store the actual user IDs
-  final List<String> participants;
-
-  final Map<String, List<ProgressVideo>> progressVideos;
-  final List<String> instructions;
   final String image;
-  final DateTime? endDate;
-  final List<String> winners;
-  final List<Donation> donations;
-  final double prizeAmount;
-  final int? maxParticipants; // Optional if you want to limit participants
+  final List<String> instructions;
+  final List<String> participants;
+  final double initialWeight;
+  final double targetWeight;
+  final DateTime startDate;
+  final DateTime endDate;
+  final int durationDays;
+  final int rewardCoins; // 500 coins
+  final int rewardPremiumMonths; // 3 months
 
   Challenge({
     required this.id,
+    required this.type,
     required this.name,
     required this.description,
-    // CHANGED: store user IDs
-    this.participants = const [],
-
-    this.progressVideos = const {},
-    this.instructions = const [],
-    this.image = '',
-    this.endDate,
-    this.winners = const [],
-    this.donations = const [],
-    required this.prizeAmount,
-    this.maxParticipants,
+    required this.image,
+    required this.instructions,
+    required this.participants,
+    required this.initialWeight,
+    required this.targetWeight,
+    required this.startDate,
+    required this.endDate,
+    required this.durationDays,
+    this.rewardCoins = 500,
+    this.rewardPremiumMonths = 3,
   });
 
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      'type': type,
       'name': name,
       'description': description,
-      // store participant user IDs in Firestore
-      'participants': participants,
-
-      'progressVideos': progressVideos.map(
-        (userId, videos) =>
-            MapEntry(userId, videos.map((v) => v.toMap()).toList()),
-      ),
-      'instructions': instructions,
       'image': image,
-      'endDate': endDate?.toIso8601String(),
-      'winners': winners,
-      'donations': donations.map((d) => d.toMap()).toList(),
-      'prizeAmount': prizeAmount,
-
-      // Only include if you use it
-      'maxParticipants': maxParticipants,
+      'instructions': instructions,
+      'participants': participants,
+      'initialWeight': initialWeight,
+      'targetWeight': targetWeight,
+      'startDate': startDate.toIso8601String(),
+      'endDate': endDate.toIso8601String(),
+      'durationDays': durationDays,
+      'rewardCoins': rewardCoins,
+      'rewardPremiumMonths': rewardPremiumMonths,
     };
   }
 
   factory Challenge.fromMap(Map<String, dynamic> map) {
     return Challenge(
       id: map['id'] ?? '',
+      type: map['type'] ?? '',
       name: map['name'] ?? '',
       description: map['description'] ?? '',
-
-      // CHANGED: read participants as List<String>
-      participants: List<String>.from(map['participants'] ?? []),
-
-      progressVideos:
-          (map['progressVideos'] as Map<String, dynamic>?)?.map(
-            (userId, videoList) => MapEntry(
-              userId,
-              (videoList as List<dynamic>)
-                  .map((v) => ProgressVideo.fromMap(v))
-                  .toList(),
-            ),
-          ) ??
-          {},
-      instructions: List<String>.from(map['instructions'] ?? []),
       image: map['image'] ?? '',
-      endDate:
-          map['endDate'] != null ? DateTime.tryParse(map['endDate']) : null,
-      winners: List<String>.from(map['winners'] ?? []),
-      donations:
-          (map['donations'] as List<dynamic>?)
-              ?.map((d) => Donation.fromMap(d))
-              .toList() ??
-          [],
-      prizeAmount: (map['prizeAmount'] as num?)?.toDouble() ?? 0.0,
+      instructions: List<String>.from(map['instructions'] ?? []),
+      participants: List<String>.from(map['participants'] ?? []),
+      initialWeight: (map['initialWeight'] ?? 0).toDouble(),
+      targetWeight: (map['targetWeight'] ?? 0).toDouble(),
 
-      // Only include if you use it
-      maxParticipants: map['maxParticipants'],
+      // Safely parse startDate
+      startDate:
+          map['startDate'] != null
+              ? DateTime.parse(map['startDate'] as String)
+              : DateTime.now(),
+
+      // Safely parse endDate
+      endDate:
+          map['endDate'] != null
+              ? DateTime.parse(map['endDate'] as String)
+              : DateTime.now(),
+
+      durationDays: (map['durationDays'] ?? 0) as int,
+      rewardCoins: (map['rewardCoins'] ?? 500) as int,
+      rewardPremiumMonths: (map['rewardPremiumMonths'] ?? 3) as int,
     );
   }
 }

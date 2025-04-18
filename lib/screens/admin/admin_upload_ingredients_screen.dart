@@ -145,10 +145,10 @@ class _AdminUploadIngredientsScreenState
         final docRef = FirebaseFirestore.instance
             .collection('ingredients')
             .doc(ingredient.id);
-        batch.set(docRef, ingredient.toJson());
+        batch.set(docRef, ingredient.toMap()); // Changed to toMap()
       }
       await batch.commit();
-      if (!mounted) return; // ✅ Check before using context
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("✅ All ingredients uploaded!")),
       );
@@ -167,8 +167,8 @@ class _AdminUploadIngredientsScreenState
       await FirebaseFirestore.instance
           .collection('ingredients')
           .doc(ingredient.id)
-          .set(ingredient.toJson());
-      if (!mounted) return; // ✅
+          .set(ingredient.toMap()); // Changed to toMap()
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("✅ '${ingredient.name}' uploaded.")),
       );
