@@ -9,7 +9,7 @@ class AdHelper {
       defaultTargetPlatform == TargetPlatform.android;
   static final bool _isIOS = defaultTargetPlatform == TargetPlatform.iOS;
 
-  // Ad Unit IDs - Replace with your own for production
+  // Ad Unit IDs - Using test IDs for now
   static String get bannerAdUnitId {
     if (_isAndroid) {
       return 'ca-app-pub-3940256099942544/6300978111'; // Test ID for Android
@@ -64,11 +64,18 @@ class AdHelper {
       request: const AdRequest(),
       adLoadCallback: InterstitialAdLoadCallback(
         onAdLoaded: (ad) {
+          debugPrint('✅ Interstitial ad loaded');
           ad.fullScreenContentCallback = FullScreenContentCallback(
-            onAdDismissedFullScreenContent: (ad) => ad.dispose(),
+            onAdDismissedFullScreenContent: (ad) {
+              debugPrint('🛑 Interstitial ad dismissed');
+              ad.dispose();
+            },
             onAdFailedToShowFullScreenContent: (ad, error) {
               debugPrint('❌ Interstitial failed to show: ${error.message}');
               ad.dispose();
+            },
+            onAdShowedFullScreenContent: (ad) {
+              debugPrint('📺 Interstitial ad shown');
             },
           );
           ad.show();
@@ -86,23 +93,35 @@ class AdHelper {
     required void Function(RewardItem reward) onRewarded,
   }) {
     if (!shouldShowAds(context)) {
+      debugPrint('🛑 Skipping rewarded ad for premium user');
       onRewarded(RewardItem(0, 'none')); // Simulate reward for premium users
       return;
     }
+    debugPrint('📢 Loading rewarded ad with unit ID: $rewardedAdUnitId');
     RewardedAd.load(
       adUnitId: rewardedAdUnitId,
       request: const AdRequest(),
       rewardedAdLoadCallback: RewardedAdLoadCallback(
         onAdLoaded: (ad) {
+          debugPrint('✅ Rewarded ad loaded');
           ad.fullScreenContentCallback = FullScreenContentCallback(
-            onAdDismissedFullScreenContent: (ad) => ad.dispose(),
+            onAdDismissedFullScreenContent: (ad) {
+              debugPrint('🛑 Rewarded ad dismissed');
+              ad.dispose();
+            },
             onAdFailedToShowFullScreenContent: (ad, error) {
               debugPrint('❌ Rewarded failed to show: ${error.message}');
               ad.dispose();
             },
+            onAdShowedFullScreenContent: (ad) {
+              debugPrint('📺 Rewarded ad shown');
+            },
           );
           ad.show(
             onUserEarnedReward: (ad, reward) {
+              debugPrint(
+                '🎁 User earned reward: ${reward.amount} ${reward.type}',
+              );
               onRewarded(reward);
               ad.dispose();
             },

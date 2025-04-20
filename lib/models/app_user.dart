@@ -1,5 +1,5 @@
-import 'package:cloud_firestore/cloud_firestore.dart'; // Add this import for Timestamp
-import 'package:cashfit/models/active_workout_program.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../models/active_workout_program.dart';
 import '../../models/active_diet_plan.dart';
 
 class AppUser {
@@ -79,6 +79,13 @@ class AppUser {
   bool hasBuiltPlans;
   bool hasClaimedBuildPlansReward;
   int checkInStreak;
+  DateTime? lastWorkoutCompletionDate;
+  DateTime? lastMealPlanCompletionDate;
+  DateTime? lastStepGoalCompletionDate;
+  DateTime? lastWeightUpdateDate;
+  List<String> completedOneOffIds;
+  DateTime? lastAdWatchedTimestamp;
+  Map<String, dynamic> claimedRewards; // Map to track reward claims
 
   AppUser({
     required this.id,
@@ -157,6 +164,13 @@ class AppUser {
     this.hasBuiltPlans = false,
     this.hasClaimedBuildPlansReward = false,
     this.checkInStreak = 0,
+    this.lastWorkoutCompletionDate,
+    this.lastMealPlanCompletionDate,
+    this.lastStepGoalCompletionDate,
+    this.lastWeightUpdateDate,
+    this.completedOneOffIds = const [],
+    this.lastAdWatchedTimestamp,
+    this.claimedRewards = const {},
   });
 
   Map<String, dynamic> toMap() {
@@ -184,63 +198,89 @@ class AppUser {
       'allergies': allergies,
       'isAdmin': isAdmin,
       'isPremium': isPremium,
-      'premiumExpiryDate': premiumExpiryDate?.toIso8601String(),
+      'premiumExpiryDate':
+          premiumExpiryDate != null
+              ? Timestamp.fromDate(premiumExpiryDate!)
+              : null,
       'autoRenew': autoRenew,
       'activeWorkoutPrograms':
           activeWorkoutPrograms.map((p) => p.toMap()).toList(),
       'activeDietPlans': activeDietPlans.map((d) => d.toMap()).toList(),
       'joinedChallenges': joinedChallenges,
       'joinedSideHustles': joinedSideHustles,
-      if (lastLogin != null) 'lastLogin': lastLogin!.toIso8601String(),
-      if (streak != null) 'streak': streak,
-      if (points != null) 'points': points,
-      if (badges != null) 'badges': badges,
-      if (workoutHistory != null) 'workoutHistory': workoutHistory,
-      if (mealHistory != null) 'mealHistory': mealHistory,
-      if (theme != null) 'theme': theme,
-      if (notifications != null) 'notifications': notifications,
-      if (language != null) 'language': language,
-      if (createdAt != null) 'createdAt': createdAt!.toIso8601String(),
-      if (referrer != null) 'referrer': referrer,
-      if (balance != null) 'balance': balance,
-      if (hydration != null) 'hydration': hydration,
+      'lastLogin': lastLogin != null ? Timestamp.fromDate(lastLogin!) : null,
+      'streak': streak,
+      'points': points,
+      'badges': badges,
+      'workoutHistory': workoutHistory,
+      'mealHistory': mealHistory,
+      'theme': theme,
+      'notifications': notifications,
+      'language': language,
+      'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : null,
+      'referrer': referrer,
+      'balance': balance,
+      'hydration': hydration,
       'dietaryRestrictions': dietaryRestrictions,
       'workoutFocus': workoutFocus,
       'workoutDuration': workoutDuration,
-      if (intensity != null) 'intensity': intensity,
+      'intensity': intensity,
       'availableDays': availableDays,
-      if (mealFrequency != null) 'mealFrequency': mealFrequency,
-      if (mealTimes != null) 'mealTimes': mealTimes,
-      if (maxPushUps != null) 'maxPushUps': maxPushUps,
-      if (maxPullUps != null) 'maxPullUps': maxPullUps,
-      if (mileRunTime != null) 'mileRunTime': mileRunTime,
+      'mealFrequency': mealFrequency,
+      'mealTimes': mealTimes,
+      'maxPushUps': maxPushUps,
+      'maxPullUps': maxPullUps,
+      'mileRunTime': mileRunTime,
       'medicalConditions': medicalConditions,
-      if (preferredWorkoutTimes != null)
-        'preferredWorkoutTimes': preferredWorkoutTimes,
+      'preferredWorkoutTimes': preferredWorkoutTimes,
       'challengeCheckIns': challengeCheckIns,
-      if (activeChallengeId != null) 'activeChallengeId': activeChallengeId,
+      'activeChallengeId': activeChallengeId,
       'challengeProgress': challengeProgress,
-      if (dailyStepTarget != null) 'dailyStepTarget': dailyStepTarget,
+      'dailyStepTarget': dailyStepTarget,
       'stepTargetHistory': stepTargetHistory,
-      if (dailyCalorieTarget != null) 'dailyCalorieTarget': dailyCalorieTarget,
-      if (dailyProteinTarget != null) 'dailyProteinTarget': dailyProteinTarget,
-      if (dailyCarbsTarget != null) 'dailyCarbsTarget': dailyCarbsTarget,
-      if (dailyFatTarget != null) 'dailyFatTarget': dailyFatTarget,
+      'dailyCalorieTarget': dailyCalorieTarget,
+      'dailyProteinTarget': dailyProteinTarget,
+      'dailyCarbsTarget': dailyCarbsTarget,
+      'dailyFatTarget': dailyFatTarget,
       'macroIntakeHistory': macroIntakeHistory,
+      'preferredWorkoutStyle': preferredWorkoutStyle,
       'isBanned': isBanned,
       'notificationsEnabled': notificationsEnabled,
       'dailyReminderTime': dailyReminderTime,
       'weeklyReminderTime': weeklyReminderTime,
       'fcmToken': fcmToken,
-      if (preferredWorkoutStyle != null)
-        'preferredWorkoutStyle': preferredWorkoutStyle,
-      if (lastCheckIn != null) 'lastCheckIn': lastCheckIn!.toIso8601String(),
+      'lastCheckIn':
+          lastCheckIn != null ? Timestamp.fromDate(lastCheckIn!) : null,
       'dailyAdsWatched': dailyAdsWatched,
-      if (lastAdsWatchedDate != null)
-        'lastAdsWatchedDate': lastAdsWatchedDate!.toIso8601String(),
+      'lastAdsWatchedDate':
+          lastAdsWatchedDate != null
+              ? Timestamp.fromDate(lastAdsWatchedDate!)
+              : null,
       'hasBuiltPlans': hasBuiltPlans,
       'hasClaimedBuildPlansReward': hasClaimedBuildPlansReward,
       'checkInStreak': checkInStreak,
+      'lastWorkoutCompletionDate':
+          lastWorkoutCompletionDate != null
+              ? Timestamp.fromDate(lastWorkoutCompletionDate!)
+              : null,
+      'lastMealPlanCompletionDate':
+          lastMealPlanCompletionDate != null
+              ? Timestamp.fromDate(lastMealPlanCompletionDate!)
+              : null,
+      'lastStepGoalCompletionDate':
+          lastStepGoalCompletionDate != null
+              ? Timestamp.fromDate(lastStepGoalCompletionDate!)
+              : null,
+      'lastWeightUpdateDate':
+          lastWeightUpdateDate != null
+              ? Timestamp.fromDate(lastWeightUpdateDate!)
+              : null,
+      'completedOneOffIds': completedOneOffIds,
+      'lastAdWatchedTimestamp':
+          lastAdWatchedTimestamp != null
+              ? Timestamp.fromDate(lastAdWatchedTimestamp!)
+              : null,
+      'claimedRewards': claimedRewards, // Serialize claimedRewards
     };
   }
 
@@ -249,7 +289,7 @@ class AppUser {
         map['premiumExpiryDate'] != null
             ? (map['premiumExpiryDate'] is Timestamp
                 ? (map['premiumExpiryDate'] as Timestamp).toDate()
-                : DateTime.tryParse(map['premiumExpiryDate']))
+                : DateTime.tryParse(map['premiumExpiryDate'] as String))
             : null;
     bool isPremium = map['isPremium'] ?? false;
     if (expiryDate != null) {
@@ -289,14 +329,12 @@ class AppUser {
       autoRenew: map['autoRenew'] ?? false,
       activeWorkoutPrograms:
           (map['activeWorkoutPrograms'] as List<dynamic>?)
-              ?.map(
-                (e) => ActiveWorkoutProgram.fromMap(e as Map<String, dynamic>),
-              )
+              ?.map((e) => ActiveWorkoutProgram.fromMap(e))
               .toList() ??
           [],
       activeDietPlans:
           (map['activeDietPlans'] as List<dynamic>?)
-              ?.map((e) => ActiveDietPlan.fromMap(e as Map<String, dynamic>))
+              ?.map((e) => ActiveDietPlan.fromMap(e))
               .toList() ??
           [],
       joinedChallenges: List<String>.from(map['joinedChallenges'] ?? []),
@@ -305,7 +343,7 @@ class AppUser {
           map['lastLogin'] != null
               ? (map['lastLogin'] is Timestamp
                   ? (map['lastLogin'] as Timestamp).toDate()
-                  : DateTime.tryParse(map['lastLogin']))
+                  : DateTime.tryParse(map['lastLogin'] as String))
               : null,
       streak: map['streak'] ?? 0,
       points: map['points'] ?? 0,
@@ -319,7 +357,7 @@ class AppUser {
           map['createdAt'] != null
               ? (map['createdAt'] is Timestamp
                   ? (map['createdAt'] as Timestamp).toDate()
-                  : DateTime.tryParse(map['createdAt']))
+                  : DateTime.tryParse(map['createdAt'] as String))
               : null,
       referrer: map['referrer'],
       balance:
@@ -367,18 +405,56 @@ class AppUser {
           map['lastCheckIn'] != null
               ? (map['lastCheckIn'] is Timestamp
                   ? (map['lastCheckIn'] as Timestamp).toDate()
-                  : DateTime.tryParse(map['lastCheckIn']))
+                  : DateTime.tryParse(map['lastCheckIn'] as String))
               : null,
       dailyAdsWatched: map['dailyAdsWatched'] ?? 0,
       lastAdsWatchedDate:
           map['lastAdsWatchedDate'] != null
               ? (map['lastAdsWatchedDate'] is Timestamp
                   ? (map['lastAdsWatchedDate'] as Timestamp).toDate()
-                  : DateTime.tryParse(map['lastAdsWatchedDate']))
+                  : DateTime.tryParse(map['lastAdsWatchedDate'] as String))
               : null,
       hasBuiltPlans: map['hasBuiltPlans'] ?? false,
       hasClaimedBuildPlansReward: map['hasClaimedBuildPlansReward'] ?? false,
       checkInStreak: map['checkInStreak'] ?? 0,
+      lastWorkoutCompletionDate:
+          map['lastWorkoutCompletionDate'] != null
+              ? (map['lastWorkoutCompletionDate'] is Timestamp
+                  ? (map['lastWorkoutCompletionDate'] as Timestamp).toDate()
+                  : DateTime.tryParse(
+                    map['lastWorkoutCompletionDate'] as String,
+                  ))
+              : null,
+      lastMealPlanCompletionDate:
+          map['lastMealPlanCompletionDate'] != null
+              ? (map['lastMealPlanCompletionDate'] is Timestamp
+                  ? (map['lastMealPlanCompletionDate'] as Timestamp).toDate()
+                  : DateTime.tryParse(
+                    map['lastMealPlanCompletionDate'] as String,
+                  ))
+              : null,
+      lastStepGoalCompletionDate:
+          map['lastStepGoalCompletionDate'] != null
+              ? (map['lastStepGoalCompletionDate'] is Timestamp
+                  ? (map['lastStepGoalCompletionDate'] as Timestamp).toDate()
+                  : DateTime.tryParse(
+                    map['lastStepGoalCompletionDate'] as String,
+                  ))
+              : null,
+      lastWeightUpdateDate:
+          map['lastWeightUpdateDate'] != null
+              ? (map['lastWeightUpdateDate'] is Timestamp
+                  ? (map['lastWeightUpdateDate'] as Timestamp).toDate()
+                  : DateTime.tryParse(map['lastWeightUpdateDate'] as String))
+              : null,
+      completedOneOffIds: List<String>.from(map['completedOneOffIds'] ?? []),
+      lastAdWatchedTimestamp:
+          map['lastAdWatchedTimestamp'] != null
+              ? (map['lastAdWatchedTimestamp'] is Timestamp
+                  ? (map['lastAdWatchedTimestamp'] as Timestamp).toDate()
+                  : DateTime.tryParse(map['lastAdWatchedTimestamp'] as String))
+              : null,
+      claimedRewards: Map<String, dynamic>.from(map['claimedRewards'] ?? {}),
     );
   }
 

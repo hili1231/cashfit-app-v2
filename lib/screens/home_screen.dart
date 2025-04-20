@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:cashfit/theme.dart';
+import 'package:cashfit/widgets/step_counter.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -18,7 +19,6 @@ import '../screens/personalize/diet_builder_screen.dart';
 import '../screens/side_hustle/side_hustle_detail_screen.dart';
 import '../screens/diets/diet_selector_screen.dart';
 import '../providers/user_provider.dart';
-import 'challenges/challenges_screen.dart';
 import 'side_hustle/side_hustle_screen.dart';
 
 class _WorkoutDietHeaderDelegate extends SliverPersistentHeaderDelegate {
@@ -73,6 +73,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<Map<String, dynamic>> fetchAllHomeData() async {
+    // Use Future.wait to fetch all data concurrently
     final workoutsFuture =
         FirebaseFirestore.instance.collection('workoutPrograms').get();
     final mealPlansFuture =
@@ -141,8 +142,17 @@ class _HomeScreenState extends State<HomeScreen> {
               SliverPersistentHeader(
                 pinned: true,
                 delegate: _WorkoutDietHeaderDelegate(
-                  height: 80,
+                  height: 94, // Already fixed to prevent overflow
                   child: _buildWorkoutDietSection(context),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16.0,
+                    vertical: 8.0,
+                  ),
+                  child: StepCounterWidget(),
                 ),
               ),
               const SliverToBoxAdapter(child: AutoRotatingBanner()),
@@ -151,7 +161,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   future: _homeDataFuture,
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
+                      return const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(16.0),
+                          child: CircularProgressIndicator(),
+                        ),
+                      );
                     }
                     if (snapshot.hasError) {
                       return Center(
@@ -181,51 +196,40 @@ class _HomeScreenState extends State<HomeScreen> {
                     final sideHustles = data['sideHustles'] as List<SideHustle>;
 
                     final userProvider = Provider.of<UserProvider>(context);
-                    final bool userHasChallenge =
-                        userProvider.currentUser?.activeChallengeId != null;
-                    final userChallenges =
-                        allChallenges
-                            .where(
-                              (ch) =>
-                                  ch.id ==
-                                  (userProvider
-                                          .currentUser
-                                          ?.activeChallengeId ??
-                                      ''),
-                            )
-                            .toList();
+                    allChallenges
+                        .where(
+                          (ch) =>
+                              ch.id ==
+                              (userProvider.currentUser?.activeChallengeId ??
+                                  ''),
+                        )
+                        .toList();
                     final bool hasSideHustles = sideHustles.isNotEmpty;
 
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 12),
                         AdHelper.bannerAdWidget(context),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 12),
                         _buildSectionTitle(context, "WORKOUTS"),
                         _buildHorizontalList(
                           workouts
                               .map((wp) => WorkoutCard(workout: wp))
                               .toList(),
                         ),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 8),
                         _buildSectionTitle(context, "MEAL PLANS"),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 8),
                           child: _buildViewAllMealPlansButton(context),
                         ),
-                        const SizedBox(height: 8),
                         _buildMealPlansRow(context, mealPlans),
-                        const SizedBox(height: 12),
-                        if (userHasChallenge && userChallenges.isNotEmpty) ...[
-                          _buildSectionTitle(context, "CHALLENGES"),
-                          _buildChallengeRow(context, userChallenges),
-                          const SizedBox(height: 20),
-                        ],
+                        const SizedBox(height: 8),
                         if (hasSideHustles) ...[
                           _buildSectionTitle(context, "SIDE HUSTLES"),
                           _buildSideHustleRow(context, sideHustles),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 8),
                         ],
                       ],
                     );
@@ -351,13 +355,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return FilledButton(
-      style: FilledButton.styleFrom(
-        backgroundColor: colorScheme.surfaceContainer,
-        foregroundColor: colorScheme.onSurface,
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
+    return TextButton(
       onPressed: () {
         final navState = context.findAncestorStateOfType<NavScreenState>();
         if (navState != null) {
@@ -369,7 +367,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Text(
         label,
         style: theme.textTheme.labelLarge?.copyWith(
-          color: colorScheme.onSurface,
+          color: colorScheme.primary,
           fontWeight: FontWeight.bold,
         ),
       ),
@@ -377,12 +375,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHorizontalList(List<Widget> items) {
+    Theme.of(context);
     return SizedBox(
-      height: 200,
-      child: ListView(
+      height: 220, // Match card height
+      child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.only(left: 16),
-        children: items,
+        padding: const EdgeInsets.only(left: 16, right: 8),
+        itemCount: items.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: (_, index) => items[index],
       ),
     );
   }
@@ -393,7 +394,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (mealPlans.isEmpty) {
       return SizedBox(
-        height: 200,
+        height: 220,
         child: Center(
           child: Text(
             'No meal plans found',
@@ -405,7 +406,7 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
     return SizedBox(
-      height: 200,
+      height: 220,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.only(left: 16, right: 8),
@@ -413,241 +414,6 @@ class _HomeScreenState extends State<HomeScreen> {
         itemBuilder: (context, index) {
           return MealPlanCard(mealPlan: mealPlans[index]);
         },
-      ),
-    );
-  }
-
-  Widget _buildChallengeRow(BuildContext context, List<Challenge> challenges) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    if (challenges.isEmpty) {
-      return SizedBox(
-        height: 220,
-        child: Center(
-          child: Text(
-            "No challenges found",
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurface,
-            ),
-          ),
-        ),
-      );
-    }
-    return SizedBox(
-      height: 220,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: challenges.length,
-        padding: const EdgeInsets.only(left: 16),
-        itemBuilder: (context, index) {
-          final challenge = challenges[index];
-          return _buildChallengeCard(context, challenge);
-        },
-      ),
-    );
-  }
-
-  Widget _buildChallengeCard(BuildContext context, Challenge challenge) {
-    final userProvider = Provider.of<UserProvider>(context);
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    final bool isJoined =
-        userProvider.currentUser != null &&
-        userProvider.currentUser!.joinedChallenges.contains(challenge.id);
-
-    return AnimatedCard(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      color: colorScheme.surfaceContainer,
-      child: SizedBox(
-        width: 180,
-        child: GestureDetector(
-          onTap: () {
-            final navState = context.findAncestorStateOfType<NavScreenState>();
-            if (navState != null) {
-              navState.setDetailScreen(const ChallengesScreen());
-            }
-          },
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ClipRRect(
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(12),
-                  topRight: Radius.circular(12),
-                ),
-                child:
-                    challenge.image.trim().isNotEmpty
-                        ? CachedNetworkImage(
-                          imageUrl: challenge.image,
-                          height: 110,
-                          width: double.infinity,
-                          fit: BoxFit.cover,
-                          placeholderFadeInDuration: const Duration(
-                            milliseconds: 200,
-                          ),
-                          placeholder:
-                              (context, url) =>
-                                  _buildPlaceholderImage(110, true),
-                          errorWidget:
-                              (context, url, error) =>
-                                  _buildPlaceholderImage(110, false),
-                          fadeInDuration: const Duration(milliseconds: 300),
-                          useOldImageOnUrlChange: true,
-                        )
-                        : _buildPlaceholderImage(110, false),
-              ),
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Text(
-                  challenge.name,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    color: colorScheme.onSurface,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (isJoined) ...[
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        "Progress: ${userProvider.currentUser!.challengeProgress}%",
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurface,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      LinearProgressIndicator(
-                        value:
-                            (userProvider.currentUser!.challengeProgress) / 100,
-                        backgroundColor: colorScheme.surfaceContainerHighest,
-                        color: colorScheme.primary,
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: colorScheme.surfaceContainerHighest,
-                      foregroundColor: colorScheme.onSurface,
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 6,
-                        horizontal: 12,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    onPressed: () {
-                      final navState =
-                          context.findAncestorStateOfType<NavScreenState>();
-                      if (navState != null) {
-                        navState.setDetailScreen(const ChallengesScreen());
-                      }
-                    },
-                    child: Text(
-                      "View Progress",
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: colorScheme.onSurface,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ] else ...[
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 2,
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.people, color: colorScheme.primary, size: 16),
-                      const SizedBox(width: 5),
-                      Text(
-                        "${challenge.participants.length} participants",
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurface,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 2,
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.monetization_on,
-                        color: colorScheme.primary,
-                        size: 12,
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        "${challenge.rewardCoins} coins",
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurface,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: colorScheme.surfaceContainerHighest,
-                      foregroundColor: colorScheme.onSurface,
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 6,
-                        horizontal: 12,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    onPressed: () {
-                      final navState =
-                          context.findAncestorStateOfType<NavScreenState>();
-                      if (navState != null) {
-                        navState.setDetailScreen(const ChallengesScreen());
-                      }
-                    },
-                    child: Text(
-                      "Join Now",
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: colorScheme.onSurface,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
       ),
     );
   }
@@ -696,6 +462,7 @@ class _HomeScreenState extends State<HomeScreen> {
       color: colorScheme.surfaceContainer,
       child: SizedBox(
         width: 180,
+        height: 220,
         child: GestureDetector(
           onTap: () {
             if (navState != null) {
@@ -880,7 +647,6 @@ Widget _buildBannerSideHustleCard(
   required String imageAsset,
 }) {
   final theme = Theme.of(context);
-  final colorScheme = theme.colorScheme;
 
   return Padding(
     padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
@@ -903,8 +669,15 @@ Widget _buildBannerSideHustleCard(
                 child: Text(
                   label.toUpperCase(),
                   style: theme.textTheme.titleMedium?.copyWith(
-                    color: colorScheme.onSurface,
+                    color: Colors.white,
                     fontWeight: FontWeight.bold,
+                    shadows: const [
+                      Shadow(
+                        offset: Offset(0, 1),
+                        blurRadius: 3,
+                        color: Colors.black54,
+                      ),
+                    ],
                   ),
                 ),
               ),

@@ -1,0 +1,229 @@
+import 'dart:async'; // Add for StreamSubscription
+import 'dart:io';
+import 'package:cashfit/theme.dart';
+import 'package:flutter/material.dart';
+import 'package:pedometer/pedometer.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:provider/provider.dart';
+import '../providers/user_provider.dart';
+
+class StepCounterWidget extends StatefulWidget {
+  const StepCounterWidget({super.key});
+
+  @override
+  State<StepCounterWidget> createState() => _StepCounterWidgetState();
+}
+
+class _StepCounterWidgetState extends State<StepCounterWidget> {
+  int currentSteps = 0;
+  int dailyStepTarget = 10000;
+  Stream<StepCount>? stepCountStream;
+  StreamSubscription<StepCount>?
+  _stepCountSubscription; // Add subscription tracking
+  bool stepCounterInitialized = false;
+  bool stepCounterSupported = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkPlatformSupport();
+    _loadStepTarget();
+  }
+
+  @override
+  void dispose() {
+    // Cancel the step count stream subscription to prevent updates after dispose
+    _stepCountSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _checkPlatformSupport() {
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      setState(() {
+        stepCounterSupported = false;
+        stepCounterInitialized = false;
+      });
+      return;
+    }
+    _initializeStepCounter();
+  }
+
+  Future<void> _initializeStepCounter() async {
+    PermissionStatus status = await Permission.activityRecognition.request();
+    if (status.isGranted) {
+      if (!mounted) return; // Check if widget is still mounted
+      setState(() {
+        stepCounterInitialized = true;
+      });
+      stepCountStream = Pedometer.stepCountStream;
+      _stepCountSubscription = stepCountStream?.listen(
+        (StepCount event) {
+          if (!mounted) return; // Check if widget is still mounted
+          setState(() {
+            currentSteps = event.steps;
+          });
+        },
+        onError: (error) {
+          if (!mounted) return; // Check if widget is still mounted
+          print("Step Counter Error: $error");
+          setState(() {
+            stepCounterInitialized = false;
+          });
+        },
+      );
+    } else {
+      print("Step counter permission denied");
+      if (status.isPermanentlyDenied && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              "Step counter permission is required to track your steps. Please enable it in settings.",
+            ),
+            action: SnackBarAction(
+              label: 'Settings',
+              onPressed: () => openAppSettings(),
+            ),
+          ),
+        );
+      }
+      if (!mounted) return;
+      setState(() {
+        stepCounterInitialized = false;
+      });
+    }
+  }
+
+  Future<void> _loadStepTarget() async {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    if (userProvider.currentUser != null) {
+      if (!mounted) return;
+      setState(() {
+        dailyStepTarget = userProvider.currentUser!.dailyStepTarget ?? 10000;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    if (!stepCounterSupported) {
+      return AnimatedCard(
+        child: Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Container(
+            height: 80,
+            padding: const EdgeInsets.all(16.0),
+            child: Center(
+              child: Text(
+                "Step counting is not supported on this platform.",
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (!stepCounterInitialized) {
+      return AnimatedCard(
+        child: Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Container(
+            height: 80,
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    "Step counter permission required.",
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    await Permission.activityRecognition.request();
+                    _initializeStepCounter();
+                  },
+                  child: Text(
+                    "Grant Permission",
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: colorScheme.onPrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final progress = (currentSteps / dailyStepTarget).clamp(0.0, 1.0);
+
+    return AnimatedCard(
+      child: Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Container(
+          height: 110,
+          padding: const EdgeInsets.all(12.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Daily Steps",
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: colorScheme.onSurface,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      "$currentSteps / $dailyStepTarget steps",
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Text(
+                    "${(progress * 100).toStringAsFixed(0)}%",
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              LinearProgressIndicator(
+                value: progress,
+                backgroundColor: colorScheme.onSurfaceVariant.withOpacity(0.3),
+                valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
+                minHeight: 6,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

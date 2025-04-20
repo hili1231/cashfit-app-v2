@@ -900,7 +900,7 @@ class DeactivatedWorkoutsScreen extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Deactivated Workouts',
+                      'DEACTIVATED WORKOUTS',
                       style: theme.textTheme.titleLarge?.copyWith(
                         color: colorScheme.onSurface,
                         fontWeight: FontWeight.bold,

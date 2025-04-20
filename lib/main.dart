@@ -9,12 +9,15 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'providers/user_provider.dart';
 import 'replace_context_provider.dart';
 
+final GlobalKey<NavScreenState> navKey = GlobalKey<NavScreenState>();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  if (defaultTargetPlatform == TargetPlatform.android ||
-      defaultTargetPlatform == TargetPlatform.iOS) {
+  if (!kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS)) {
     await MobileAds.instance.initialize();
   }
 
@@ -109,6 +112,6 @@ class AuthWrapper extends StatelessWidget {
       );
     }
 
-    return const NavScreen();
+    return NavScreen(key: navKey);
   }
 }

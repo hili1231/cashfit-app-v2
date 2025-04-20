@@ -140,7 +140,7 @@ class MealPlanCard extends StatelessWidget {
 
     if (imageUrl.isEmpty) {
       return Container(
-        height: 90,
+        height: 80,
         width: double.infinity,
         color: colorScheme.surfaceContainer,
         alignment: Alignment.center,

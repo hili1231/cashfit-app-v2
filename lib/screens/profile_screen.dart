@@ -37,8 +37,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isSaving = false;
   File? _selectedImage;
 
-  // Define possible badges with their earned and unearned image paths
   final List<_Badge> _possibleBadges = [
+    _Badge(
+      name: "Profile Builder",
+      earnedImagePath: "assets/images/badge_profile_builder.png",
+      unearnedImagePath: "assets/images/badge_profile_builder_unearned.png",
+    ),
+    _Badge(
+      name: "Plan Creator",
+      earnedImagePath: "assets/images/badge_plan_creator.png",
+      unearnedImagePath: "assets/images/badge_plan_creator_unearned.png",
+    ),
+    _Badge(
+      name: "Weight Tracker",
+      earnedImagePath: "assets/images/badge_weight_tracker.png",
+      unearnedImagePath: "assets/images/badge_weight_tracker_unearned.png",
+    ),
     _Badge(
       name: "Beginner",
       earnedImagePath: "assets/images/badge_beginner.png",
@@ -76,6 +90,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
       controllers['email'] = TextEditingController(
         text: userProvider.currentUser!.email,
       );
+      controllers['gender'] = TextEditingController(
+        text: userProvider.currentUser!.gender,
+      );
+      controllers['age'] = TextEditingController(
+        text: userProvider.currentUser!.age,
+      );
+      controllers['height'] = TextEditingController(
+        text: userProvider.currentUser!.height,
+      );
+      controllers['weight'] = TextEditingController(
+        text: userProvider.currentUser!.weight,
+      );
       _notificationsEnabled = userProvider.currentUser!.notificationsEnabled;
       if (userProvider.currentUser!.dailyReminderTime != null) {
         final parts = userProvider.currentUser!.dailyReminderTime!.split(':');
@@ -100,6 +126,66 @@ class _ProfileScreenState extends State<ProfileScreen> {
       controller.dispose();
     }
     super.dispose();
+  }
+
+  Future<void> _saveProfileFields() async {
+    setState(() {
+      _isSaving = true;
+    });
+
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+
+    try {
+      await userProvider.updateProfileFields(
+        gender: controllers['gender']!.text,
+        age: controllers['age']!.text,
+        height: controllers['height']!.text,
+        weight: controllers['weight']!.text,
+        avatar: userProvider.currentUser!.avatar,
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: colorScheme.primary,
+          content: Text(
+            userProvider.currentUser!.completedOneOffIds.contains(
+                  'build_profile',
+                )
+                ? "Profile updated successfully"
+                : "Profile updated! +15 points earned",
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onPrimary,
+            ),
+          ),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: colorScheme.error,
+          content: Text(
+            "Failed to update profile: $e",
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onError,
+            ),
+          ),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
+    }
   }
 
   Future<void> _saveNotificationPreferences() async {
@@ -186,14 +272,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (!mounted) return;
 
       Navigator.of(context).pushAndRemoveUntil(
-        PageRouteBuilder(
-          transitionDuration: const Duration(milliseconds: 400),
-          pageBuilder:
-              (context, animation, secondaryAnimation) => const NavScreen(),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return FadeTransition(opacity: animation, child: child);
-          },
-        ),
+        AppTheme.createPageRoute(const NavScreen()),
         (route) => false,
       );
 
@@ -258,7 +337,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Display the current avatar
                   Padding(
                     padding: const EdgeInsets.only(bottom: 16.0),
                     child: Column(
@@ -292,16 +370,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                           userProvider.currentUser!.avatar,
                                         ))
                                     : const AssetImage(
-                                          'assets/images/default_avatar_1.png',
-                                        )
-                                        as ImageProvider,
+                                      'assets/images/default_avatar_1.png',
+                                    ),
                             onBackgroundImageError: (_, __) {},
                           ),
                         ),
                       ],
                     ),
                   ),
-                  // List of default avatars
                   ...defaultAvatars.map((avatarPath) {
                     return ListTile(
                       leading: CircleAvatar(
@@ -486,8 +562,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
               children: [
                 _buildAvatar(context),
                 const SizedBox(height: 20),
-                _buildEditableField(context, 'name', controllers['name']!),
-                _buildEditableField(context, 'email', controllers['email']!),
+                _buildEditableField(
+                  context,
+                  'Name',
+                  controllers['name']!,
+                  readOnly: true,
+                ),
+                _buildEditableField(
+                  context,
+                  'Email',
+                  controllers['email']!,
+                  readOnly: true,
+                ),
+                _buildEditableField(context, 'Gender', controllers['gender']!),
+                _buildEditableField(context, 'Age', controllers['age']!),
+                _buildEditableField(context, 'Height', controllers['height']!),
+                _buildEditableField(context, 'Weight', controllers['weight']!),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: ElevatedButton(
+                    style: theme.elevatedButtonTheme.style?.copyWith(
+                      backgroundColor: WidgetStateProperty.all(
+                        colorScheme.primary,
+                      ),
+                      foregroundColor: WidgetStateProperty.all(
+                        colorScheme.onPrimary,
+                      ),
+                    ),
+                    onPressed: _isSaving ? null : _saveProfileFields,
+                    child:
+                        _isSaving
+                            ? CircularProgressIndicator(
+                              color: colorScheme.onPrimary,
+                            )
+                            : const Text("Save Profile"),
+                  ),
+                ),
                 const SizedBox(height: 30),
                 Card(
                   elevation: 1,
@@ -514,32 +625,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 leading: Icon(
                                   Icons.monetization_on,
                                   color: colorScheme.primary,
-                                  size: 20,
+                                  size: 32,
                                 ),
                                 title: Text(
-                                  "Points: ${userProvider.currentUser!.points ?? 0}",
-                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                  "Points",
+                                  style: theme.textTheme.titleLarge?.copyWith(
                                     color: colorScheme.onSurface,
+                                    fontWeight: FontWeight.bold,
                                   ),
+                                ),
+                                subtitle: Text(
+                                  "${userProvider.currentUser!.points ?? 0}",
+                                  style: theme.textTheme.headlineSmall
+                                      ?.copyWith(color: colorScheme.primary),
                                 ),
                                 onTap: () {
                                   Navigator.push(
                                     context,
-                                    MaterialPageRoute(
-                                      builder:
-                                          (context) =>
-                                              const PointsConversionScreen(),
+                                    AppTheme.createPageRoute(
+                                      const PointsConversionScreen(),
                                     ),
                                   );
                                 },
                               ),
                             ),
-                            Padding(
-                              padding: const EdgeInsets.only(right: 16.0),
-                              child: Text(
-                                "Streak: ${userProvider.currentUser!.streak ?? 0} days",
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: colorScheme.onSurface,
+                            Expanded(
+                              child: ListTile(
+                                leading: Icon(
+                                  Icons.local_fire_department,
+                                  color: colorScheme.primary,
+                                  size: 32,
+                                ),
+                                title: Text(
+                                  "Streak",
+                                  style: theme.textTheme.titleLarge?.copyWith(
+                                    color: colorScheme.onSurface,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  "${userProvider.currentUser!.streak ?? 0} days",
+                                  style: theme.textTheme.headlineSmall
+                                      ?.copyWith(color: colorScheme.primary),
                                 ),
                               ),
                             ),
@@ -552,7 +679,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             Padding(
                               padding: const EdgeInsets.only(left: 16.0),
                               child: Text(
-                                "Balance: \$${(userProvider.currentUser!.balance ?? 0.0).toStringAsFixed(2)}",
+                                "Balance: \$${userProvider.currentUser!.balance?.toStringAsFixed(2) ?? '0.00'}",
                                 style: theme.textTheme.bodyMedium?.copyWith(
                                   color: colorScheme.onSurface,
                                 ),
@@ -573,10 +700,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 onPressed: () {
                                   Navigator.push(
                                     context,
-                                    MaterialPageRoute(
-                                      builder:
-                                          (context) =>
-                                              const PointsConversionScreen(),
+                                    AppTheme.createPageRoute(
+                                      const PointsConversionScreen(),
                                     ),
                                   );
                                 },
@@ -777,7 +902,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   onTap: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                      AppTheme.createPageRoute(const SettingsScreen()),
                     );
                   },
                 ),
@@ -813,11 +938,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             backgroundImage:
                 (imageUrl != null && imageUrl.isNotEmpty)
                     ? (imageUrl.startsWith('http')
-                            ? NetworkImage(imageUrl)
-                            : AssetImage(imageUrl))
-                        as ImageProvider
-                    : const AssetImage('assets/images/default_avatar_1.png')
-                        as ImageProvider,
+                        ? NetworkImage(imageUrl)
+                        : AssetImage(imageUrl))
+                    : const AssetImage('assets/images/default_avatar_1.png'),
             onBackgroundImageError: (exception, stackTrace) {},
           ),
         ),
@@ -875,9 +998,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildEditableField(
     BuildContext context,
-    String key,
-    TextEditingController controller,
-  ) {
+    String label,
+    TextEditingController controller, {
+    bool readOnly = false,
+  }) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -885,12 +1009,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: TextField(
         controller: controller,
-        readOnly: true,
+        readOnly: readOnly,
         style: theme.textTheme.bodyLarge?.copyWith(
           color: colorScheme.onSurface,
         ),
         decoration: InputDecoration(
-          labelText: key.toUpperCase(),
+          labelText: label.toUpperCase(),
           labelStyle: theme.textTheme.labelLarge?.copyWith(
             color: colorScheme.onSurface,
           ),

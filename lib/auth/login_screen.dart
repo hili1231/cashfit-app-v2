@@ -17,6 +17,8 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
+  final forgotPasswordEmailController =
+      TextEditingController(); // Controller for forgot password email
   final AuthService auth = AuthService();
 
   bool isLoading = false;
@@ -127,10 +129,151 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  // Forgot Password Method
+  Future<void> _forgotPassword() async {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    // Show dialog to enter email
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(
+            "Forgot Password",
+            style: theme.textTheme.titleLarge?.copyWith(
+              color: colorScheme.onSurface,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: TextFormField(
+            controller: forgotPasswordEmailController,
+            keyboardType: TextInputType.emailAddress,
+            decoration: InputDecoration(
+              labelText: "Email",
+              labelStyle: theme.textTheme.bodyLarge?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+              filled: true,
+              fillColor: colorScheme.surfaceContainer,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: colorScheme.outline),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: colorScheme.outline),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: colorScheme.primary),
+              ),
+            ),
+            validator: (v) {
+              if (v == null || v.isEmpty) return "Enter email";
+              if (!v.contains('@')) return "Invalid email format";
+              return null;
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                "Cancel",
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: colorScheme.primary,
+                foregroundColor: colorScheme.onPrimary,
+              ),
+              onPressed: () async {
+                final email = forgotPasswordEmailController.text.trim();
+                if (email.isEmpty || !email.contains('@')) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      backgroundColor: colorScheme.error,
+                      content: Text(
+                        "Please enter a valid email address",
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onError,
+                        ),
+                      ),
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  );
+                  return;
+                }
+
+                try {
+                  await FirebaseAuth.instance.sendPasswordResetEmail(
+                    email: email,
+                  );
+                  Navigator.pop(context);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        backgroundColor: colorScheme.primary,
+                        content: Text(
+                          "Password reset email sent to $email",
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onPrimary,
+                          ),
+                        ),
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        backgroundColor: colorScheme.error,
+                        content: Text(
+                          "Failed to send reset email: ${e.toString()}",
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onError,
+                          ),
+                        ),
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    );
+                  }
+                }
+              },
+              child: Text(
+                "Send Reset Email",
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onPrimary,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    // Clear the controller after dialog is closed
+    forgotPasswordEmailController.clear();
+  }
+
   @override
   void dispose() {
     emailController.dispose();
     passwordController.dispose();
+    forgotPasswordEmailController.dispose(); // Dispose of the new controller
     super.dispose();
   }
 
@@ -235,7 +378,20 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: _forgotPassword,
+                    child: Text(
+                      "Forgot Password?",
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
                 if (errorMessage.isNotEmpty)
                   Text(
                     errorMessage,

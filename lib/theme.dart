@@ -1,362 +1,298 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  // 🎨 **Color Schemes for Light and Dark Themes**
-  static final ColorScheme _lightColorScheme = ColorScheme.light(
+  // ───────────────── COLOR SCHEMES ─────────────────
+  static final ColorScheme _light = ColorScheme.light(
     primary: Colors.amber,
     onPrimary: Colors.black,
-    primaryContainer: Colors.amber[200],
+    primaryContainer: Colors.amber.shade200,
     onPrimaryContainer: Colors.black,
     secondary: Colors.amberAccent,
     onSecondary: Colors.black,
-    secondaryContainer: Colors.amberAccent[100],
+    secondaryContainer: Colors.amberAccent.shade100,
     onSecondaryContainer: Colors.black,
     surface: Colors.white,
     onSurface: Colors.black87,
-    surfaceContainer: Colors.grey[100], // Used for elevated surfaces like cards
+    surfaceContainer: Colors.grey.shade100,
     onSurfaceVariant: Colors.black54,
     error: Colors.redAccent,
     onError: Colors.white,
   );
 
-  static final ColorScheme _darkColorScheme = ColorScheme.dark(
+  static final ColorScheme _dark = ColorScheme.dark(
     primary: Colors.amber,
     onPrimary: Colors.black,
-    primaryContainer: Colors.amber[800],
+    primaryContainer: Colors.amber.shade800,
     onPrimaryContainer: Colors.white,
     secondary: Colors.amberAccent,
     onSecondary: Colors.black,
-    secondaryContainer: Colors.amberAccent[700],
+    secondaryContainer: Colors.amberAccent.shade700,
     onSecondaryContainer: Colors.white,
     surface: const Color(0xFF1A1A1A),
     onSurface: Colors.white70,
-    surfaceContainer: Colors.grey[900],
+    surfaceContainer: Colors.grey.shade900,
     onSurfaceVariant: Colors.white60,
     error: Colors.redAccent,
     onError: Colors.white,
   );
 
-  // 🏆 **Typography**
-  static TextTheme _buildTextTheme(ColorScheme colorScheme) {
-    return TextTheme(
-      displayLarge: TextStyle(
-        fontSize: 57,
-        fontWeight: FontWeight.bold,
-        color: colorScheme.onSurface,
-        letterSpacing: 0.25,
-      ),
-      displayMedium: TextStyle(
-        fontSize: 45,
-        fontWeight: FontWeight.bold,
-        color: colorScheme.onSurface,
-        letterSpacing: 0,
-      ),
-      displaySmall: TextStyle(
-        fontSize: 36,
-        fontWeight: FontWeight.bold,
-        color: colorScheme.onSurface,
-        letterSpacing: -0.5,
-      ),
-      headlineLarge: TextStyle(
-        fontSize: 32,
-        fontWeight: FontWeight.bold,
-        color: colorScheme.onSurface,
-        letterSpacing: 0,
-      ),
-      headlineMedium: TextStyle(
-        fontSize: 28,
-        fontWeight: FontWeight.bold,
-        color: colorScheme.onSurface,
-        letterSpacing: 0,
-      ),
-      headlineSmall: TextStyle(
-        fontSize: 24,
-        fontWeight: FontWeight.bold,
-        color: colorScheme.onSurface,
-        letterSpacing: 0,
-      ),
-      titleLarge: TextStyle(
-        fontSize: 22,
-        fontWeight: FontWeight.w500,
-        color: colorScheme.onSurface,
-        letterSpacing: 0,
-      ),
-      titleMedium: TextStyle(
-        fontSize: 16,
-        fontWeight: FontWeight.w500,
-        color: colorScheme.onSurface,
-        letterSpacing: 0.15,
-      ),
-      titleSmall: TextStyle(
-        fontSize: 14,
-        fontWeight: FontWeight.w500,
-        color: colorScheme.onSurface,
-        letterSpacing: 0.1,
-      ),
-      bodyLarge: TextStyle(
-        fontSize: 16,
-        fontWeight: FontWeight.normal,
-        color: colorScheme.onSurface,
-        letterSpacing: 0.5,
-      ),
-      bodyMedium: TextStyle(
-        fontSize: 14,
-        fontWeight: FontWeight.normal,
-        color: colorScheme.onSurfaceVariant,
-        letterSpacing: 0.25,
-      ),
-      bodySmall: TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.normal,
-        color: colorScheme.onSurfaceVariant,
-        letterSpacing: 0.4,
-      ),
-      labelLarge: TextStyle(
-        fontSize: 14,
-        fontWeight: FontWeight.w500,
-        color: colorScheme.onSurface,
-        letterSpacing: 0.1,
-      ),
-      labelMedium: TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w500,
-        color: colorScheme.onSurface,
-        letterSpacing: 0.5,
-      ),
-      labelSmall: TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w500,
-        color: colorScheme.onSurface,
-        letterSpacing: 0.5,
-      ),
-    );
-  }
+  // ───────────────── TYPOGRAPHY ─────────────────
+  static TextTheme _text(ColorScheme cs) => TextTheme(
+    displayLarge: _h(cs, 57, FontWeight.bold, 0.25),
+    displayMedium: _h(cs, 45, FontWeight.bold),
+    displaySmall: _h(cs, 36, FontWeight.bold, -0.5),
+    headlineLarge: _h(cs, 32, FontWeight.bold),
+    headlineMedium: _h(cs, 28, FontWeight.bold),
+    headlineSmall: _h(cs, 24, FontWeight.bold),
+    titleLarge: _h(cs, 22, FontWeight.w500),
+    titleMedium: _h(cs, 16, FontWeight.w500, 0.15),
+    titleSmall: _h(cs, 14, FontWeight.w500, 0.1),
+    bodyLarge: _b(cs, 16),
+    bodyMedium: _b(cs, 14, cs.onSurfaceVariant, 0.25),
+    bodySmall: _b(cs, 12, cs.onSurfaceVariant, 0.4),
+    labelLarge: _l(cs, 14),
+    labelMedium: _l(cs, 12, cs.onSurface),
+    labelSmall: _l(cs, 11, cs.onSurface),
+  );
 
-  // 🔥 **Refined Global Gradient for Backgrounds**
-  static BoxDecoration backgroundGradient(ColorScheme colorScheme) {
-    final bool isDarkMode = colorScheme.brightness == Brightness.dark;
-    if (isDarkMode) {
-      return BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.black, Colors.grey[900]!, Colors.grey[800]!],
-          stops: const [0.0, 0.8, 1.0],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-        ),
+  static TextStyle _h(
+    ColorScheme cs,
+    double s,
+    FontWeight w, [
+    double ls = 0,
+  ]) => TextStyle(
+    fontSize: s,
+    fontWeight: w,
+    letterSpacing: ls,
+    color: cs.onSurface,
+  );
+  static TextStyle _b(ColorScheme cs, double s, [Color? c, double ls = 0.5]) =>
+      TextStyle(
+        fontSize: s,
+        fontWeight: FontWeight.normal,
+        letterSpacing: ls,
+        color: c ?? cs.onSurface,
       );
-    } else {
-      return BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.grey[50]!, Colors.grey[100]!, Colors.grey[100]!],
-          stops: const [0.0, 0.8, 1.0],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-        ),
+  static TextStyle _l(ColorScheme cs, double s, [Color? c]) => TextStyle(
+    fontSize: s,
+    fontWeight: FontWeight.w500,
+    letterSpacing: 0.1,
+    color: c ?? cs.onSurface,
+  );
+
+  // ───────────────── BACKGROUND GRADIENT ─────────────────
+  static BoxDecoration backgroundGradient(ColorScheme cs) => BoxDecoration(
+    gradient: LinearGradient(
+      colors:
+          cs.brightness == Brightness.dark
+              ? [Colors.black, Colors.grey.shade900, Colors.grey.shade800]
+              : [
+                Colors.grey.shade50,
+                Colors.grey.shade100,
+                Colors.grey.shade100,
+              ],
+      stops: const [0, .8, 1],
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+    ),
+  );
+
+  // ───────────────── CARD POP‑IN EFFECT ─────────────────
+  static Widget _animatedCard({required Widget child}) => TweenAnimationBuilder(
+    tween: Tween<double>(begin: 0.9, end: 1),
+    duration: const Duration(milliseconds: 400),
+    curve: Curves.easeOut,
+    builder:
+        (_, double scale, __) => Transform.scale(scale: scale, child: child),
+    child: child,
+  );
+
+  /// **Public wrapper kept for backward‑compatibility**
+  static Widget animatedCard({required Widget child}) =>
+      _animatedCard(child: child);
+
+  // ───────────────── PAGE ROUTE ─────────────────
+  static Route createPageRoute(Widget page) => PageRouteBuilder(
+    transitionDuration: const Duration(milliseconds: 400),
+    reverseTransitionDuration: const Duration(milliseconds: 400),
+    pageBuilder: (_, __, ___) => page,
+    transitionsBuilder: (_, anim, __, child) {
+      final offset = Tween(
+        begin: const Offset(0, .1),
+        end: Offset.zero,
+      ).chain(CurveTween(curve: Curves.easeOutCubic));
+      return SlideTransition(
+        position: anim.drive(offset),
+        child: FadeTransition(opacity: anim, child: child),
       );
-    }
-  }
+    },
+  );
 
-  // 🎬 **Global Animation Widget (For Consistent Scaling)**
-  static Widget animatedCard({required Widget child}) {
-    return TweenAnimationBuilder(
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.easeOut,
-      tween: Tween<double>(begin: 0.9, end: 1.0),
-      builder: (context, double scale, _) {
-        return Transform.scale(scale: scale, child: child);
-      },
-      child: child,
-    );
-  }
+  // ───────────────── BASE THEME BUILDERS ─────────────────
+  static ThemeData _base(ColorScheme cs, {required bool dark}) {
+    final txt = _text(cs);
+    final shadow = dark ? Colors.white70 : Colors.black87;
 
-  // 📌 **Custom Page Transitions**
-  static Route createPageRoute(Widget page) {
-    return PageRouteBuilder(
-      transitionDuration: const Duration(milliseconds: 400),
-      reverseTransitionDuration: const Duration(milliseconds: 400),
-      pageBuilder: (context, animation, secondaryAnimation) => page,
-      transitionsBuilder: (context, animation, secondaryAnimation, child) {
-        var tween = Tween(
-          begin: const Offset(0.0, 0.1),
-          end: Offset.zero,
-        ).chain(CurveTween(curve: Curves.easeOutCubic));
-
-        return SlideTransition(
-          position: animation.drive(tween),
-          child: FadeTransition(opacity: animation, child: child),
-        );
-      },
-    );
-  }
-
-  // 🔹 **ThemeData for Light and Dark Modes**
-  static ThemeData lightTheme() {
-    final colorScheme = _lightColorScheme;
     return ThemeData(
       useMaterial3: true,
-      colorScheme: colorScheme,
-      scaffoldBackgroundColor: colorScheme.surface,
-      textTheme: _buildTextTheme(colorScheme),
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          foregroundColor: colorScheme.onPrimary,
-          backgroundColor: colorScheme.primary,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-          elevation: 3,
-        ),
-      ),
-      filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          foregroundColor: colorScheme.onPrimary,
-          backgroundColor: colorScheme.primary,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-        ),
-      ),
+      colorScheme: cs,
+      scaffoldBackgroundColor: cs.surface,
+      textTheme: txt,
       cardTheme: CardTheme(
-        color: colorScheme.surface,
-        elevation: 4,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        clipBehavior: Clip.antiAlias, // Ensure animations don't overflow
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: colorScheme.surfaceContainer,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: colorScheme.outline),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: colorScheme.outline),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: colorScheme.primary, width: 2),
-        ),
-        labelStyle: TextStyle(color: colorScheme.onSurfaceVariant),
-      ),
-      appBarTheme: AppBarTheme(
-        backgroundColor: Colors.transparent,
-        elevation: 2,
-        shadowColor: Colors.amber.withValues(alpha: 0.2),
-        iconTheme: IconThemeData(color: colorScheme.onSurface),
-        titleTextStyle: _buildTextTheme(
-          colorScheme,
-        ).headlineSmall?.copyWith(color: colorScheme.primary),
-      ),
-      progressIndicatorTheme: ProgressIndicatorThemeData(
-        color: colorScheme.primary,
-      ),
-      // Wrap Card widgets with animatedCard globally
-      extensions: [
-        CardAnimationExtension(
-          cardBuilder: (context, child) => animatedCard(child: child),
-        ),
-      ],
-    );
-  }
-
-  static ThemeData darkTheme() {
-    final colorScheme = _darkColorScheme;
-    return ThemeData(
-      useMaterial3: true,
-      colorScheme: colorScheme,
-      scaffoldBackgroundColor: colorScheme.surface,
-      textTheme: _buildTextTheme(colorScheme),
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          foregroundColor: Colors.black,
-          backgroundColor: Colors.amber,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-          elevation: 3,
-        ),
-      ),
-      filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          foregroundColor: Colors.black,
-          backgroundColor: Colors.amber,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-        ),
-      ),
-      cardTheme: CardTheme(
-        color: colorScheme.surface,
+        color: cs.surface,
         elevation: 4,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         clipBehavior: Clip.antiAlias,
       ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: colorScheme.surfaceContainer,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: colorScheme.outline),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          foregroundColor: cs.onPrimary,
+          backgroundColor: cs.primary,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.all(8),
+          elevation: 5,
+          shadowColor: shadow,
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: colorScheme.outline),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          foregroundColor: cs.onPrimary,
+          backgroundColor: cs.primary,
+          padding: const EdgeInsets.all(8),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          elevation: 4,
+          shadowColor: shadow,
+          surfaceTintColor: Colors.transparent,
+          textStyle: txt.labelMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+            fontSize: 13,
+          ),
         ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: colorScheme.primary, width: 2),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(color: cs.primary, width: 1.5),
+          foregroundColor: cs.onSurface,
+          backgroundColor: cs.surfaceContainer,
+          padding: const EdgeInsets.all(8),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          elevation: 4,
+          shadowColor: shadow,
+          surfaceTintColor: Colors.transparent,
+          textStyle: txt.labelMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+            fontSize: 13,
+          ),
         ),
-        labelStyle: TextStyle(color: colorScheme.onSurfaceVariant),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: cs.primary,
+          padding: const EdgeInsets.all(8),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          textStyle: txt.labelMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+            fontSize: 13,
+          ),
+        ),
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
         elevation: 2,
-        shadowColor: Colors.amber.withValues(alpha: 0.2),
-        iconTheme: IconThemeData(color: colorScheme.onSurface),
-        titleTextStyle: _buildTextTheme(
-          colorScheme,
-        ).headlineSmall?.copyWith(color: colorScheme.primary),
+        shadowColor: Colors.amber.withAlpha(51),
+        iconTheme: IconThemeData(color: cs.onSurface),
+        titleTextStyle: txt.headlineSmall?.copyWith(color: cs.primary),
       ),
-      progressIndicatorTheme: ProgressIndicatorThemeData(
-        color: colorScheme.primary,
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: cs.surfaceContainer,
+        border: _border(cs),
+        enabledBorder: _border(cs),
+        focusedBorder: _border(cs, focus: true),
+        labelStyle: TextStyle(color: cs.onSurfaceVariant),
       ),
-      // Wrap Card widgets with animatedCard globally
+      progressIndicatorTheme: ProgressIndicatorThemeData(color: cs.primary),
       extensions: [
-        CardAnimationExtension(
-          cardBuilder: (context, child) => animatedCard(child: child),
+        CardAnimationExtension(cardBuilder: (_, w) => _animatedCard(child: w)),
+        GreyFilledButtonTheme(
+          style: ButtonStyle(
+            backgroundColor: WidgetStateProperty.all(cs.surfaceContainer),
+            foregroundColor: WidgetStateProperty.all(cs.onSurface),
+            padding: WidgetStateProperty.all(const EdgeInsets.all(8)),
+            shape: WidgetStateProperty.all(
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            elevation: WidgetStateProperty.all(4),
+            shadowColor: WidgetStateProperty.all(shadow),
+            textStyle: WidgetStateProperty.all(
+              txt.labelLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+          ),
         ),
       ],
     );
   }
+
+  static OutlineInputBorder _border(ColorScheme cs, {bool focus = false}) =>
+      OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(
+          color: focus ? cs.primary : cs.outline,
+          width: focus ? 2 : 1,
+        ),
+      );
+
+  /// Light theme
+  static ThemeData lightTheme() => _base(_light, dark: false);
+
+  /// Dark theme
+  static ThemeData darkTheme() => _base(_dark, dark: true);
 }
 
-// Custom Theme Extension for Card Animation
+// ───────────────── EXTENSIONS ─────────────────
 class CardAnimationExtension extends ThemeExtension<CardAnimationExtension> {
   final Widget Function(BuildContext, Widget) cardBuilder;
-
   CardAnimationExtension({required this.cardBuilder});
 
   @override
-  ThemeExtension<CardAnimationExtension> copyWith() {
-    return CardAnimationExtension(cardBuilder: cardBuilder);
-  }
+  CardAnimationExtension copyWith({
+    Widget Function(BuildContext, Widget)? cardBuilder,
+  }) => CardAnimationExtension(cardBuilder: cardBuilder ?? this.cardBuilder);
 
   @override
-  ThemeExtension<CardAnimationExtension> lerp(
+  CardAnimationExtension lerp(
     ThemeExtension<CardAnimationExtension>? other,
     double t,
-  ) {
-    if (other is! CardAnimationExtension) return this;
-    return CardAnimationExtension(cardBuilder: cardBuilder);
-  }
+  ) => this;
 }
 
-// Custom Card Widget to Use Theme Animation
+class GreyFilledButtonTheme extends ThemeExtension<GreyFilledButtonTheme> {
+  final ButtonStyle style;
+  GreyFilledButtonTheme({required this.style});
+
+  @override
+  GreyFilledButtonTheme copyWith({ButtonStyle? style}) =>
+      GreyFilledButtonTheme(style: style ?? this.style);
+
+  @override
+  GreyFilledButtonTheme lerp(
+    ThemeExtension<GreyFilledButtonTheme>? other,
+    double t,
+  ) => this;
+}
+
+// ───────────────── HELPER WIDGET ─────────────────
 class AnimatedCard extends StatelessWidget {
   final Widget child;
   final double? elevation;
@@ -377,11 +313,9 @@ class AnimatedCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cardTheme = theme.cardTheme;
-    final animationExtension = theme.extension<CardAnimationExtension>();
-
-    return animationExtension!.cardBuilder(
+    final cardTheme = Theme.of(context).cardTheme;
+    final anim = Theme.of(context).extension<CardAnimationExtension>()!;
+    return anim.cardBuilder(
       context,
       Card(
         elevation: elevation ?? cardTheme.elevation,

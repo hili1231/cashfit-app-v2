@@ -1,5 +1,7 @@
+import 'package:cashfit/screens/admin/admin_create_reward_task_screen.dart';
 import 'package:cashfit/screens/admin/admin_dashboard_screen.dart';
 import 'package:cashfit/screens/admin/admin_manage_meals_csv_screen.dart';
+import 'package:cashfit/screens/admin/admin_withdrawal_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'admin_upload_ingredients_screen.dart';
@@ -50,9 +52,21 @@ class AdminPanelScreen extends StatelessWidget {
             ),
             _buildNavTile(
               context,
+              "Create Reward Tasks",
+              Icons.menu_book,
+              const AdminCreateRewardTaskScreen(),
+            ),
+            _buildNavTile(
+              context,
               "Create Meal Plan",
               Icons.menu_book,
               const AdminCreateMealPlanScreen(),
+            ),
+            _buildNavTile(
+              context,
+              "Withdrawal Approvals",
+              Icons.menu_book,
+              const AdminWithdrawalsScreen(),
             ),
             _buildNavTile(
               context,

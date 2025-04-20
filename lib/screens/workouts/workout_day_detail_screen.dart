@@ -7,7 +7,7 @@ import '../../models/exercise.dart';
 import 'exercise_detail_screen.dart';
 import '../nav_screen.dart';
 
-class DayDetailScreen extends StatelessWidget {
+class DayDetailScreen extends StatefulWidget {
   final int dayNumber;
   final List<Map<String, dynamic>> dayExercises;
   final WorkoutProgram workout;
@@ -19,10 +19,37 @@ class DayDetailScreen extends StatelessWidget {
     required this.workout,
   });
 
+  @override
+  State<DayDetailScreen> createState() => _DayDetailScreenState();
+}
+
+class _DayDetailScreenState extends State<DayDetailScreen> {
+  bool _isWorkoutCompletedToday = false;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkWorkoutCompletion();
+  }
+
+  Future<void> _checkWorkoutCompletion() async {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    if (userProvider.currentUser != null) {
+      final now = DateTime.now();
+      final lastCompletion =
+          userProvider.currentUser!.lastWorkoutCompletionDate;
+      setState(() {
+        _isWorkoutCompletedToday =
+            lastCompletion != null && isSameDay(lastCompletion, now);
+      });
+    }
+  }
+
   Future<List<Exercise>> fetchExercises() async {
-    if (dayExercises.isEmpty) return [];
+    if (widget.dayExercises.isEmpty) return [];
     final exerciseIds =
-        dayExercises.map((e) => e['exerciseId'] as String).toList();
+        widget.dayExercises.map((e) => e['exerciseId'] as String).toList();
     final snapshot =
         await FirebaseFirestore.instance
             .collection('exercises')
@@ -43,6 +70,102 @@ class DayDetailScreen extends StatelessWidget {
     return 10000;
   }
 
+  Future<void> _finishWorkout(BuildContext context) async {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      if (userProvider.currentUser != null) {
+        final now = DateTime.now();
+        if (userProvider.currentUser!.lastWorkoutCompletionDate == null ||
+            !isSameDay(
+              userProvider.currentUser!.lastWorkoutCompletionDate!,
+              now,
+            )) {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(userProvider.firebaseUser!.uid)
+              .update({
+                'lastWorkoutCompletionDate': FieldValue.serverTimestamp(),
+                'workoutsCompleted': FieldValue.increment(1),
+              });
+
+          await userProvider.loadUserData(userProvider.firebaseUser!.uid);
+
+          if (!mounted) return;
+          scaffoldMessenger.showSnackBar(
+            SnackBar(
+              backgroundColor: colorScheme.primary,
+              content: Text(
+                "Workout completed! Return to Earn Points to claim your reward.",
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onPrimary,
+                ),
+              ),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          );
+
+          setState(() {
+            _isWorkoutCompletedToday = true;
+          });
+        } else {
+          scaffoldMessenger.showSnackBar(
+            SnackBar(
+              backgroundColor: colorScheme.error,
+              content: Text(
+                "Workout already completed today!",
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onError,
+                ),
+              ),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          backgroundColor: colorScheme.error,
+          content: Text(
+            "Failed to complete workout: $e",
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onError,
+            ),
+          ),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  bool isSameDay(DateTime date1, DateTime date2) {
+    return date1.day == date2.day &&
+        date1.month == date2.month &&
+        date1.year == date2.year;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -61,7 +184,7 @@ class DayDetailScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'DAY $dayNumber'.toUpperCase(),
+                  'DAY ${widget.dayNumber}'.toUpperCase(),
                   style: theme.textTheme.titleLarge?.copyWith(
                     color: colorScheme.onSurface,
                     fontWeight: FontWeight.bold,
@@ -79,7 +202,7 @@ class DayDetailScreen extends StatelessWidget {
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
                       child: Image.network(
-                        workout.image,
+                        widget.workout.image,
                         width: double.infinity,
                         height: 220,
                         fit: BoxFit.cover,
@@ -101,7 +224,7 @@ class DayDetailScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  workout.description,
+                  widget.workout.description,
                   style: theme.textTheme.bodyLarge?.copyWith(
                     color: colorScheme.onSurface,
                   ),
@@ -131,8 +254,8 @@ class DayDetailScreen extends StatelessWidget {
                       );
                     }
                     if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                      if (dayExercises.isNotEmpty &&
-                          dayExercises.every(
+                      if (widget.dayExercises.isNotEmpty &&
+                          widget.dayExercises.every(
                             (e) => e['exerciseId'].toString().contains('rest'),
                           )) {
                         return _buildRestDayMessage(theme, colorScheme);
@@ -152,9 +275,9 @@ class DayDetailScreen extends StatelessWidget {
                         ListView.builder(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
-                          itemCount: dayExercises.length,
+                          itemCount: widget.dayExercises.length,
                           itemBuilder: (context, index) {
-                            final config = dayExercises[index];
+                            final config = widget.dayExercises[index];
                             final exercise = exercises.firstWhere(
                               (e) => e.id == config['exerciseId'],
                               orElse:
@@ -176,12 +299,59 @@ class DayDetailScreen extends StatelessWidget {
                             );
                           },
                         ),
+                        const SizedBox(height: 20),
+                        if (widget.dayExercises.isNotEmpty &&
+                            !widget.dayExercises.every(
+                              (e) =>
+                                  e['exerciseId'].toString().contains('rest'),
+                            ))
+                          Align(
+                            alignment: Alignment.center,
+                            child: FilledButton(
+                              style: FilledButton.styleFrom(
+                                backgroundColor:
+                                    _isWorkoutCompletedToday
+                                        ? colorScheme.onSurfaceVariant
+                                            .withOpacity(0.5)
+                                        : colorScheme.primary,
+                                foregroundColor:
+                                    _isWorkoutCompletedToday
+                                        ? colorScheme.onSurface.withOpacity(0.6)
+                                        : colorScheme.onPrimary,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 24,
+                                  vertical: 12,
+                                ),
+                              ),
+                              onPressed:
+                                  _isWorkoutCompletedToday || _isLoading
+                                      ? null
+                                      : () => _finishWorkout(context),
+                              child:
+                                  _isLoading
+                                      ? SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          color: colorScheme.onPrimary,
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                      : Text(
+                                        _isWorkoutCompletedToday
+                                            ? "Completed Today"
+                                            : "Workout Completed",
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                            ),
+                          ),
                         const SizedBox(height: 80),
                       ],
                     );
                   },
                 ),
-                const SizedBox(height: 80),
               ],
             ),
           ),
@@ -205,7 +375,7 @@ class DayDetailScreen extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              "Step Goal for Day $dayNumber",
+              "Step Goal for Day ${widget.dayNumber}",
               style: theme.textTheme.titleMedium?.copyWith(
                 color: colorScheme.onSurface,
                 fontWeight: FontWeight.bold,
@@ -269,8 +439,8 @@ class DayDetailScreen extends StatelessWidget {
         navState?.setDetailScreen(
           ExerciseDetailScreen(
             exercise: exercise,
-            workout: workout,
-            dayNumber: dayNumber,
+            workout: widget.workout,
+            dayNumber: widget.dayNumber,
           ),
         );
       },

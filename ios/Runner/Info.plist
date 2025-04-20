@@ -4,6 +4,10 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>We need access to your step count to track your calories and provide rewards.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>We need access to your step count to track your calories and provide rewards.</string>
 	<key>CFBundleDisplayName</key>
 	<string>CashFit</string>
 	<key>CFBundleExecutable</key>
