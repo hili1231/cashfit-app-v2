@@ -1,11 +1,11 @@
-import 'dart:core';
 import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:logger/logger.dart';
-import 'package:firebase_messaging/firebase_messaging.dart'; // Add FCM dependency
+import 'package:firebase_messaging/firebase_messaging.dart';
 import '../models/app_user.dart';
 
 class UserProvider with ChangeNotifier {
@@ -37,7 +37,7 @@ class UserProvider with ChangeNotifier {
       if (user != null) {
         _logger.i("Auth state changed: User logged in with UID: ${user.uid}");
         loadUserData(user.uid);
-        _refreshFcmToken(user.uid); // Refresh FCM token on login
+        _refreshFcmToken(user.uid);
       } else {
         _logger.i("Auth state changed: User logged out");
         _currentUser = null;
@@ -49,12 +49,14 @@ class UserProvider with ChangeNotifier {
       }
     });
 
-    // Listen for FCM token refresh
-    FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
-      if (isLoggedIn && firebaseUser != null) {
-        _logger.i("FCM token refreshed: $newToken");
-        _updateFcmToken(firebaseUser!.uid, newToken);
-      }
+    _supportsFcm.then((enabled) {
+      if (!enabled) return;
+      FirebaseMessaging.instance.onTokenRefresh.listen((token) {
+        if (isLoggedIn && firebaseUser != null) {
+          _logger.i('FCM token refreshed: $token');
+          _updateFcmToken(firebaseUser!.uid, token);
+        }
+      });
     });
   }
 
@@ -83,11 +85,13 @@ class UserProvider with ChangeNotifier {
     }
   }
 
-  Future<void> loadUserData(String uid) async {
+  Future<void> loadUserData(String uid, {bool silent = false}) async {
     try {
-      _isLoading = true;
-      _errorMessage = null;
-      notifyListeners();
+      if (!silent) {
+        _isLoading = true;
+        _errorMessage = null;
+        notifyListeners();
+      }
 
       final snapshot =
           await FirebaseFirestore.instance.collection('users').doc(uid).get();
@@ -174,7 +178,7 @@ class UserProvider with ChangeNotifier {
           notificationsEnabled: true,
           dailyReminderTime: "08:00",
           weeklyReminderTime: "09:00",
-          fcmToken: await _messaging.getToken(),
+          fcmToken: await _safeFcmToken(),
           lastCheckIn: null,
           dailyAdsWatched: 0,
           lastAdsWatchedDate: null,
@@ -202,10 +206,15 @@ class UserProvider with ChangeNotifier {
       _errorMessage = e.toString();
       _currentUser = null;
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (!silent) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
+
+  Future<void> refreshUser() async =>
+      loadUserData(firebaseUser!.uid, silent: true);
 
   Future<void> updateUserFields(Map<String, dynamic> updates) async {
     if (!isLoggedIn || firebaseUser == null) {
@@ -280,6 +289,7 @@ class UserProvider with ChangeNotifier {
   }
 
   Future<void> updateProfileFields({
+    required String name,
     required String gender,
     required String age,
     required String height,
@@ -298,6 +308,7 @@ class UserProvider with ChangeNotifier {
       notifyListeners();
 
       final updates = {
+        'name': name,
         'gender': gender,
         'age': age,
         'height': height,
@@ -321,6 +332,84 @@ class UserProvider with ChangeNotifier {
       notifyListeners();
     } finally {
       _isSaving = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateStreak() async {
+    if (!isLoggedIn || firebaseUser == null || _currentUser == null) {
+      _errorMessage = "User not logged in";
+      notifyListeners();
+      return;
+    }
+
+    try {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      DateTime? lastActivityDate;
+
+      // Determine the most recent activity date
+      final activityDates =
+          [
+            _currentUser!.lastCheckIn,
+            _currentUser!.lastWorkoutCompletionDate,
+            _currentUser!.lastMealPlanCompletionDate,
+            _currentUser!.lastStepGoalCompletionDate,
+          ].where((date) => date != null).toList();
+
+      if (activityDates.isNotEmpty) {
+        lastActivityDate = activityDates.reduce(
+          (a, b) => a!.isAfter(b!) ? a : b,
+        );
+      }
+
+      int newStreak = _currentUser!.checkInStreak;
+
+      if (lastActivityDate != null) {
+        final lastActivityDay = DateTime(
+          lastActivityDate.year,
+          lastActivityDate.month,
+          lastActivityDate.day,
+        );
+
+        if (today.isAfter(lastActivityDay)) {
+          // Check if today is the next day after the last activity
+          if (today.difference(lastActivityDay).inDays == 1) {
+            newStreak += 1;
+          } else {
+            // More than one day has passed, reset streak
+            newStreak = 1;
+          }
+        } else if (today == lastActivityDay) {
+          // Same day, keep streak
+          newStreak = newStreak;
+        } else {
+          // Last activity is in the future (unlikely), reset
+          newStreak = 1;
+        }
+      } else {
+        // No previous activity, start streak
+        newStreak = 1;
+      }
+
+      // Update Firestore
+      final updates = {
+        'checkInStreak': newStreak,
+      };
+
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(firebaseUser!.uid)
+          .update(updates);
+
+      if (_currentUser != null) {
+        final updatedMap = {..._currentUser!.toMap(), ...updates};
+        _currentUser = AppUser.fromMap(updatedMap);
+      }
+      notifyListeners();
+    } catch (e) {
+      _logger.e("Error updating streak: $e");
+      _errorMessage = e.toString();
       notifyListeners();
     }
   }
@@ -377,21 +466,55 @@ class UserProvider with ChangeNotifier {
           .update(updates);
 
       if (_currentUser != null) {
-        await loadUserData(firebaseUser!.uid);
+        // Manually update _currentUser to avoid FieldValue type issues
+        final currentMap = _currentUser!.toMap();
+        currentMap['points'] = (_currentUser!.points ?? 0) + points;
+        currentMap['claimedRewards'] = {
+          ...(_currentUser!.claimedRewards),
+          taskId: {'claimed': true, 'lastClaimed': Timestamp.now()},
+        };
+
+        if (taskId == 'daily_check_in') {
+          currentMap['lastCheckIn'] = Timestamp.now();
+          currentMap['checkInStreak'] = (_currentUser!.checkInStreak) + 1;
+        } else if (taskId == 'complete_workout') {
+          currentMap['lastWorkoutCompletionDate'] = Timestamp.now();
+          currentMap['workoutsCompleted'] =
+              (_currentUser!.workoutsCompleted) + 1;
+        } else if (taskId == 'complete_meal_plan') {
+          currentMap['lastMealPlanCompletionDate'] = Timestamp.now();
+          currentMap['mealsTracked'] = (_currentUser!.mealsTracked) + 1;
+        } else if (taskId == 'daily_step_goal') {
+          currentMap['lastStepGoalCompletionDate'] = Timestamp.now();
+        } else if (taskId == 'update_weight') {
+          currentMap['lastWeightUpdateDate'] = Timestamp.now();
+          if (badge != null) {
+            currentMap['badges'] = [...(currentMap['badges'] ?? []), badge];
+          }
+        } else if ([
+          'build_profile',
+          'share_progress',
+          'join_challenge',
+          'complete_side_hustle',
+        ].contains(taskId)) {
+          currentMap['completedOneOffIds'] = [
+            ...(currentMap['completedOneOffIds'] ?? []),
+            taskId,
+          ];
+          if (badge != null) {
+            currentMap['badges'] = [...(currentMap['badges'] ?? []), badge];
+          }
+        }
+
+        _currentUser = AppUser.fromMap(currentMap);
+        notifyListeners();
       }
-      notifyListeners();
     } catch (e) {
       _logger.e("Error claiming reward: $e");
       _errorMessage = e.toString();
       notifyListeners();
       rethrow;
     }
-  }
-
-  bool _isSameDay(DateTime date1, DateTime date2) {
-    return date1.day == date2.day &&
-        date1.month == date2.month &&
-        date1.year == date2.year;
   }
 
   Future<void> updateWeight(String weight) async {
@@ -414,6 +537,7 @@ class UserProvider with ChangeNotifier {
 
       final updates = {
         'weight': weight,
+        'lastWeightUpdateDate': FieldValue.serverTimestamp(),
         'weightHistory': FieldValue.arrayUnion([weightEntry]),
       };
 
@@ -423,7 +547,7 @@ class UserProvider with ChangeNotifier {
           .update(updates);
 
       if (_currentUser != null) {
-        await loadUserData(firebaseUser!.uid);
+        await loadUserData(firebaseUser!.uid, silent: true);
       }
       notifyListeners();
     } catch (e) {
@@ -489,6 +613,29 @@ class UserProvider with ChangeNotifier {
     _isSaving = false;
     _themeMode = ThemeMode.dark;
     notifyListeners();
+  }
+
+  Future<bool> get _supportsFcm async {
+    try {
+      await FirebaseMessaging.instance.getToken();
+      return true;
+    } on MissingPluginException {
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<String?> _safeFcmToken() async {
+    try {
+      return await FirebaseMessaging.instance.getToken();
+    } on MissingPluginException {
+      _logger.w('FCM plugin not available on this platform – skipping token');
+      return null;
+    } catch (e) {
+      _logger.e('Unexpected FCM error: $e');
+      return null;
+    }
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {

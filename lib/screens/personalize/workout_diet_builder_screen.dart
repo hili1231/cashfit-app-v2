@@ -389,8 +389,8 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
         user: currentUser,
         totalDays: totalDays,
         mealFrequency: mealFrequency ?? 3,
-        // ignore: use_build_context_synchronously
         mealTimes: mealTimes,
+        // ignore: use_build_context_synchronously
         context: context,
       );
 

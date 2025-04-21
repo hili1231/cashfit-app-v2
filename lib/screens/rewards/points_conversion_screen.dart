@@ -320,6 +320,8 @@ class _PointsConversionScreenState extends State<PointsConversionScreen> {
   // ── UI ──────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final userProv = context.watch<UserProvider>();
     final cs = Theme.of(context).colorScheme;
     final txt = Theme.of(context).textTheme;
@@ -346,10 +348,11 @@ class _PointsConversionScreenState extends State<PointsConversionScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Convert FitCoins',
-                        style: txt.headlineSmall?.copyWith(
+                        'CONVERT FitCoins',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          color: colorScheme.onSurface,
                           fontWeight: FontWeight.bold,
-                          color: cs.onSurface,
+                          fontSize: 20,
                         ),
                       ),
                       IconButton(
@@ -359,7 +362,6 @@ class _PointsConversionScreenState extends State<PointsConversionScreen> {
                           context
                               .findAncestorStateOfType<NavScreenState>()
                               ?.clearDetailScreen();
-                          Navigator.pop(context);
                         },
                       ),
                     ],
@@ -374,7 +376,7 @@ class _PointsConversionScreenState extends State<PointsConversionScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Conversion rate · 5 000 FitCoins = \$1',
+                          'Conversion rate · 5 000 FitCoins = \$1',
                           style: txt.bodyMedium?.copyWith(
                             color: cs.onSurfaceVariant,
                           ),
@@ -424,7 +426,7 @@ class _PointsConversionScreenState extends State<PointsConversionScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // ── Recent Withdrawals ─────────────────────────────────--
+                  // ── Recent Withdrawals ───────────────────────────────────
                   if (_withdrawals.isNotEmpty) ...[
                     Text(
                       'Recent withdrawals',
@@ -453,37 +455,32 @@ class _PointsConversionScreenState extends State<PointsConversionScreen> {
   }) {
     final cs = Theme.of(context).colorScheme;
     final txt = Theme.of(context).textTheme;
-    return AnimatedCard(
-      child: Card(
-        elevation: 4,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Image.asset('assets/images/fitcoin_icon.png', width: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    title,
-                    style: txt.titleLarge?.copyWith(
-                      color: cs.onSurface,
-                      fontWeight: FontWeight.bold,
-                    ),
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Image.asset('assets/images/fitcoin_icon.png', width: 20),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: txt.titleLarge?.copyWith(
+                    color: cs.onSurface,
+                    fontWeight: FontWeight.bold,
                   ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                subtitle,
-                style: txt.bodyLarge?.copyWith(color: cs.onSurface),
-              ),
-              const Divider(height: 24),
-              child,
-            ],
-          ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(subtitle, style: txt.bodyLarge?.copyWith(color: cs.onSurface)),
+            const Divider(height: 24),
+            child,
+          ],
         ),
       ),
     );

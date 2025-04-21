@@ -7,8 +7,8 @@ import '../theme.dart';
 
 class WorkoutCard extends StatelessWidget {
   final WorkoutProgram workout;
-  final int? currentDay; // Optional current day for active workouts
-  final VoidCallback? onDayButtonPressed; // Callback for day button action
+  final int? currentDay;
+  final VoidCallback? onDayButtonPressed;
 
   const WorkoutCard({
     super.key,

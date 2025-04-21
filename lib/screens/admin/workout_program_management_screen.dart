@@ -181,6 +181,7 @@ class _AdminWorkoutProgramManagementScreenState
       }
 
       await loadWorkoutPrograms();
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('✅ CSV Uploaded and Programs Processed!')),
       );

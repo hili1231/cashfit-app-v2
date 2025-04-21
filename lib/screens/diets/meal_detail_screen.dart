@@ -4,8 +4,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../models/meal.dart';
 import '../../models/meal_day.dart';
 import '../../models/meal_plan.dart';
-import '../nav_screen.dart';
-import 'diet_day_detail_screen.dart';
 
 class MealDetailScreen extends StatefulWidget {
   final MealPlan plan;
@@ -26,7 +24,6 @@ class MealDetailScreen extends StatefulWidget {
 class MealDetailScreenState extends State<MealDetailScreen> {
   VideoPlayerController? _videoController;
   late Meal _cachedMeal;
-  late ColorScheme colorScheme; // Define colorScheme as a class-level variable
 
   bool get isVideo => widget.meal.image.toLowerCase().endsWith('.mp4');
 
@@ -35,9 +32,6 @@ class MealDetailScreenState extends State<MealDetailScreen> {
     super.initState();
     // Cache the meal data once on initialization
     _cachedMeal = widget.meal;
-
-    // Initialize colorScheme in initState
-    colorScheme = Theme.of(context).colorScheme;
 
     // Initialize video if applicable
     if (isVideo) {
@@ -67,43 +61,28 @@ class MealDetailScreenState extends State<MealDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    // Note: We already have colorScheme at class level, but let's keep it here for consistency
-    // with other methods that expect it as a parameter
-    final colorScheme = this.colorScheme;
+    final colorScheme = theme.colorScheme;
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
-      appBar: AppBar(
-        title: Text(
-          _cachedMeal.name.toUpperCase(),
-          style: theme.textTheme.titleLarge?.copyWith(
-            color: colorScheme.onSurface,
-            fontWeight: FontWeight.bold,
-            fontSize: 22,
-          ),
-        ),
-        centerTitle: true,
-        backgroundColor: colorScheme.surface,
-        elevation: 2,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: colorScheme.onSurface),
-          onPressed: () {
-            final navState = context.findAncestorStateOfType<NavScreenState>();
-            if (navState != null) {
-              navState.setDetailScreen(
-                DietDayDetailScreen(plan: widget.plan, day: widget.day),
-              );
-            } else {
-              Navigator.pop(context);
-            }
-          },
-        ),
-      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                _cachedMeal.name.toUpperCase(),
+                style: theme.textTheme.titleLarge?.copyWith(
+                  color: colorScheme.onSurface,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 20,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: isVideo ? _buildVideoPlayer() : _buildImage(colorScheme),
@@ -139,6 +118,7 @@ class MealDetailScreenState extends State<MealDetailScreen> {
   }
 
   Widget _buildVideoPlayer() {
+    final colorScheme = Theme.of(context).colorScheme;
     if (_videoController != null && _videoController!.value.isInitialized) {
       return AspectRatio(
         aspectRatio: _videoController!.value.aspectRatio,

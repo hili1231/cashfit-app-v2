@@ -4,6 +4,7 @@ import '../auth/login_screen.dart';
 import '../providers/user_provider.dart';
 import 'home_screen.dart';
 import 'workouts/workouts_screen.dart';
+import 'workouts/workout_detail_screen.dart';
 import 'diets/diet_selector_screen.dart';
 import 'community_feed/community_feed_screen.dart';
 import 'side_hustle/side_hustle_screen.dart';
@@ -18,14 +19,14 @@ enum FitCoinButtonStyle { filled, outlined, text, greyFilled }
 // Custom widget for FitCoin buttons (filled, outlined, text, grey-filled)
 class FitCoinButton extends StatelessWidget {
   final String label;
-  final IconData icon;
+  final IconData? icon;
   final VoidCallback? onPressed;
   final FitCoinButtonStyle style;
 
   const FitCoinButton({
     super.key,
     required this.label,
-    required this.icon,
+    this.icon,
     this.onPressed,
     required this.style,
   });
@@ -34,34 +35,66 @@ class FitCoinButton extends StatelessWidget {
   Widget build(BuildContext context) {
     switch (style) {
       case FitCoinButtonStyle.filled:
-        return FilledButton.icon(
+        return FilledButton(
           onPressed: onPressed,
-          icon: Icon(icon, size: 16),
-          label: Text(label),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 16),
+                const SizedBox(width: 8),
+              ],
+              Text(label),
+            ],
+          ),
         );
       case FitCoinButtonStyle.outlined:
-        return OutlinedButton.icon(
+        return OutlinedButton(
           onPressed: onPressed,
-          icon: Icon(
-            icon,
-            size: 16,
-            color: Theme.of(context).colorScheme.primary,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(
+                  icon,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+              ],
+              Text(label),
+            ],
           ),
-          label: Text(label),
         );
       case FitCoinButtonStyle.text:
-        return TextButton.icon(
+        return TextButton(
           onPressed: onPressed,
-          icon: Icon(icon, size: 16),
-          label: Text(label),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 16),
+                const SizedBox(width: 8),
+              ],
+              Text(label),
+            ],
+          ),
         );
       case FitCoinButtonStyle.greyFilled:
         final greyTheme = Theme.of(context).extension<GreyFilledButtonTheme>();
-        return FilledButton.icon(
+        return FilledButton(
           style: greyTheme?.style,
           onPressed: onPressed,
-          icon: Icon(icon, size: 16),
-          label: Text(label),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 16),
+                const SizedBox(width: 8),
+              ],
+              Text(label),
+            ],
+          ),
         );
     }
   }
@@ -75,8 +108,9 @@ class NavScreen extends StatefulWidget {
 }
 
 class NavScreenState extends State<NavScreen> {
-  final PageController _pageController = PageController();
+  static const earnPageKey = ValueKey('earn-fitcoins');
   int selectedIndex = 0;
+  late final PageController _pageController;
   Widget? detailScreen;
   final List<Widget> detailStack = [];
 
@@ -88,18 +122,71 @@ class NavScreenState extends State<NavScreen> {
     const SideHustleScreen(),
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: selectedIndex);
+  }
+
   void onItemTapped(int index) {
+    if (selectedIndex == index && detailScreen == null) {
+      // Already on the selected tab with no detail screen, do nothing
+      return;
+    }
+
     setState(() {
       selectedIndex = index;
       detailScreen = null;
       detailStack.clear();
     });
-    _pageController.jumpToPage(index);
+
+    // Defer navigation to ensure PageView is rendered
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_pageController.hasClients) {
+        _pageController.jumpToPage(index);
+      } else {
+        debugPrint(
+          'PageController not attached, navigation deferred to index: $index',
+        );
+      }
+    });
   }
 
   void clearDetailScreen() {
     setState(() {
-      detailScreen = detailStack.isNotEmpty ? detailStack.removeLast() : null;
+      if (detailScreen is WorkoutDetailScreen ||
+          detailScreen is DeactivatedWorkoutsScreen) {
+        selectedIndex = 1; // Workouts tab index
+        detailScreen = null;
+        detailStack.clear();
+        // Defer jumpToPage until after the PageView is rendered
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_pageController.hasClients) {
+            _pageController.jumpToPage(1);
+          }
+        });
+      } else {
+        detailScreen = detailStack.isNotEmpty ? detailStack.removeLast() : null;
+      }
+    });
+  }
+
+  void clearDetailAndGoTo(int tabIndex) {
+    setState(() {
+      detailScreen = null;
+      detailStack.clear();
+      selectedIndex = tabIndex;
+    });
+
+    // Now that the PageView is rebuilt, we can safely jump
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_pageController.hasClients) {
+        _pageController.jumpToPage(tabIndex);
+      } else {
+        debugPrint(
+          'PageController not attached, navigation deferred to index: $tabIndex',
+        );
+      }
     });
   }
 
@@ -115,6 +202,12 @@ class NavScreenState extends State<NavScreen> {
       if (detailScreen != null) detailStack.add(detailScreen!);
       detailScreen = screen;
     });
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
   }
 
   @override
@@ -204,34 +297,37 @@ class NavScreenState extends State<NavScreen> {
                 children: _screens,
               ),
         ),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: selectedIndex,
-          onDestinationSelected: onItemTapped,
-          backgroundColor: colorScheme.surface,
-          elevation: 5,
-          labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
-          destinations: const [
-            NavigationDestination(
-              icon: Icon(Icons.home_rounded, size: 28),
-              label: "Home",
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.fitness_center_rounded, size: 28),
-              label: "Workouts",
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.lunch_dining, size: 28),
-              label: "Diet",
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.people, size: 28),
-              label: "Community",
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.monetization_on_rounded, size: 28),
-              label: "Side Hustles",
-            ),
-          ],
+        bottomNavigationBar: NavigationBarTheme(
+          data: NavigationBarThemeData(indicatorColor: Colors.transparent),
+          child: NavigationBar(
+            selectedIndex: selectedIndex,
+            onDestinationSelected: onItemTapped,
+            backgroundColor: colorScheme.surface,
+            elevation: 5,
+            labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
+            destinations: const [
+              NavigationDestination(
+                icon: Icon(Icons.home_rounded, size: 28),
+                label: "Home",
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.fitness_center_rounded, size: 28),
+                label: "Workouts",
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.lunch_dining, size: 28),
+                label: "Diet",
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.people, size: 28),
+                label: "Community",
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.monetization_on_rounded, size: 28),
+                label: "Side Hustles",
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -261,15 +357,17 @@ class NavScreenState extends State<NavScreen> {
             ),
             FitCoinButton(
               label: "FitCoins to Cash",
-              icon: Icons.swap_horiz,
               onPressed: () => setDetailScreen(const PointsConversionScreen()),
-              style: FitCoinButtonStyle.filled,
+              style: FitCoinButtonStyle.outlined,
             ),
             const SizedBox(width: 8),
             FitCoinButton(
-              label: "Earn FitCoins",
-              icon: Icons.add_circle_outline,
-              onPressed: () => setDetailScreen(const EarnPointsScreen()),
+              label: 'Earn FitCoins',
+              onPressed: () {
+                setDetailScreen(
+                  const EarnPointsScreen(key: NavScreenState.earnPageKey),
+                );
+              },
               style: FitCoinButtonStyle.outlined,
             ),
           ],

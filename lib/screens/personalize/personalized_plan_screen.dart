@@ -132,13 +132,13 @@ class _PersonalizedPlanScreenState extends State<PersonalizedPlanScreen> {
                                     .findAncestorStateOfType<NavScreenState>();
                             if (navState != null) {
                               navState.setDetailScreen(
-                                MealPlanScreen(selectedPlan: mealPlan!),
+                                MealPlanScreen(plan: mealPlan!),
                               );
                             } else {
                               Navigator.push(
                                 context,
                                 AppTheme.createPageRoute(
-                                  MealPlanScreen(selectedPlan: mealPlan!),
+                                  MealPlanScreen(plan: mealPlan!),
                                 ),
                               );
                             }

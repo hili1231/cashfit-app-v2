@@ -120,6 +120,8 @@ class AdminDashboardScreenState extends State<AdminDashboardScreen> {
             final user = users[index];
             final theme = Theme.of(context);
             final colorScheme = theme.colorScheme;
+            // Store ScaffoldMessengerState before async operation
+            final scaffoldMessenger = ScaffoldMessenger.of(context);
 
             return Card(
               color: colorScheme.surfaceContainer,
@@ -153,8 +155,7 @@ class AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         ? TextButton(
                           onPressed: () async {
                             await _authService.unbanUser(user.id);
-                            if (!mounted) return; // Guard context usage
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            scaffoldMessenger.showSnackBar(
                               SnackBar(
                                 content: Text("${user.name} unbanned"),
                                 backgroundColor: colorScheme.secondary,
@@ -171,8 +172,7 @@ class AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         : TextButton(
                           onPressed: () async {
                             await _authService.banUser(user.id);
-                            if (!mounted) return; // Guard context usage
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            scaffoldMessenger.showSnackBar(
                               SnackBar(
                                 content: Text("${user.name} banned"),
                                 backgroundColor: colorScheme.error,
@@ -227,6 +227,8 @@ class AdminDashboardScreenState extends State<AdminDashboardScreen> {
             final challenge = challenges[index];
             final theme = Theme.of(context);
             final colorScheme = theme.colorScheme;
+            // Store ScaffoldMessengerState before async operation
+            final scaffoldMessenger = ScaffoldMessenger.of(context);
 
             return Card(
               color: colorScheme.surfaceContainer,
@@ -251,8 +253,7 @@ class AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 trailing: TextButton(
                   onPressed: () async {
                     await _authService.deleteChallenge(challenge.id);
-                    if (!mounted) return; // Guard context usage
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    scaffoldMessenger.showSnackBar(
                       SnackBar(
                         content: Text("${challenge.name} deleted"),
                         backgroundColor: colorScheme.error,
@@ -339,6 +340,8 @@ class AdminDashboardScreenState extends State<AdminDashboardScreen> {
             final reason = doc['reason'] ?? 'No reason provided';
             final theme = Theme.of(context);
             final colorScheme = theme.colorScheme;
+            // Store ScaffoldMessengerState before async operation
+            final scaffoldMessenger = ScaffoldMessenger.of(context);
 
             return Card(
               color: colorScheme.surfaceContainer,
@@ -366,8 +369,7 @@ class AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     TextButton(
                       onPressed: () async {
                         await _authService.banUser(userId);
-                        if (!mounted) return; // Guard context usage
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        scaffoldMessenger.showSnackBar(
                           SnackBar(
                             content: Text("User $userId banned"),
                             backgroundColor: colorScheme.error,
@@ -384,8 +386,7 @@ class AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     TextButton(
                       onPressed: () async {
                         await _authService.dismissFlag(userId);
-                        if (!mounted) return; // Guard context usage
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        scaffoldMessenger.showSnackBar(
                           SnackBar(
                             content: Text("Flag for user $userId dismissed"),
                             backgroundColor: colorScheme.secondary,
@@ -438,6 +439,8 @@ class AdminDashboardScreenState extends State<AdminDashboardScreen> {
             final reason = doc['reason'] ?? 'No reason provided';
             final theme = Theme.of(context);
             final colorScheme = theme.colorScheme;
+            // Store ScaffoldMessengerState before async operation
+            final scaffoldMessenger = ScaffoldMessenger.of(context);
 
             return Card(
               color: colorScheme.surfaceContainer,
@@ -465,8 +468,7 @@ class AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     TextButton(
                       onPressed: () async {
                         await _authService.deletePost(postId);
-                        if (!mounted) return; // Guard context usage
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        scaffoldMessenger.showSnackBar(
                           SnackBar(
                             content: Text("Post $postId deleted"),
                             backgroundColor: colorScheme.error,
@@ -483,8 +485,7 @@ class AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     TextButton(
                       onPressed: () async {
                         await _authService.dismissReportedPost(postId);
-                        if (!mounted) return; // Guard context usage
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        scaffoldMessenger.showSnackBar(
                           SnackBar(
                             content: Text("Report for post $postId dismissed"),
                             backgroundColor: colorScheme.secondary,

@@ -36,6 +36,7 @@ class ChallengeSignUpScreenState extends State<ChallengeSignUpScreen> {
         widget.challenge,
       );
       AdHelper.showInterstitialAd(
+        // ignore: use_build_context_synchronously
         context,
       ); // Show ad after sign-up for non-premium users
       if (!mounted) return; // Guard context usage
@@ -56,7 +57,10 @@ class ChallengeSignUpScreenState extends State<ChallengeSignUpScreen> {
         ),
       );
     } finally {
-      if (!mounted) return; // Guard context usage
+      if (!mounted) {
+        // ignore: control_flow_in_finally
+        return; // Guard context usage
+      }
       setState(() {
         isSigningUp = false;
       });

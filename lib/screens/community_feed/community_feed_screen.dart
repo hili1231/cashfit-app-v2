@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -21,8 +20,6 @@ class CommunityFeedScreenState extends State<CommunityFeedScreen> {
   final TextEditingController _commentController = TextEditingController();
   final TextEditingController _usernameController = TextEditingController();
   bool isPosting = false;
-  StreamController<List<Post>>? _postsStreamController;
-  bool _isStreamInitialized = false;
 
   @override
   void initState() {
@@ -32,7 +29,6 @@ class CommunityFeedScreenState extends State<CommunityFeedScreen> {
       persistenceEnabled: true,
       cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
     );
-    _setupPostsStream();
   }
 
   @override
@@ -40,65 +36,7 @@ class CommunityFeedScreenState extends State<CommunityFeedScreen> {
     _postController.dispose();
     _commentController.dispose();
     _usernameController.dispose();
-    _postsStreamController?.close();
     super.dispose();
-  }
-
-  void _setupPostsStream() {
-    _postsStreamController = StreamController<List<Post>>.broadcast();
-
-    // Use withConverter to specify the document type
-    Future.microtask(() async {
-      await Future.delayed(
-        const Duration(milliseconds: 500),
-      ); // Ensure Firestore readiness
-      try {
-        final stream =
-            FirebaseFirestore.instance
-                .collection('posts')
-                .orderBy('timestamp', descending: true)
-                .withConverter<Map<String, dynamic>>(
-                  fromFirestore: (snapshot, _) => snapshot.data()!,
-                  toFirestore: (data, _) => data,
-                )
-                .snapshots();
-
-        stream.listen(
-          (QuerySnapshot<Map<String, dynamic>> snapshot) {
-            Future.microtask(() {
-              if (!_postsStreamController!.isClosed) {
-                final posts =
-                    snapshot.docs
-                        .map((doc) => Post.fromMap(doc.data()))
-                        .toList();
-                print("Stream received ${posts.length} posts");
-                _postsStreamController!.add(posts);
-              }
-            });
-          },
-          onError: (error) {
-            Future.microtask(() {
-              if (!_postsStreamController!.isClosed) {
-                print("Stream error: $error");
-                _postsStreamController!.addError(error);
-              }
-            });
-          },
-          onDone: () {
-            print("Firestore stream closed");
-          },
-        );
-
-        setState(() {
-          _isStreamInitialized = true;
-        });
-      } catch (e) {
-        print("Error initializing stream: $e");
-        if (!_postsStreamController!.isClosed) {
-          _postsStreamController!.addError(e);
-        }
-      }
-    });
   }
 
   Future<bool> _checkAndPromptForUsername(UserProvider userProvider) async {
@@ -212,15 +150,12 @@ class CommunityFeedScreenState extends State<CommunityFeedScreen> {
     });
 
     try {
-      print("Creating post with content: ${_postController.text}");
-      await Future.microtask(() async {
-        await _authService.createPost(
-          userId: userProvider.currentUser!.id,
-          userName: userProvider.currentUser!.name,
-          userAvatar: userProvider.currentUser!.avatar,
-          content: _postController.text,
-        );
-      });
+      await _authService.createPost(
+        userId: userProvider.currentUser!.id,
+        userName: userProvider.currentUser!.name,
+        userAvatar: userProvider.currentUser!.avatar,
+        content: _postController.text,
+      );
 
       _postController.clear();
       if (mounted) {
@@ -241,7 +176,6 @@ class CommunityFeedScreenState extends State<CommunityFeedScreen> {
         );
       }
     } catch (e) {
-      print("Error creating post: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -295,12 +229,12 @@ class CommunityFeedScreenState extends State<CommunityFeedScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                // Post Creation Section (Reduced size)
+                // Post Creation Section
                 Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 8,
-                  ), // Reduced padding
+                  ),
                   child: Column(
                     children: [
                       TextField(
@@ -320,7 +254,7 @@ class CommunityFeedScreenState extends State<CommunityFeedScreen> {
                             borderSide: BorderSide.none,
                           ),
                         ),
-                        maxLines: 2, // Reduced from 3 to 2
+                        maxLines: 2,
                       ),
                       const SizedBox(height: 8),
                       ElevatedButton(
@@ -349,33 +283,14 @@ class CommunityFeedScreenState extends State<CommunityFeedScreen> {
                   ),
                 ),
                 // Feed Section
-                StreamBuilder<List<Post>>(
-                  stream: _postsStreamController?.stream,
+                StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream:
+                      FirebaseFirestore.instance
+                          .collection('posts')
+                          .orderBy('timestamp', descending: true)
+                          .snapshots(),
                   builder: (context, snapshot) {
-                    if (!_isStreamInitialized) {
-                      print("StreamBuilder: Stream not yet initialized");
-                      return Container(
-                        decoration: AppTheme.backgroundGradient(colorScheme),
-                        child: Center(
-                          child: CircularProgressIndicator(
-                            color: colorScheme.primary,
-                          ),
-                        ),
-                      );
-                    }
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      print("StreamBuilder: Waiting for data...");
-                      return Container(
-                        decoration: AppTheme.backgroundGradient(colorScheme),
-                        child: Center(
-                          child: CircularProgressIndicator(
-                            color: colorScheme.primary,
-                          ),
-                        ),
-                      );
-                    }
                     if (snapshot.hasError) {
-                      print("StreamBuilder error: ${snapshot.error}");
                       return Center(
                         child: Text(
                           "Error loading posts: ${snapshot.error}",
@@ -385,8 +300,21 @@ class CommunityFeedScreenState extends State<CommunityFeedScreen> {
                         ),
                       );
                     }
-                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                      print("StreamBuilder: No data or empty posts");
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return Container(
+                        decoration: AppTheme.backgroundGradient(colorScheme),
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            color: colorScheme.primary,
+                          ),
+                        ),
+                      );
+                    }
+                    final posts =
+                        snapshot.data!.docs
+                            .map((doc) => Post.fromMap(doc.data()))
+                            .toList();
+                    if (posts.isEmpty) {
                       return Center(
                         child: Text(
                           "No posts yet. Be the first to share!",
@@ -397,14 +325,10 @@ class CommunityFeedScreenState extends State<CommunityFeedScreen> {
                       );
                     }
 
-                    final posts = snapshot.data!;
-
                     return ListView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      padding: const EdgeInsets.only(
-                        bottom: 80,
-                      ), // Ensure last post is fully visible
+                      padding: const EdgeInsets.only(bottom: 80),
                       itemCount: posts.length,
                       itemBuilder: (context, index) {
                         return _buildPostCard(
@@ -417,7 +341,7 @@ class CommunityFeedScreenState extends State<CommunityFeedScreen> {
                     );
                   },
                 ),
-                const SizedBox(height: 16), // Extra padding at the bottom
+                const SizedBox(height: 16),
               ],
             ),
           ),
@@ -543,19 +467,14 @@ class CommunityFeedScreenState extends State<CommunityFeedScreen> {
                           user == null
                               ? null
                               : () async {
-                                await Future.microtask(() async {
-                                  if (isLiked) {
-                                    await _authService.unlikePost(
-                                      post.id,
-                                      user.id,
-                                    );
-                                  } else {
-                                    await _authService.likePost(
-                                      post.id,
-                                      user.id,
-                                    );
-                                  }
-                                });
+                                if (isLiked) {
+                                  await _authService.unlikePost(
+                                    post.id,
+                                    user.id,
+                                  );
+                                } else {
+                                  await _authService.likePost(post.id, user.id);
+                                }
                               },
                     ),
                     Text(
@@ -581,13 +500,11 @@ class CommunityFeedScreenState extends State<CommunityFeedScreen> {
                               colorScheme,
                             );
                             if (reason != null) {
-                              await Future.microtask(() async {
-                                await _authService.reportPost(
-                                  post.id,
-                                  user.id,
-                                  reason,
-                                );
-                              });
+                              await _authService.reportPost(
+                                post.id,
+                                user.id,
+                                reason,
+                              );
                               if (mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
@@ -672,14 +589,12 @@ class CommunityFeedScreenState extends State<CommunityFeedScreen> {
                         user == null || _commentController.text.isEmpty
                             ? null
                             : () async {
-                              await Future.microtask(() async {
-                                await _authService.addComment(
-                                  post.id,
-                                  user.id,
-                                  user.name,
-                                  _commentController.text,
-                                );
-                              });
+                              await _authService.addComment(
+                                post.id,
+                                user.id,
+                                user.name,
+                                _commentController.text,
+                              );
                               _commentController.clear();
                             },
                   ),

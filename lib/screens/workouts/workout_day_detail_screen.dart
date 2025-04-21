@@ -1,11 +1,14 @@
 import 'package:cashfit/providers/user_provider.dart';
+import 'package:cashfit/screens/workouts/workout_repository.dart';
+import 'package:cashfit/widgets/step_counter.dart';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../../models/workout_program.dart';
 import '../../models/exercise.dart';
-import 'exercise_detail_screen.dart';
 import '../nav_screen.dart';
+import 'exercise_detail_screen.dart';
+
+enum DayStatus { notDone, doneToday, doneEarlier }
 
 class DayDetailScreen extends StatefulWidget {
   final int dayNumber;
@@ -24,146 +27,102 @@ class DayDetailScreen extends StatefulWidget {
 }
 
 class _DayDetailScreenState extends State<DayDetailScreen> {
-  bool _isWorkoutCompletedToday = false;
   bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _checkWorkoutCompletion();
   }
 
-  Future<void> _checkWorkoutCompletion() async {
+  Future<void> _toggleDayCompleted(BuildContext context, bool markDone) async {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
-    if (userProvider.currentUser != null) {
-      final now = DateTime.now();
-      final lastCompletion =
-          userProvider.currentUser!.lastWorkoutCompletionDate;
-      setState(() {
-        _isWorkoutCompletedToday =
-            lastCompletion != null && isSameDay(lastCompletion, now);
-      });
-    }
-  }
-
-  Future<List<Exercise>> fetchExercises() async {
-    if (widget.dayExercises.isEmpty) return [];
-    final exerciseIds =
-        widget.dayExercises.map((e) => e['exerciseId'] as String).toList();
-    final snapshot =
-        await FirebaseFirestore.instance
-            .collection('exercises')
-            .where(FieldPath.documentId, whereIn: exerciseIds)
-            .get();
-    return snapshot.docs
-        .map((doc) => Exercise.fromMap(doc.data()..['id'] = doc.id))
-        .toList();
-  }
-
-  Future<int> fetchStepGoal(String userId) async {
-    final userDoc =
-        await FirebaseFirestore.instance.collection('users').doc(userId).get();
-    if (userDoc.exists) {
-      final userData = userDoc.data()!;
-      return userData['dailyStepTarget'] as int? ?? 10000;
-    }
-    return 10000;
-  }
-
-  Future<void> _finishWorkout(BuildContext context) async {
-    final userProvider = Provider.of<UserProvider>(context, listen: false);
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final repo = context.read<WorkoutRepository>();
     final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+
+    if (_isLoading) return;
 
     setState(() {
       _isLoading = true;
+      _errorMessage = null;
     });
 
     try {
-      if (userProvider.currentUser != null) {
-        final now = DateTime.now();
-        if (userProvider.currentUser!.lastWorkoutCompletionDate == null ||
-            !isSameDay(
-              userProvider.currentUser!.lastWorkoutCompletionDate!,
-              now,
-            )) {
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(userProvider.firebaseUser!.uid)
-              .update({
-                'lastWorkoutCompletionDate': FieldValue.serverTimestamp(),
-                'workoutsCompleted': FieldValue.increment(1),
-              });
-
-          await userProvider.loadUserData(userProvider.firebaseUser!.uid);
-
-          if (!mounted) return;
-          scaffoldMessenger.showSnackBar(
-            SnackBar(
-              backgroundColor: colorScheme.primary,
-              content: Text(
-                "Workout completed! Return to Earn Points to claim your reward.",
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onPrimary,
-                ),
-              ),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-          );
-
-          setState(() {
-            _isWorkoutCompletedToday = true;
-          });
-        } else {
-          scaffoldMessenger.showSnackBar(
-            SnackBar(
-              backgroundColor: colorScheme.error,
-              content: Text(
-                "Workout already completed today!",
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onError,
-                ),
-              ),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-          );
-        }
+      final userId = userProvider.firebaseUser!.uid;
+      if (!markDone &&
+          !await repo
+              .streamActiveWorkout(userId, widget.workout.id)
+              .first
+              .then((value) => value != null)) {
+        throw Exception('Cannot undo completion for inactive workout');
       }
-    } catch (e) {
-      if (!mounted) return;
-      scaffoldMessenger.showSnackBar(
-        SnackBar(
-          backgroundColor: colorScheme.error,
-          content: Text(
-            "Failed to complete workout: $e",
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onError,
+
+      if (markDone) {
+        await repo.setActiveWorkout(
+          userId,
+          widget.workout.id,
+          widget.dayNumber,
+        );
+      }
+
+      await repo.toggleDayCompleted(
+        userId,
+        widget.workout.id,
+        widget.dayNumber,
+        markDone,
+        widget.workout.days.length,
+      );
+
+      await userProvider.loadUserData(userId, silent: true);
+
+      if (mounted) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            backgroundColor: colorScheme.primary,
+            content: Text(
+              markDone
+                  ? "Workout completed! Return to Earn Points to claim your reward."
+                  : "Day completion undone.",
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onPrimary,
+              ),
+            ),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
             ),
           ),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-      );
-    } finally {
+        );
+      }
+    } catch (e) {
       if (mounted) {
         setState(() {
-          _isLoading = false;
+          _errorMessage =
+              'Failed to ${markDone ? 'complete' : 'undo'} workout: $e';
         });
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            backgroundColor: colorScheme.error,
+            content: Text(
+              'Error: $e',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onError,
+              ),
+            ),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
       }
     }
-  }
-
-  bool isSameDay(DateTime date1, DateTime date2) {
-    return date1.day == date2.day &&
-        date1.month == date2.month &&
-        date1.year == date2.year;
   }
 
   @override
@@ -171,226 +130,243 @@ class _DayDetailScreenState extends State<DayDetailScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final userProvider = Provider.of<UserProvider>(context);
-    final userId = userProvider.firebaseUser?.uid ?? 'currentUserId';
+    final userId = userProvider.firebaseUser?.uid;
 
-    return Scaffold(
-      backgroundColor: colorScheme.surface,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          physics: const ClampingScrollPhysics(),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'DAY ${widget.dayNumber}'.toUpperCase(),
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    color: colorScheme.onSurface,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 20,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: Card(
-                    elevation: 4,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.network(
-                        widget.workout.image,
-                        width: double.infinity,
-                        height: 220,
-                        fit: BoxFit.cover,
-                        errorBuilder:
-                            (_, __, ___) => _buildPlaceholderImage(
-                              colorScheme: colorScheme,
-                              height: 220,
-                            ),
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return _buildPlaceholderImage(
-                            colorScheme: colorScheme,
-                            height: 220,
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  widget.workout.description,
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    color: colorScheme.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                FutureBuilder<int>(
-                  future: fetchStepGoal(userId),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const SizedBox(
-                        height: 48,
-                        child: Center(child: CircularProgressIndicator()),
-                      );
-                    }
-                    final stepGoal = snapshot.data ?? 10000;
-                    return _buildStepGoalCard(theme, colorScheme, stepGoal);
-                  },
-                ),
-                const SizedBox(height: 20),
-                FutureBuilder<List<Exercise>>(
-                  future: fetchExercises(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const SizedBox(
-                        height: 100,
-                        child: Center(child: CircularProgressIndicator()),
-                      );
-                    }
-                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                      if (widget.dayExercises.isNotEmpty &&
-                          widget.dayExercises.every(
-                            (e) => e['exerciseId'].toString().contains('rest'),
-                          )) {
-                        return _buildRestDayMessage(theme, colorScheme);
-                      }
-                      return Center(
-                        child: Text(
-                          "No exercises available for this day",
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      );
-                    }
-                    final exercises = snapshot.data!;
-                    return Column(
-                      children: [
-                        ListView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: widget.dayExercises.length,
-                          itemBuilder: (context, index) {
-                            final config = widget.dayExercises[index];
-                            final exercise = exercises.firstWhere(
-                              (e) => e.id == config['exerciseId'],
-                              orElse:
-                                  () => Exercise(
-                                    id: config['exerciseId'],
-                                    name: "Unknown Exercise",
-                                    instructions: "",
-                                    muscleGroups: [],
-                                    injuryRisks: [],
-                                    category: "",
-                                  ),
-                            );
-                            return _buildExerciseCard(
-                              context,
-                              theme,
-                              colorScheme,
-                              exercise,
-                              config,
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 20),
-                        if (widget.dayExercises.isNotEmpty &&
-                            !widget.dayExercises.every(
-                              (e) =>
-                                  e['exerciseId'].toString().contains('rest'),
-                            ))
-                          Align(
-                            alignment: Alignment.center,
-                            child: FilledButton(
-                              style: FilledButton.styleFrom(
-                                backgroundColor:
-                                    _isWorkoutCompletedToday
-                                        ? colorScheme.onSurfaceVariant
-                                            .withOpacity(0.5)
-                                        : colorScheme.primary,
-                                foregroundColor:
-                                    _isWorkoutCompletedToday
-                                        ? colorScheme.onSurface.withOpacity(0.6)
-                                        : colorScheme.onPrimary,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 24,
-                                  vertical: 12,
-                                ),
-                              ),
-                              onPressed:
-                                  _isWorkoutCompletedToday || _isLoading
-                                      ? null
-                                      : () => _finishWorkout(context),
-                              child:
-                                  _isLoading
-                                      ? SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                          color: colorScheme.onPrimary,
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                      : Text(
-                                        _isWorkoutCompletedToday
-                                            ? "Completed Today"
-                                            : "Workout Completed",
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                            ),
-                          ),
-                        const SizedBox(height: 80),
-                      ],
-                    );
-                  },
-                ),
-              ],
+    if (userId == null) {
+      return Scaffold(
+        backgroundColor: colorScheme.surface,
+        body: Center(
+          child: Text(
+            'Please log in to view this page.',
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: colorScheme.onSurface,
             ),
           ),
         ),
-      ),
-    );
-  }
+      );
+    }
 
-  Widget _buildStepGoalCard(
-    ThemeData theme,
-    ColorScheme colorScheme,
-    int stepGoal,
-  ) {
-    return Card(
-      elevation: 1,
-      color: colorScheme.surfaceContainer,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              "Step Goal for Day ${widget.dayNumber}",
-              style: theme.textTheme.titleMedium?.copyWith(
-                color: colorScheme.onSurface,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            Text(
-              "$stepGoal steps",
-              style: theme.textTheme.titleMedium?.copyWith(
-                color: colorScheme.primary,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
+    return StreamBuilder<ActiveWorkoutProgram?>(
+      stream: context.read<WorkoutRepository>().streamActiveWorkout(
+        userId,
+        widget.workout.id,
       ),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Scaffold(
+            backgroundColor: colorScheme.surface,
+            body: Center(
+              child: CircularProgressIndicator(color: colorScheme.primary),
+            ),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return Scaffold(
+            backgroundColor: colorScheme.surface,
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Error loading workout: ${snapshot.error}',
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: colorScheme.error,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  TextButton(
+                    onPressed: () => setState(() {}),
+                    child: Text(
+                      'Retry',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        final activeProgram = snapshot.data;
+
+        final isWorkoutActive = activeProgram != null;
+        final completedDays = activeProgram?.completedDays ?? [];
+        final isWorkoutCompletedToday =
+            completedDays.contains(widget.dayNumber) &&
+            activeProgram?.lastCompletion != null &&
+            DateUtils.isSameDay(activeProgram!.lastCompletion, DateTime.now());
+        final dayStatus =
+            isWorkoutCompletedToday
+                ? DayStatus.doneToday
+                : completedDays.contains(widget.dayNumber)
+                ? DayStatus.doneEarlier
+                : DayStatus.notDone;
+
+        return Scaffold(
+          backgroundColor: colorScheme.surface,
+          body: SafeArea(
+            child: SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 20,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'DAY ${widget.dayNumber}'.toUpperCase(),
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        color: colorScheme.onSurface,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 20,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: Card(
+                        elevation: 4,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.network(
+                            widget.workout.image,
+                            width: double.infinity,
+                            height: 220,
+                            fit: BoxFit.cover,
+                            errorBuilder:
+                                (_, __, ___) => _buildPlaceholderImage(
+                                  colorScheme: colorScheme,
+                                  height: 220,
+                                ),
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return _buildPlaceholderImage(
+                                colorScheme: colorScheme,
+                                height: 220,
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+                    Text(
+                      widget.workout.description,
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    StepCounterWidget(),
+                    const SizedBox(height: 20),
+                    if (_errorMessage != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Text(
+                          _errorMessage!,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.error,
+                          ),
+                        ),
+                      ),
+                    FutureBuilder<List<Exercise>>(
+                      future: context.read<WorkoutRepository>().fetchExercises(
+                        widget.dayExercises
+                            .map((e) => e['exerciseId'] as String)
+                            .toList(),
+                      ),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const SizedBox(
+                            height: 100,
+                            child: Center(child: CircularProgressIndicator()),
+                          );
+                        }
+                        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                          if (widget.dayExercises.isNotEmpty &&
+                              widget.dayExercises.every(
+                                (e) =>
+                                    e['exerciseId'].toString().contains('rest'),
+                              )) {
+                            return _buildRestDayMessage(theme, colorScheme);
+                          }
+                          return Center(
+                            child: Text(
+                              "No exercises available for this day",
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          );
+                        }
+                        final exercises = snapshot.data!;
+                        return Column(
+                          children: [
+                            ListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: widget.dayExercises.length,
+                              itemBuilder: (context, index) {
+                                final config = widget.dayExercises[index];
+                                final exercise = exercises.firstWhere(
+                                  (e) => e.id == config['exerciseId'],
+                                  orElse:
+                                      () => Exercise(
+                                        id: config['exerciseId'],
+                                        name: "Unknown Exercise",
+                                        instructions: "",
+                                        muscleGroups: [],
+                                        injuryRisks: [],
+                                        category: "",
+                                      ),
+                                );
+                                return _buildExerciseCard(
+                                  context,
+                                  theme,
+                                  colorScheme,
+                                  exercise,
+                                  config,
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 20),
+                          ],
+                        );
+                      },
+                    ),
+                    if (widget.dayExercises.isNotEmpty)
+                      Align(
+                        alignment: Alignment.center,
+                        child: DayCompletionButton(
+                          status: dayStatus,
+                          isLoading: _isLoading,
+                          onPressed:
+                              isWorkoutActive
+                                  ? (bool markDone) =>
+                                      _toggleDayCompleted(context, markDone)
+                                  : (bool _) =>
+                                      _toggleDayCompleted(context, true),
+                        ),
+                      ),
+                    const SizedBox(height: 80),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -544,6 +520,58 @@ class _DayDetailScreenState extends State<DayDetailScreen> {
         size: 40,
         color: colorScheme.onSurfaceVariant,
       ),
+    );
+  }
+}
+
+class DayCompletionButton extends StatelessWidget {
+  final DayStatus status;
+  final bool isLoading;
+  final void Function(bool markDone)? onPressed;
+
+  const DayCompletionButton({
+    super.key,
+    required this.status,
+    required this.isLoading,
+    this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDone = status != DayStatus.notDone;
+    final buttonText = isDone ? "Undo Completion" : "Workout Completed";
+    final buttonColor =
+        isDone
+            ? colorScheme.onSurface.withAlpha((255 * 0.6).round())
+            : colorScheme.primary;
+    final textColor =
+        isDone
+            ? colorScheme.onSurface.withAlpha((255 * 0.6).round())
+            : colorScheme.onPrimary;
+
+    return FilledButton(
+      style: FilledButton.styleFrom(
+        backgroundColor: buttonColor,
+        foregroundColor: textColor,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      ),
+      onPressed: isLoading ? null : () => onPressed?.call(!isDone),
+      child:
+          isLoading
+              ? SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  color: textColor,
+                  strokeWidth: 2,
+                ),
+              )
+              : Text(
+                buttonText,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
     );
   }
 }

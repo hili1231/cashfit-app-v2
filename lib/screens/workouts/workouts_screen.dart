@@ -10,7 +10,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'workout_detail_screen.dart';
 
-// Define the RemovedWorkoutProgram class for deactivated workouts
 class RemovedWorkoutProgram {
   final String workoutProgramId;
   final DateTime removedDate;
@@ -43,8 +42,6 @@ class WorkoutsScreen extends StatefulWidget {
   const WorkoutsScreen({super.key});
 
   static List<WorkoutProgram>? _cachedWorkouts;
-  static List<ActiveWorkoutProgram>? _cachedActivePrograms;
-  static List<WorkoutProgram>? _cachedActiveWorkouts;
 
   @override
   State<WorkoutsScreen> createState() => _WorkoutsScreenState();
@@ -52,9 +49,8 @@ class WorkoutsScreen extends StatefulWidget {
 
 class _WorkoutsScreenState extends State<WorkoutsScreen> {
   late Future<List<WorkoutProgram>> _fetchFuture;
-  List<ActiveWorkoutProgram> _activeWorkoutPrograms = [];
-  List<WorkoutProgram> _activeWorkouts = [];
   final Map<String, bool> _deactivatedWorkouts = {};
+  final bool _isLoadingActiveWorkouts = false;
 
   @override
   void initState() {
@@ -67,108 +63,72 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
         return value;
       });
     }
-
-    if (WorkoutsScreen._cachedActivePrograms != null &&
-        WorkoutsScreen._cachedActiveWorkouts != null) {
-      _activeWorkoutPrograms = WorkoutsScreen._cachedActivePrograms!;
-      _activeWorkouts = WorkoutsScreen._cachedActiveWorkouts!;
-    } else {
-      _fetchActiveWorkouts();
-    }
   }
 
   Future<List<WorkoutProgram>> _fetchAllWorkouts() async {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     List<WorkoutProgram> allWorkouts = [];
 
-    final snapshot =
-        await FirebaseFirestore.instance.collection('workoutPrograms').get();
-
-    allWorkouts =
-        snapshot.docs
-            .map((doc) => WorkoutProgram.fromMap(doc.data(), doc.id))
-            .toList();
-
-    if (userProvider.isLoggedIn && userProvider.firebaseUser != null) {
-      final uid = userProvider.firebaseUser!.uid;
-
-      // Parallel fetch: prepare all futures
-      final futures =
-          allWorkouts.map((workout) {
-            return FirebaseFirestore.instance
-                .collection('users')
-                .doc(uid)
-                .collection('removedWorkoutPrograms')
-                .doc(workout.id)
-                .get()
-                .then((doc) => MapEntry(workout.id, doc.exists));
-          }).toList();
-
-      final results = await Future.wait(futures);
-
-      for (var result in results) {
-        _deactivatedWorkouts[result.key] = result.value;
-      }
-    }
-
-    return allWorkouts;
-  }
-
-  Future<void> _fetchActiveWorkouts() async {
-    final userProvider = Provider.of<UserProvider>(context, listen: false);
-    if (!userProvider.isLoggedIn || userProvider.firebaseUser == null) {
-      if (mounted) {
-        setState(() {
-          _activeWorkoutPrograms = [];
-          _activeWorkouts = [];
-        });
-      }
-      WorkoutsScreen._cachedActivePrograms = [];
-      WorkoutsScreen._cachedActiveWorkouts = [];
-      return;
-    }
-
     try {
-      setState(() {});
+      debugPrint('Fetching all workout programs');
+      final snapshot = await FirebaseFirestore.instance
+          .collection('workoutPrograms')
+          .get(GetOptions(source: Source.cache));
+      allWorkouts =
+          snapshot.docs
+              .map((doc) => WorkoutProgram.fromMap(doc.data(), doc.id))
+              .toList();
 
-      final activeSnapshot =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(userProvider.firebaseUser!.uid)
-              .collection('activeWorkoutPrograms')
-              .get();
-      final programs = <ActiveWorkoutProgram>[];
-      final workouts = <WorkoutProgram>[];
-      for (var doc in activeSnapshot.docs) {
-        final activeProgram = ActiveWorkoutProgram.fromMap(doc.data());
-        final programSnapshot =
-            await FirebaseFirestore.instance
-                .collection('workoutPrograms')
-                .doc(activeProgram.workoutProgramId)
-                .get();
-        if (programSnapshot.exists) {
-          programs.add(activeProgram);
-          workouts.add(
-            WorkoutProgram.fromMap(programSnapshot.data()!, programSnapshot.id),
-          );
-          _deactivatedWorkouts[activeProgram.workoutProgramId] = false;
+      if (allWorkouts.isEmpty) {
+        debugPrint('Cache empty, fetching from server');
+        final serverSnapshot = await FirebaseFirestore.instance
+            .collection('workoutPrograms')
+            .get(GetOptions(source: Source.server));
+        allWorkouts =
+            serverSnapshot.docs
+                .map((doc) => WorkoutProgram.fromMap(doc.data(), doc.id))
+                .toList();
+      }
+
+      if (userProvider.isLoggedIn && userProvider.firebaseUser != null) {
+        final uid = userProvider.firebaseUser!.uid;
+        debugPrint('Fetching deactivation status for user: $uid');
+
+        const batchSize = 10;
+        for (var i = 0; i < allWorkouts.length; i += batchSize) {
+          final batchIds =
+              allWorkouts
+                  .sublist(
+                    i,
+                    i + batchSize > allWorkouts.length
+                        ? allWorkouts.length
+                        : i + batchSize,
+                  )
+                  .map((workout) => workout.id)
+                  .toList();
+          final batchSnapshot =
+              await FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(uid)
+                  .collection('removedWorkoutPrograms')
+                  .where(FieldPath.documentId, whereIn: batchIds)
+                  .get();
+          for (var doc in batchSnapshot.docs) {
+            _deactivatedWorkouts[doc.id] = true;
+          }
+        }
+
+        for (var workout in allWorkouts) {
+          _deactivatedWorkouts.putIfAbsent(workout.id, () => false);
         }
       }
-      if (mounted) {
-        setState(() {
-          _activeWorkoutPrograms = programs;
-          _activeWorkouts = workouts;
-        });
-      }
-      WorkoutsScreen._cachedActivePrograms = programs;
-      WorkoutsScreen._cachedActiveWorkouts = workouts;
     } catch (e) {
-      debugPrint('Error fetching active workouts: $e');
+      debugPrint('Error fetching workout programs: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Failed to load active programs: $e',
+              'Failed to load workouts: $e',
               style: TextStyle(color: Theme.of(context).colorScheme.onError),
             ),
             backgroundColor: Theme.of(context).colorScheme.error,
@@ -176,87 +136,68 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
         );
       }
     }
+
+    return allWorkouts;
   }
 
   Future<void> _setActiveWorkout(String workoutProgramId) async {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
-    if (!userProvider.isLoggedIn || userProvider.firebaseUser == null) return;
+    if (!userProvider.isLoggedIn || userProvider.firebaseUser == null) {
+      debugPrint('User not logged in or firebaseUser is null');
+      return;
+    }
 
     try {
+      debugPrint('Activating workout program: $workoutProgramId');
       final activeProgramRef = FirebaseFirestore.instance
           .collection('users')
           .doc(userProvider.firebaseUser!.uid)
           .collection('activeWorkoutPrograms')
           .doc(workoutProgramId);
 
-      // Optimistically update the local state
-      final newProgram = ActiveWorkoutProgram(
-        workoutProgramId: workoutProgramId,
-        startDate: DateTime.now(),
-        currentDay: 1,
-      );
-
+      debugPrint('Fetching workout program data for: $workoutProgramId');
       final programSnapshot =
           await FirebaseFirestore.instance
               .collection('workoutPrograms')
               .doc(workoutProgramId)
               .get();
 
-      if (programSnapshot.exists) {
-        final workout = WorkoutProgram.fromMap(
-          programSnapshot.data()!,
-          programSnapshot.id,
-        );
+      if (!programSnapshot.exists) {
+        debugPrint('Workout program does not exist: $workoutProgramId');
+        throw Exception('Workout program not found');
+      }
 
-        setState(() {
-          _activeWorkoutPrograms.add(newProgram);
-          _activeWorkouts.add(workout);
-          _deactivatedWorkouts[workoutProgramId] = false;
-          WorkoutsScreen._cachedActivePrograms = _activeWorkoutPrograms;
-          WorkoutsScreen._cachedActiveWorkouts = _activeWorkouts;
-        });
+      debugPrint('Writing active workout program to Firestore');
+      await activeProgramRef.set({
+        'workoutProgramId': workoutProgramId,
+        'startDate': DateTime.now().toIso8601String(),
+        'currentDay': 1,
+        'completedDays': [],
+      });
 
-        await activeProgramRef.set({
-          'workoutProgramId': workoutProgramId,
-          'startDate': DateTime.now().toIso8601String(),
-          'currentDay': 1,
-        });
+      debugPrint('Removing workout program from removedWorkoutPrograms');
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userProvider.firebaseUser!.uid)
+          .collection('removedWorkoutPrograms')
+          .doc(workoutProgramId)
+          .delete();
 
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userProvider.firebaseUser!.uid)
-            .collection('removedWorkoutPrograms')
-            .doc(workoutProgramId)
-            .delete();
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Workout added to active programs',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onPrimary,
-                ),
-              ),
-              backgroundColor: Theme.of(context).colorScheme.primary,
+      if (mounted) {
+        debugPrint('Showing success snackbar');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Workout added to active programs',
+              style: TextStyle(color: Theme.of(context).colorScheme.onPrimary),
             ),
-          );
-        }
+            backgroundColor: Theme.of(context).colorScheme.primary,
+          ),
+        );
       }
     } catch (e) {
       debugPrint('Error setting active workout: $e');
       if (mounted) {
-        setState(() {
-          // Revert the optimistic update if the Firestore operation fails
-          _activeWorkoutPrograms.removeWhere(
-            (program) => program.workoutProgramId == workoutProgramId,
-          );
-          _activeWorkouts.removeWhere(
-            (workout) => workout.id == workoutProgramId,
-          );
-          WorkoutsScreen._cachedActivePrograms = _activeWorkoutPrograms;
-          WorkoutsScreen._cachedActiveWorkouts = _activeWorkouts;
-        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -267,13 +208,15 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
           ),
         );
       }
-      await _fetchActiveWorkouts();
     }
   }
 
   Future<void> _removeActiveWorkout(String workoutProgramId) async {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
-    if (!userProvider.isLoggedIn || userProvider.firebaseUser == null) return;
+    if (!userProvider.isLoggedIn || userProvider.firebaseUser == null) {
+      debugPrint('User not logged in or firebaseUser is null');
+      return;
+    }
 
     bool confirmed = false;
     await showDialog(
@@ -327,9 +270,13 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
           ),
     );
 
-    if (!confirmed) return;
+    if (!confirmed) {
+      debugPrint('Removal cancelled');
+      return;
+    }
 
     try {
+      debugPrint('Removing active workout program: $workoutProgramId');
       final activeProgramRef = FirebaseFirestore.instance
           .collection('users')
           .doc(userProvider.firebaseUser!.uid)
@@ -342,19 +289,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
           .collection('removedWorkoutPrograms')
           .doc(workoutProgramId);
 
-      setState(() {
-        final index = _activeWorkoutPrograms.indexWhere(
-          (program) => program.workoutProgramId == workoutProgramId,
-        );
-        if (index != -1) {
-          _activeWorkoutPrograms.removeAt(index);
-          _activeWorkouts.removeAt(index);
-        }
-        _deactivatedWorkouts[workoutProgramId] = true;
-        WorkoutsScreen._cachedActivePrograms = _activeWorkoutPrograms;
-        WorkoutsScreen._cachedActiveWorkouts = _activeWorkouts;
-      });
-
+      debugPrint('Setting removed workout program in Firestore');
       await removedProgramRef.set(
         RemovedWorkoutProgram(
           workoutProgramId: workoutProgramId,
@@ -363,9 +298,11 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
         ).toMap(),
       );
 
+      debugPrint('Deleting active workout program from Firestore');
       await activeProgramRef.delete();
 
       if (mounted) {
+        debugPrint('Showing success snackbar for removal');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -379,9 +316,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
     } catch (e) {
       debugPrint('Error removing active workout: $e');
       if (mounted) {
-        setState(() {
-          _deactivatedWorkouts[workoutProgramId] = false;
-        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -392,8 +326,51 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
           ),
         );
       }
-      await _fetchActiveWorkouts();
     }
+  }
+
+  Future<Map<String, WorkoutProgram>> _fetchWorkoutPrograms(
+    List<String> programIds,
+  ) async {
+    final Map<String, WorkoutProgram> workoutMap = {};
+    if (programIds.isEmpty) return workoutMap;
+
+    const batchSize = 10;
+    for (var i = 0; i < programIds.length; i += batchSize) {
+      final batchIds = programIds.sublist(
+        i,
+        i + batchSize > programIds.length ? programIds.length : i + batchSize,
+      );
+      debugPrint('Fetching workout programs batch: $batchIds');
+      final programSnapshot = await FirebaseFirestore.instance
+          .collection('workoutPrograms')
+          .where(FieldPath.documentId, whereIn: batchIds)
+          .get(GetOptions(source: Source.cache));
+
+      var batchWorkouts =
+          programSnapshot.docs
+              .map((doc) => WorkoutProgram.fromMap(doc.data(), doc.id))
+              .toList();
+
+      if (batchWorkouts.isEmpty) {
+        debugPrint('Cache empty, fetching batch from server');
+        final serverSnapshot = await FirebaseFirestore.instance
+            .collection('workoutPrograms')
+            .where(FieldPath.documentId, whereIn: batchIds)
+            .get(GetOptions(source: Source.server));
+        batchWorkouts =
+            serverSnapshot.docs
+                .map((doc) => WorkoutProgram.fromMap(doc.data(), doc.id))
+                .toList();
+      }
+
+      for (var workout in batchWorkouts) {
+        workoutMap[workout.id] = workout;
+        _deactivatedWorkouts[workout.id] = false;
+      }
+    }
+
+    return workoutMap;
   }
 
   @override
@@ -406,164 +383,137 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
       decoration: AppTheme.backgroundGradient(colorScheme),
       child: Scaffold(
         backgroundColor: Colors.transparent,
-        body: FutureBuilder<List<WorkoutProgram>>(
-          future: _fetchFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return Center(
-                child: CircularProgressIndicator(color: colorScheme.primary),
-              );
-            }
-            if (snapshot.hasError) {
-              return Center(
-                child: Text(
-                  "Error: ${snapshot.error}",
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              );
-            }
-            if (!snapshot.hasData || snapshot.data!.isEmpty) {
-              return Center(
-                child: Text(
-                  "No workouts found",
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              );
-            }
-
-            final allWorkouts = snapshot.data!;
-            final beginnerWorkouts = <WorkoutProgram>[];
-            final intermediateWorkouts = <WorkoutProgram>[];
-            final advancedWorkouts = <WorkoutProgram>[];
-
-            for (var wp in allWorkouts) {
-              final level = wp.level.trim().toLowerCase();
-              if (level == "beginner") {
-                beginnerWorkouts.add(wp);
-              } else if (level == "intermediate") {
-                intermediateWorkouts.add(wp);
-              } else if (level == "advanced") {
-                advancedWorkouts.add(wp);
-              }
-            }
-
-            return SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              child: SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 20,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        "WORKOUTS",
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          color: colorScheme.onSurface,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 20,
+        body: Stack(
+          children: [
+            FutureBuilder<List<WorkoutProgram>>(
+              future: _fetchFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(color: colorScheme.primary),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Loading workout programs...',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurface,
+                          ),
                         ),
+                      ],
+                    ),
+                  );
+                }
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text(
+                      "Error: ${snapshot.error}",
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
                       ),
-                      const SizedBox(height: 12),
-                      if (userProvider.isLoggedIn)
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  "Your Active Programs",
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    color: colorScheme.onSurface,
-                                  ),
-                                ),
-                                IconButton(
-                                  icon: Icon(
-                                    Icons.delete_sweep,
-                                    color: colorScheme.primary,
-                                  ),
-                                  tooltip: 'View Deactivated Workouts',
-                                  onPressed: () {
-                                    final navState =
-                                        context
-                                            .findAncestorStateOfType<
-                                              NavScreenState
-                                            >();
-                                    navState?.setDetailScreen(
-                                      const DeactivatedWorkoutsScreen(),
-                                    );
-                                  },
-                                ),
-                              ],
+                    ),
+                  );
+                }
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return Center(
+                    child: Text(
+                      "No workouts found",
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  );
+                }
+
+                final allWorkouts = snapshot.data!;
+                final beginnerWorkouts = <WorkoutProgram>[];
+                final intermediateWorkouts = <WorkoutProgram>[];
+                final advancedWorkouts = <WorkoutProgram>[];
+
+                for (var wp in allWorkouts) {
+                  final level = wp.level.trim().toLowerCase();
+                  if (level == "beginner") {
+                    beginnerWorkouts.add(wp);
+                  } else if (level == "intermediate") {
+                    intermediateWorkouts.add(wp);
+                  } else if (level == "advanced") {
+                    advancedWorkouts.add(wp);
+                  }
+                }
+
+                return SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 20,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "WORKOUTS",
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              color: colorScheme.onSurface,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 20,
                             ),
-                            const SizedBox(height: 12),
-                            StreamBuilder<QuerySnapshot>(
-                              stream:
-                                  userProvider.isLoggedIn &&
-                                          userProvider.firebaseUser != null
-                                      ? FirebaseFirestore.instance
+                          ),
+                          const SizedBox(height: 12),
+                          if (userProvider.isLoggedIn &&
+                              userProvider.firebaseUser != null)
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      "Your Active Programs",
+                                      style: theme.textTheme.titleMedium
+                                          ?.copyWith(
+                                            color: colorScheme.onSurface,
+                                          ),
+                                    ),
+                                    Row(
+                                      children: [
+                                        IconButton(
+                                          icon: Icon(
+                                            Icons.delete_sweep,
+                                            color: colorScheme.primary,
+                                          ),
+                                          tooltip: 'View Deactivated Workouts',
+                                          onPressed: () {
+                                            final navState =
+                                                context
+                                                    .findAncestorStateOfType<
+                                                      NavScreenState
+                                                    >();
+                                            navState?.setDetailScreen(
+                                              const DeactivatedWorkoutsScreen(),
+                                            );
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                StreamBuilder<QuerySnapshot>(
+                                  stream:
+                                      FirebaseFirestore.instance
                                           .collection('users')
                                           .doc(userProvider.firebaseUser!.uid)
                                           .collection('activeWorkoutPrograms')
-                                          .snapshots()
-                                      : Stream.empty(),
-                              builder: (context, snapshot) {
-                                if (snapshot.connectionState ==
-                                    ConnectionState.waiting) {
-                                  return const Center(
-                                    child: CircularProgressIndicator(),
-                                  );
-                                }
-                                if (snapshot.hasError) {
-                                  return Center(
-                                    child: Text(
-                                      'Error: ${snapshot.error}',
-                                      style: theme.textTheme.bodyMedium
-                                          ?.copyWith(
-                                            color: colorScheme.onSurfaceVariant,
-                                          ),
-                                    ),
-                                  );
-                                }
-                                if (!userProvider.isLoggedIn ||
-                                    userProvider.firebaseUser == null ||
-                                    !snapshot.hasData ||
-                                    snapshot.data!.docs.isEmpty) {
-                                  return Center(
-                                    child: Text(
-                                      "No active programs",
-                                      style: theme.textTheme.bodyMedium
-                                          ?.copyWith(
-                                            color: colorScheme.onSurfaceVariant,
-                                          ),
-                                    ),
-                                  );
-                                }
-
-                                return FutureBuilder<
-                                  List<Map<String, dynamic>>
-                                >(
-                                  future: _processActiveWorkouts(
-                                    snapshot.data!.docs,
-                                  ),
-                                  builder: (context, futureSnapshot) {
-                                    if (futureSnapshot.connectionState ==
-                                        ConnectionState.waiting) {
-                                      return const Center(
-                                        child: CircularProgressIndicator(),
-                                      );
-                                    }
-                                    if (futureSnapshot.hasError) {
+                                          .snapshots(),
+                                  builder: (context, snapshot) {
+                                    if (snapshot.hasError) {
                                       return Center(
                                         child: Text(
-                                          'Error: ${futureSnapshot.error}',
+                                          'Error: ${snapshot.error}',
                                           style: theme.textTheme.bodyMedium
                                               ?.copyWith(
                                                 color:
@@ -573,8 +523,14 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                                         ),
                                       );
                                     }
-                                    if (!futureSnapshot.hasData ||
-                                        futureSnapshot.data!.isEmpty) {
+                                    if (snapshot.connectionState ==
+                                        ConnectionState.waiting) {
+                                      return const Center(
+                                        child: CircularProgressIndicator(),
+                                      );
+                                    }
+                                    if (!snapshot.hasData ||
+                                        snapshot.data!.docs.isEmpty) {
                                       return Center(
                                         child: Text(
                                           "No active programs",
@@ -588,213 +544,266 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                                       );
                                     }
 
-                                    final activeData = futureSnapshot.data!;
-                                    _activeWorkoutPrograms =
-                                        activeData
+                                    final activePrograms =
+                                        snapshot.data!.docs
                                             .map(
-                                              (data) =>
-                                                  data['program']
-                                                      as ActiveWorkoutProgram,
+                                              (doc) =>
+                                                  ActiveWorkoutProgram.fromMap(
+                                                    doc.data()
+                                                        as Map<String, dynamic>,
+                                                  ),
                                             )
                                             .toList();
-                                    _activeWorkouts =
-                                        activeData
-                                            .map(
-                                              (data) =>
-                                                  data['workout']
-                                                      as WorkoutProgram,
-                                            )
-                                            .toList();
-                                    WorkoutsScreen._cachedActivePrograms =
-                                        _activeWorkoutPrograms;
-                                    WorkoutsScreen._cachedActiveWorkouts =
-                                        _activeWorkouts;
 
-                                    return SizedBox(
-                                      height: 200,
-                                      child: ListView.separated(
-                                        scrollDirection: Axis.horizontal,
-                                        physics: const BouncingScrollPhysics(),
-                                        itemCount: _activeWorkouts.length,
-                                        separatorBuilder:
-                                            (_, __) =>
-                                                const SizedBox(width: 14),
-                                        itemBuilder: (context, index) {
-                                          final workout =
-                                              _activeWorkouts[index];
-                                          final program =
-                                              _activeWorkoutPrograms[index];
-                                          return GestureDetector(
-                                            onTap: () {
-                                              final navState =
-                                                  context
-                                                      .findAncestorStateOfType<
-                                                        NavScreenState
-                                                      >();
-                                              navState?.setDetailScreen(
-                                                WorkoutDetailScreen(
-                                                  workout: workout,
+                                    return FutureBuilder<
+                                      Map<String, WorkoutProgram>
+                                    >(
+                                      future: _fetchWorkoutPrograms(
+                                        activePrograms
+                                            .map((p) => p.workoutProgramId)
+                                            .toList(),
+                                      ),
+                                      builder: (context, workoutSnapshot) {
+                                        if (workoutSnapshot.connectionState ==
+                                            ConnectionState.waiting) {
+                                          return const Center(
+                                            child: CircularProgressIndicator(),
+                                          );
+                                        }
+                                        if (workoutSnapshot.hasError) {
+                                          return Center(
+                                            child: Text(
+                                              'Error: ${workoutSnapshot.error}',
+                                              style: theme.textTheme.bodyMedium
+                                                  ?.copyWith(
+                                                    color:
+                                                        colorScheme
+                                                            .onSurfaceVariant,
+                                                  ),
+                                            ),
+                                          );
+                                        }
+                                        if (!workoutSnapshot.hasData ||
+                                            workoutSnapshot.data!.isEmpty) {
+                                          return Center(
+                                            child: Text(
+                                              "No active programs found",
+                                              style: theme.textTheme.bodyMedium
+                                                  ?.copyWith(
+                                                    color:
+                                                        colorScheme
+                                                            .onSurfaceVariant,
+                                                  ),
+                                            ),
+                                          );
+                                        }
+
+                                        final workoutMap =
+                                            workoutSnapshot.data!;
+                                        final activeData =
+                                            activePrograms
+                                                .where(
+                                                  (program) =>
+                                                      workoutMap.containsKey(
+                                                        program
+                                                            .workoutProgramId,
+                                                      ),
+                                                )
+                                                .map(
+                                                  (program) => {
+                                                    'program': program,
+                                                    'workout':
+                                                        workoutMap[program
+                                                            .workoutProgramId]!,
+                                                  },
+                                                )
+                                                .toList();
+
+                                        if (activeData.isEmpty) {
+                                          return Center(
+                                            child: Text(
+                                              "No active programs found",
+                                              style: theme.textTheme.bodyMedium
+                                                  ?.copyWith(
+                                                    color:
+                                                        colorScheme
+                                                            .onSurfaceVariant,
+                                                  ),
+                                            ),
+                                          );
+                                        }
+
+                                        return SizedBox(
+                                          height: 200,
+                                          child: ListView.separated(
+                                            scrollDirection: Axis.horizontal,
+                                            physics:
+                                                const BouncingScrollPhysics(),
+                                            itemCount: activeData.length,
+                                            separatorBuilder:
+                                                (_, __) =>
+                                                    const SizedBox(width: 14),
+                                            itemBuilder: (context, index) {
+                                              final workout =
+                                                  activeData[index]['workout']
+                                                      as WorkoutProgram;
+                                              final program =
+                                                  activeData[index]['program']
+                                                      as ActiveWorkoutProgram;
+                                              return GestureDetector(
+                                                onTap: () {
+                                                  final navState =
+                                                      context
+                                                          .findAncestorStateOfType<
+                                                            NavScreenState
+                                                          >();
+                                                  navState?.setDetailScreen(
+                                                    WorkoutDetailScreen(
+                                                      workout: workout,
+                                                    ),
+                                                  );
+                                                },
+                                                child: Stack(
+                                                  children: [
+                                                    Container(
+                                                      decoration: BoxDecoration(
+                                                        border: Border.all(
+                                                          color:
+                                                              colorScheme
+                                                                  .primary,
+                                                          width: 2,
+                                                        ),
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              12,
+                                                            ),
+                                                      ),
+                                                      child: WorkoutCard(
+                                                        workout: workout,
+                                                        currentDay:
+                                                            program.currentDay,
+                                                        onDayButtonPressed: () {
+                                                          final navState =
+                                                              context
+                                                                  .findAncestorStateOfType<
+                                                                    NavScreenState
+                                                                  >();
+                                                          navState?.setDetailScreen(
+                                                            DayDetailScreen(
+                                                              dayNumber:
+                                                                  program
+                                                                      .currentDay,
+                                                              dayExercises:
+                                                                  workout
+                                                                      .days['Day ${program.currentDay}'] ??
+                                                                  [],
+                                                              workout: workout,
+                                                            ),
+                                                          );
+                                                        },
+                                                      ),
+                                                    ),
+                                                    Positioned(
+                                                      top: 8,
+                                                      right: 8,
+                                                      child: Container(
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 8,
+                                                              vertical: 4,
+                                                            ),
+                                                        decoration: BoxDecoration(
+                                                          color:
+                                                              colorScheme
+                                                                  .primary,
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                8,
+                                                              ),
+                                                        ),
+                                                        child: Text(
+                                                          'Active',
+                                                          style: theme
+                                                              .textTheme
+                                                              .labelSmall
+                                                              ?.copyWith(
+                                                                color:
+                                                                    colorScheme
+                                                                        .onPrimary,
+                                                              ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    Positioned(
+                                                      top: 8,
+                                                      left: 8,
+                                                      child: IconButton(
+                                                        icon: Icon(
+                                                          Icons.close,
+                                                          color:
+                                                              colorScheme
+                                                                  .primary,
+                                                          size: 20,
+                                                        ),
+                                                        tooltip:
+                                                            'Remove Active Workout',
+                                                        onPressed:
+                                                            () =>
+                                                                _removeActiveWorkout(
+                                                                  workout.id,
+                                                                ),
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
                                               );
                                             },
-                                            child: Stack(
-                                              children: [
-                                                Container(
-                                                  decoration: BoxDecoration(
-                                                    border: Border.all(
-                                                      color:
-                                                          colorScheme.primary,
-                                                      width: 2,
-                                                    ),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          12,
-                                                        ),
-                                                  ),
-                                                  child: WorkoutCard(
-                                                    workout: workout,
-                                                    currentDay:
-                                                        program.currentDay,
-                                                    onDayButtonPressed: () {
-                                                      final navState =
-                                                          context
-                                                              .findAncestorStateOfType<
-                                                                NavScreenState
-                                                              >();
-                                                      navState?.setDetailScreen(
-                                                        DayDetailScreen(
-                                                          dayNumber:
-                                                              program
-                                                                  .currentDay,
-                                                          dayExercises:
-                                                              workout
-                                                                  .days['Day ${program.currentDay}'] ??
-                                                              [],
-                                                          workout: workout,
-                                                        ),
-                                                      );
-                                                    },
-                                                  ),
-                                                ),
-                                                Positioned(
-                                                  top: 8,
-                                                  right: 8,
-                                                  child: Container(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 8,
-                                                          vertical: 4,
-                                                        ),
-                                                    decoration: BoxDecoration(
-                                                      color:
-                                                          colorScheme.primary,
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            8,
-                                                          ),
-                                                    ),
-                                                    child: Text(
-                                                      'Active',
-                                                      style: theme
-                                                          .textTheme
-                                                          .labelSmall
-                                                          ?.copyWith(
-                                                            color:
-                                                                colorScheme
-                                                                    .onPrimary,
-                                                          ),
-                                                    ),
-                                                  ),
-                                                ),
-                                                Positioned(
-                                                  top: 8,
-                                                  left: 8,
-                                                  child: IconButton(
-                                                    icon: Icon(
-                                                      Icons.close,
-                                                      color:
-                                                          colorScheme.primary,
-                                                      size: 20,
-                                                    ),
-                                                    tooltip:
-                                                        'Remove Active Workout',
-                                                    onPressed:
-                                                        () =>
-                                                            _removeActiveWorkout(
-                                                              workout.id,
-                                                            ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          );
-                                        },
-                                      ),
+                                          ),
+                                        );
+                                      },
                                     );
                                   },
-                                );
-                              },
+                                ),
+                                const SizedBox(height: 20),
+                              ],
                             ),
-                            const SizedBox(height: 20),
-                          ],
-                        ),
-                      if (beginnerWorkouts.isNotEmpty)
-                        _buildWorkoutCategorySection(
-                          theme,
-                          colorScheme,
-                          "Beginner",
-                          beginnerWorkouts,
-                        ),
-                      if (intermediateWorkouts.isNotEmpty)
-                        _buildWorkoutCategorySection(
-                          theme,
-                          colorScheme,
-                          "Intermediate",
-                          intermediateWorkouts,
-                        ),
-                      if (advancedWorkouts.isNotEmpty)
-                        _buildWorkoutCategorySection(
-                          theme,
-                          colorScheme,
-                          "Advanced",
-                          advancedWorkouts,
-                        ),
-                    ],
+                          if (beginnerWorkouts.isNotEmpty)
+                            _buildWorkoutCategorySection(
+                              theme,
+                              colorScheme,
+                              "Beginner",
+                              beginnerWorkouts,
+                            ),
+                          if (intermediateWorkouts.isNotEmpty)
+                            _buildWorkoutCategorySection(
+                              theme,
+                              colorScheme,
+                              "Intermediate",
+                              intermediateWorkouts,
+                            ),
+                          if (advancedWorkouts.isNotEmpty)
+                            _buildWorkoutCategorySection(
+                              theme,
+                              colorScheme,
+                              "Advanced",
+                              advancedWorkouts,
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
+                );
+              },
+            ),
+            if (_isLoadingActiveWorkouts)
+              Positioned(
+                bottom: 16,
+                right: 16,
+                child: CircularProgressIndicator(color: colorScheme.primary),
               ),
-            );
-          },
+          ],
         ),
       ),
-    );
-  }
-
-  Future<List<Map<String, dynamic>>> _processActiveWorkouts(
-    List<QueryDocumentSnapshot> docs,
-  ) async {
-    final programs = <ActiveWorkoutProgram>[];
-    final workouts = <WorkoutProgram>[];
-    for (var doc in docs) {
-      final activeProgram = ActiveWorkoutProgram.fromMap(
-        doc.data() as Map<String, dynamic>,
-      );
-      final programSnapshot =
-          await FirebaseFirestore.instance
-              .collection('workoutPrograms')
-              .doc(activeProgram.workoutProgramId)
-              .get();
-      if (programSnapshot.exists) {
-        programs.add(activeProgram);
-        workouts.add(
-          WorkoutProgram.fromMap(programSnapshot.data()!, programSnapshot.id),
-        );
-        _deactivatedWorkouts[activeProgram.workoutProgramId] = false;
-      }
-    }
-    return List.generate(
-      programs.length,
-      (index) => {'program': programs[index], 'workout': workouts[index]},
     );
   }
 
@@ -824,7 +833,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
             separatorBuilder: (_, __) => const SizedBox(width: 14),
             itemBuilder: (context, index) {
               final workout = workouts[index];
-              final isActive = _activeWorkouts.any((w) => w.id == workout.id);
+              final isActive = _deactivatedWorkouts[workout.id] == false;
 
               return GestureDetector(
                 onTap: () {
@@ -864,7 +873,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
   }
 }
 
-// New screen to display deactivated workouts
 class DeactivatedWorkoutsScreen extends StatelessWidget {
   const DeactivatedWorkoutsScreen({super.key});
 
@@ -912,10 +920,9 @@ class DeactivatedWorkoutsScreen extends StatelessWidget {
                       onPressed: () {
                         final navState =
                             context.findAncestorStateOfType<NavScreenState>();
-                        navState?.setDetailScreen(null);
-                        navState?.onItemTapped(
+                        navState?.clearDetailAndGoTo(
                           1,
-                        ); // Navigate back to WorkoutsScreen
+                        ); // Navigate to Workouts tab
                       },
                     ),
                   ],
@@ -923,12 +930,13 @@ class DeactivatedWorkoutsScreen extends StatelessWidget {
                 const SizedBox(height: 12),
                 Expanded(
                   child: FutureBuilder<QuerySnapshot>(
-                    future:
-                        FirebaseFirestore.instance
-                            .collection('users')
-                            .doc(userProvider.firebaseUser!.uid)
-                            .collection('removedWorkoutPrograms')
-                            .get(),
+                    future: Future.microtask(
+                      () => FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(userProvider.firebaseUser!.uid)
+                          .collection('removedWorkoutPrograms')
+                          .get(GetOptions(source: Source.cache)),
+                    ),
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
                         return const Center(child: CircularProgressIndicator());
@@ -952,11 +960,12 @@ class DeactivatedWorkoutsScreen extends StatelessWidget {
                                 as Map<String, dynamic>,
                           );
                           return FutureBuilder<DocumentSnapshot>(
-                            future:
-                                FirebaseFirestore.instance
-                                    .collection('workoutPrograms')
-                                    .doc(removedProgram.workoutProgramId)
-                                    .get(),
+                            future: Future.microtask(
+                              () => FirebaseFirestore.instance
+                                  .collection('workoutPrograms')
+                                  .doc(removedProgram.workoutProgramId)
+                                  .get(GetOptions(source: Source.cache)),
+                            ),
                             builder: (context, workoutSnapshot) {
                               if (workoutSnapshot.connectionState ==
                                   ConnectionState.waiting) {
@@ -1002,49 +1011,80 @@ class DeactivatedWorkoutsScreen extends StatelessWidget {
                                     foregroundColor: colorScheme.primary,
                                   ),
                                   onPressed: () async {
-                                    await FirebaseFirestore.instance
-                                        .collection('users')
-                                        .doc(userProvider.firebaseUser!.uid)
-                                        .collection('activeWorkoutPrograms')
-                                        .doc(workout.id)
-                                        .set({
-                                          'workoutProgramId': workout.id,
-                                          'startDate':
-                                              DateTime.now().toIso8601String(),
-                                          'currentDay': 1,
-                                          'uid': userProvider.firebaseUser!.uid,
-                                        });
-
-                                    await FirebaseFirestore.instance
-                                        .collection('users')
-                                        .doc(userProvider.firebaseUser!.uid)
-                                        .collection('removedWorkoutPrograms')
-                                        .doc(workout.id)
-                                        .delete();
-
-                                    if (context.mounted) {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            'Workout reactivated',
-                                            style: TextStyle(
-                                              color: colorScheme.onPrimary,
-                                            ),
-                                          ),
-                                          backgroundColor: colorScheme.primary,
-                                        ),
+                                    try {
+                                      debugPrint(
+                                        'Reactivating workout: ${workout.id}',
                                       );
-                                      final navState =
-                                          context
-                                              .findAncestorStateOfType<
-                                                NavScreenState
-                                              >();
-                                      navState?.setDetailScreen(null);
-                                      navState?.onItemTapped(
-                                        1,
-                                      ); // Navigate back to WorkoutsScreen
+                                      await FirebaseFirestore.instance
+                                          .collection('users')
+                                          .doc(userProvider.firebaseUser!.uid)
+                                          .collection('activeWorkoutPrograms')
+                                          .doc(workout.id)
+                                          .set({
+                                            'workoutProgramId': workout.id,
+                                            'startDate':
+                                                DateTime.now()
+                                                    .toIso8601String(),
+                                            'currentDay': 1,
+                                            'completedDays': [],
+                                          });
+
+                                      await FirebaseFirestore.instance
+                                          .collection('users')
+                                          .doc(userProvider.firebaseUser!.uid)
+                                          .collection('removedWorkoutPrograms')
+                                          .doc(workout.id)
+                                          .delete();
+
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              'Workout reactivated',
+                                              style: TextStyle(
+                                                color: colorScheme.onPrimary,
+                                              ),
+                                            ),
+                                            backgroundColor:
+                                                colorScheme.primary,
+                                          ),
+                                        );
+                                        final navState =
+                                            context
+                                                .findAncestorStateOfType<
+                                                  NavScreenState
+                                                >();
+                                        navState?.clearDetailAndGoTo(
+                                          1,
+                                        ); // Navigate to Workouts tab
+                                      }
+                                    } catch (e) {
+                                      debugPrint(
+                                        'Error reactivating workout: $e',
+                                      );
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              'Failed to reactivate workout: $e',
+                                              style: TextStyle(
+                                                color:
+                                                    Theme.of(
+                                                      context,
+                                                    ).colorScheme.onError,
+                                              ),
+                                            ),
+                                            backgroundColor:
+                                                Theme.of(
+                                                  context,
+                                                ).colorScheme.error,
+                                          ),
+                                        );
+                                      }
                                     }
                                   },
                                   child: const Text('Reactivate'),

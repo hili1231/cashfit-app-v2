@@ -24,14 +24,19 @@ class AdminManageMealsScreenState extends State<AdminManageMealsScreen> {
 
   // Fetch meals from Firestore
   Future<void> fetchMeals() async {
+    // Store ScaffoldMessengerState before async operation
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
     try {
       final snapshot =
           await FirebaseFirestore.instance.collection('meals').get();
-      setState(() {
-        meals = snapshot.docs.map((doc) => Meal.fromMap(doc.data())).toList();
-      });
+      if (mounted) {
+        setState(() {
+          meals = snapshot.docs.map((doc) => Meal.fromMap(doc.data())).toList();
+        });
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      scaffoldMessenger.showSnackBar(
         SnackBar(content: Text('Error fetching meals from Firestore: $e')),
       );
     }
@@ -39,6 +44,9 @@ class AdminManageMealsScreenState extends State<AdminManageMealsScreen> {
 
   // Fetch meals from the MealDB API
   Future<void> fetchMealsFromMealDB() async {
+    // Store ScaffoldMessengerState before async operation
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
     try {
       final response = await _dio.get(
         'https://www.themealdb.com/api/json/v1/1/filter.php',
@@ -69,7 +77,7 @@ class AdminManageMealsScreenState extends State<AdminManageMealsScreen> {
         throw Exception("Failed to load meals from MealDB API");
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      scaffoldMessenger.showSnackBar(
         SnackBar(content: Text('Error fetching meals from MealDB API: $e')),
       );
     }
@@ -158,18 +166,21 @@ class AdminManageMealsScreenState extends State<AdminManageMealsScreen> {
 
   // Add new meal to Firestore
   Future<void> _addMealToFirestore(Meal meal) async {
+    // Store ScaffoldMessengerState before async operation
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
     try {
       await FirebaseFirestore.instance
           .collection('meals')
           .doc(meal.id)
           .set(meal.toMap());
-      ScaffoldMessenger.of(context).showSnackBar(
+      scaffoldMessenger.showSnackBar(
         SnackBar(content: Text("Meal added to Firestore: ${meal.name}")),
       );
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error adding meal: $e")));
+      scaffoldMessenger.showSnackBar(
+        SnackBar(content: Text("Error adding meal: $e")),
+      );
     }
   }
 

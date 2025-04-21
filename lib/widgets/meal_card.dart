@@ -7,8 +7,14 @@ import '../theme.dart';
 
 class MealPlanCard extends StatelessWidget {
   final MealPlan mealPlan;
-
-  const MealPlanCard({super.key, required this.mealPlan});
+  final int? currentDay;
+  final VoidCallback? onDayButtonPressed;
+  const MealPlanCard({
+    super.key,
+    required this.mealPlan,
+    this.currentDay,
+    this.onDayButtonPressed,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -26,18 +32,7 @@ class MealPlanCard extends StatelessWidget {
           onTap: () {
             final navScreenState =
                 context.findAncestorStateOfType<NavScreenState>();
-            if (navScreenState != null) {
-              navScreenState.setDetailScreen(
-                MealPlanScreen(selectedPlan: mealPlan),
-              );
-            } else {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => MealPlanScreen(selectedPlan: mealPlan),
-                ),
-              );
-            }
+            navScreenState?.setDetailScreen(MealPlanScreen(plan: mealPlan));
           },
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -91,14 +86,13 @@ class MealPlanCard extends StatelessWidget {
                         context.findAncestorStateOfType<NavScreenState>();
                     if (navScreenState != null) {
                       navScreenState.setDetailScreen(
-                        MealPlanScreen(selectedPlan: mealPlan),
+                        MealPlanScreen(plan: mealPlan),
                       );
                     } else {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder:
-                              (_) => MealPlanScreen(selectedPlan: mealPlan),
+                          builder: (_) => MealPlanScreen(plan: mealPlan),
                         ),
                       );
                     }

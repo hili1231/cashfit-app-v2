@@ -84,6 +84,7 @@ class ChallengeProgressScreenState extends State<ChallengeProgressScreen> {
         errorMessage = e.toString();
       });
     } finally {
+      // ignore: control_flow_in_finally
       if (!mounted) return; // Guard context usage
       setState(() {
         isUpdating = false;

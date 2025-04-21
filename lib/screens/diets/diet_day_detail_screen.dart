@@ -1,14 +1,19 @@
+import 'package:cashfit/auth/login_screen.dart';
+import 'package:cashfit/screens/diets/diet_plan_repository.dart';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:provider/provider.dart';
 import '../../models/meal_day.dart';
 import '../../models/meal.dart';
 import '../../models/meal_plan.dart';
 import '../../models/meal_portion.dart';
+import '../../providers/user_provider.dart';
+import '../../widgets/calorie_tracker_widget.dart';
 import '../nav_screen.dart';
-import 'meal_plan_screen.dart';
 import 'meal_detail_screen.dart';
+import 'replace_meal_plan.dart';
+
+enum DayStatus { notDone, doneToday, doneEarlier }
 
 class DietDayDetailScreen extends StatefulWidget {
   final MealPlan plan;
@@ -23,104 +28,294 @@ class DietDayDetailScreen extends StatefulWidget {
 class _DietDayDetailScreenState extends State<DietDayDetailScreen> {
   late MealDay _cachedDay;
   late MealPlan _cachedPlan;
-  bool _isCustom = false;
+  bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    // Cache the plan and day data once on initialization
     _cachedDay = widget.day;
     _cachedPlan = widget.plan;
+  }
+
+  void _handleReplace(BuildContext context, String mealId, String mealType) {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final navState = context.findAncestorStateOfType<NavScreenState>();
+
+    if (!userProvider.isLoggedIn) {
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder:
+              (context) => AlertDialog(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                title: Text(
+                  'Login Required',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
+                content: Text(
+                  'Please log in to replace meals.',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(
+                      'Cancel',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  FilledButton(
+                    style: Theme.of(context).filledButtonTheme.style,
+                    onPressed: () {
+                      Navigator.pop(context);
+                      navState?.setDetailScreen(const LoginScreen());
+                    },
+                    child: Text(
+                      'Log In',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+        );
+      }
+    } else {
+      navState?.setDetailScreen(
+        ReplaceMealScreen(
+          mealId: mealId,
+          mealType: mealType,
+          dayNumber: widget.day.dayNumber,
+          plan: widget.plan,
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final userProvider = Provider.of<UserProvider>(context);
+    final userId = userProvider.firebaseUser?.uid;
 
-    return Scaffold(
-      backgroundColor: colorScheme.surface,
-      appBar: AppBar(
+    if (userId == null) {
+      return Scaffold(
         backgroundColor: colorScheme.surface,
-        elevation: 2,
-        centerTitle: true,
-        title: Text(
-          "Day ${_cachedDay.dayNumber}",
-          style: theme.textTheme.titleLarge?.copyWith(
-            color: colorScheme.onSurface,
-            fontWeight: FontWeight.bold,
-            fontSize: 22,
+        body: Center(
+          child: Text(
+            'Please log in to view this page.',
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: colorScheme.onSurface,
+            ),
           ),
         ),
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: colorScheme.onSurface),
-          onPressed: () {
-            final navState = context.findAncestorStateOfType<NavScreenState>();
-            if (navState != null) {
-              navState.setDetailScreen(
-                MealPlanScreen(selectedPlan: _cachedPlan),
-              );
-            } else {
-              Navigator.pop(context);
-            }
-          },
-        ),
-        actions: [
-          if (_isCustom)
-            IconButton(
-              icon: Icon(Icons.save_alt, color: colorScheme.onSurface),
-              onPressed: () async {
-                final user = FirebaseAuth.instance.currentUser;
-                if (!mounted) return;
+      );
+    }
 
-                if (user == null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: const Text(
-                        "⚠ You must be logged in to save custom plans",
-                      ),
-                      backgroundColor: colorScheme.error,
-                    ),
-                  );
-                  return;
-                }
-
-                // Store ScaffoldMessenger before async operation
-                final scaffoldMessenger = ScaffoldMessenger.of(context);
-
-                final customPlan = _cachedPlan.copyWith(
-                  id:
-                      "custom_${user.uid}_${DateTime.now().millisecondsSinceEpoch}",
-                  userId: user.uid,
-                );
-
-                await FirebaseFirestore.instance
-                    .collection("mealPlans")
-                    .doc(customPlan.id)
-                    .set(customPlan.toMap());
-
-                if (!mounted) return;
-
-                scaffoldMessenger.showSnackBar(
-                  SnackBar(
-                    content: const Text("✅ Custom meal plan saved!"),
-                    backgroundColor: colorScheme.primary,
-                  ),
-                );
-
-                setState(() => _isCustom = false);
-              },
+    return StreamBuilder<ActiveDietPlan?>(
+      stream: context.read<DietPlanRepository>().streamActivePlan(
+        userId,
+        widget.plan.id,
+      ),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Scaffold(
+            backgroundColor: colorScheme.surface,
+            body: Center(
+              child: CircularProgressIndicator(color: colorScheme.primary),
             ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: _buildMealsList(context, theme, colorScheme),
-        ),
-      ),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return Scaffold(
+            backgroundColor: colorScheme.surface,
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Error loading diet plan: ${snapshot.error}',
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: colorScheme.error,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  TextButton(
+                    onPressed: () => setState(() {}),
+                    child: Text(
+                      'Retry',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        final activePlan = snapshot.data;
+        final isPlanActive = activePlan != null;
+        final completedDays = activePlan?.completedDays ?? [];
+        final isDayCompletedToday =
+            completedDays.contains(widget.day.dayNumber) &&
+            activePlan?.lastCompletion != null &&
+            DateUtils.isSameDay(activePlan!.lastCompletion, DateTime.now());
+        final dayStatus =
+            isDayCompletedToday
+                ? DayStatus.doneToday
+                : completedDays.contains(widget.day.dayNumber)
+                ? DayStatus.doneEarlier
+                : DayStatus.notDone;
+
+        return Scaffold(
+          backgroundColor: colorScheme.surface,
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'DAY ${_cachedDay.dayNumber}'.toUpperCase(),
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const CalorieTrackerWidget(),
+                const SizedBox(height: 20),
+                if (_errorMessage != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: Text(
+                      _errorMessage!,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.error,
+                      ),
+                    ),
+                  ),
+                ..._buildMealsList(context, theme, colorScheme),
+                if (_buildMealsList(context, theme, colorScheme).isNotEmpty)
+                  Align(
+                    alignment: Alignment.center,
+                    child: DayCompletionButton(
+                      status: dayStatus,
+                      isLoading: _isLoading,
+                      onPressed:
+                          (markDone) => _toggleDayCompleted(
+                            context,
+                            isPlanActive ? markDone : true,
+                          ),
+                    ),
+                  ),
+                const SizedBox(height: 30),
+              ],
+            ),
+          ),
+        );
+      },
     );
+  }
+
+  Future<void> _toggleDayCompleted(BuildContext context, bool markDone) async {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final repo = context.read<DietPlanRepository>();
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+
+    if (_isLoading) return;
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final userId = userProvider.firebaseUser!.uid;
+      await repo.setActiveDietPlan(
+        userId,
+        widget.plan.id,
+        widget.day.dayNumber,
+      );
+
+      await repo.toggleDayCompleted(
+        userId,
+        widget.plan.id,
+        widget.day.dayNumber,
+        markDone,
+        widget.plan.days.length,
+      );
+
+      await userProvider.loadUserData(userId, silent: true);
+
+      if (mounted) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            backgroundColor: colorScheme.primary,
+            content: Text(
+              markDone
+                  ? "Meal day completed! Return to Earn Points to claim your reward."
+                  : "Meal day completion undone.",
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onPrimary,
+              ),
+            ),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage =
+              'Failed to ${markDone ? 'complete' : 'undo'} meal day: $e';
+        });
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            backgroundColor: colorScheme.error,
+            content: Text(
+              'Error: $e',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onError,
+              ),
+            ),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   List<Widget> _buildMealsList(
@@ -137,7 +332,6 @@ class _DietDayDetailScreenState extends State<DietDayDetailScreen> {
       {"portion": _cachedDay.snack3, "type": "Snack3"},
     ];
 
-    // Only return cards for non-null meal portions
     return meals.where((m) => m['portion'] != null).map((obj) {
       final portion = obj["portion"] as MealPortion;
       final type = obj["type"] as String;
@@ -229,18 +423,17 @@ class _DietDayDetailScreenState extends State<DietDayDetailScreen> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  // Uncomment if you want to re-enable the Replace button
-                  /*
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: _buildReplaceButton(
-                      context: context,
-                      meal: meal,
-                      mealType: mealType,
-                      portion: portion,
+                    child: TextButton(
+                      style: TextButton.styleFrom(
+                        foregroundColor: colorScheme.primary,
+                      ),
+                      onPressed:
+                          () => _handleReplace(context, meal.id, mealType),
+                      child: const Text('Replace Meal'),
                     ),
                   ),
-                  */
                 ],
               ),
             ),
@@ -285,6 +478,59 @@ class _DietDayDetailScreenState extends State<DietDayDetailScreen> {
         size: 30,
         color: colorScheme.onSurfaceVariant,
       ),
+    );
+  }
+}
+
+class DayCompletionButton extends StatelessWidget {
+  final DayStatus status;
+  final bool isLoading;
+  final void Function(bool markDone)? onPressed;
+
+  const DayCompletionButton({
+    super.key,
+    required this.status,
+    required this.isLoading,
+    this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    final isDone = status != DayStatus.notDone;
+    final buttonText = isDone ? "Undo Completion" : "Meal Day Completed";
+    final buttonColor =
+        isDone
+            ? colorScheme.onSurface.withAlpha((255 * 0.6).round())
+            : colorScheme.primary;
+    final textColor =
+        isDone
+            ? colorScheme.onSurface.withAlpha((255 * 0.6).round())
+            : colorScheme.onPrimary;
+
+    return FilledButton(
+      style: FilledButton.styleFrom(
+        backgroundColor: buttonColor,
+        foregroundColor: textColor,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      ),
+      onPressed: isLoading ? null : () => onPressed?.call(!isDone),
+      child:
+          isLoading
+              ? SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  color: textColor,
+                  strokeWidth: 2,
+                ),
+              )
+              : Text(
+                buttonText,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
     );
   }
 }

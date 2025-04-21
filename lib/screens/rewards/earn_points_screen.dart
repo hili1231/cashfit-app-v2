@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:cashfit/models/app_user.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
@@ -18,6 +19,7 @@ import '../profile_screen.dart';
 import '../nav_screen.dart';
 import '../workouts/workouts_screen.dart';
 import '../../ad_helper.dart';
+import '../../services/auth_service.dart';
 
 class EarnPointsScreen extends StatefulWidget {
   const EarnPointsScreen({super.key});
@@ -35,32 +37,36 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
   Map<String, bool> taskLoadingStates = {};
   Map<String, bool> taskSparkleStates = {};
 
-  // Daily Check-In State
   bool canCheckInToday = false;
   int currentCheckInStreak = 0;
   int checkInFitCoinsToEarn = 0;
   static const List<int> checkInFitCoins = [5, 10, 15, 20, 25, 30, 40];
 
-  // Watch Ad State
   bool canWatchAd = false;
   int adsWatchedToday = 0;
   Timestamp? lastAdWatchedTimestamp;
-  static const int maxAdsPerPeriod = 5;
+  static const int maxAdsPerPeriod = 7;
   static const int fitCoinsPerAd = 10;
-  static const Duration adCooldown = Duration(hours: 4);
+  static const Duration adDebounce = Duration(seconds: 1);
 
-  // Step Counter State
   int currentSteps = 0;
   int dailyStepTarget = 10000;
   Stream<StepCount>? stepCountStream;
   bool stepCounterInitialized = false;
-  bool stepCounterSupported = true;
+  bool stepCounterSupported = Platform.isAndroid || Platform.isIOS;
+  DateTime? lastAdAttempt;
 
   @override
   void initState() {
     super.initState();
     _initAll();
-    _initializeStepCounter();
+    if (stepCounterSupported) {
+      _initializeStepCounter();
+    } else {
+      _logger.i(
+        'Step counter skipped on unsupported platform: ${Platform.operatingSystem}',
+      );
+    }
   }
 
   @override
@@ -70,17 +76,6 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
   }
 
   Future<void> _initializeStepCounter() async {
-    if (!Platform.isAndroid && !Platform.isIOS) {
-      _logger.w(
-        "Step counter not supported on this platform: ${Platform.operatingSystem}",
-      );
-      setState(() {
-        stepCounterSupported = false;
-        stepCounterInitialized = false;
-      });
-      return;
-    }
-
     PermissionStatus status = await Permission.activityRecognition.request();
     if (status.isGranted) {
       setState(() {
@@ -106,7 +101,7 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text(
-              "Step counter permission is required to track your steps. Please enable it in settings.",
+              "Step counter permission is required to track steps. Please enable it in settings.",
             ),
             action: SnackBarAction(
               label: 'Settings',
@@ -155,86 +150,15 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
 
     if (userProvider.currentUser == null) {
       await userProvider.loadUserData(FirebaseAuth.instance.currentUser!.uid);
+    } else {
+      await userProvider.refreshUser();
     }
 
     if (userProvider.currentUser != null) {
-      final now = DateTime.now();
-      final user = userProvider.currentUser!;
-
-      // Daily Check-In Logic
-      final lastCheckIn = user.lastCheckIn;
-      currentCheckInStreak = user.checkInStreak;
-      canCheckInToday = lastCheckIn == null || !_isSameDay(lastCheckIn, now);
-      if (lastCheckIn != null && canCheckInToday) {
-        final daysSinceLastCheckIn = now.difference(lastCheckIn).inDays;
-        if (daysSinceLastCheckIn >= 2) {
-          currentCheckInStreak = 0;
-        }
-      }
-      int nextStreakDay = (currentCheckInStreak + 1) % 7;
-      if (nextStreakDay == 0) nextStreakDay = 7;
-      checkInFitCoinsToEarn = checkInFitCoins[nextStreakDay - 1];
-
-      // Watch Ad Logic
-      final lastAdsWatchedDate = user.lastAdsWatchedDate;
-      lastAdWatchedTimestamp = user.lastAdWatchedTimestamp as Timestamp?;
-      adsWatchedToday =
-          lastAdsWatchedDate != null && _isSameDay(lastAdsWatchedDate, now)
-              ? user.dailyAdsWatched
-              : 0;
-      canWatchAd =
-          adsWatchedToday < maxAdsPerPeriod &&
-          (lastAdWatchedTimestamp == null ||
-              now.difference(lastAdWatchedTimestamp!.toDate()).inSeconds >=
-                  adCooldown.inSeconds);
-
-      // Load daily step target
-      dailyStepTarget = user.dailyStepTarget ?? 10000;
-
-      // Initialize task states
-      taskStates = {
-        'daily_check_in': canCheckInToday,
-        'complete_workout':
-            user.lastWorkoutCompletionDate != null &&
-            _isSameDay(user.lastWorkoutCompletionDate!, now),
-        'complete_meal_plan':
-            user.lastMealPlanCompletionDate != null &&
-            _isSameDay(user.lastMealPlanCompletionDate!, now),
-        'daily_step_goal':
-            stepCounterSupported && currentSteps >= dailyStepTarget,
-        'update_weight':
-            user.lastWeightUpdateDate != null &&
-            DateTime.now().difference(user.lastWeightUpdateDate!).inDays < 7,
-        'build_profile':
-            user.gender.isNotEmpty &&
-            user.age.isNotEmpty &&
-            user.height.isNotEmpty &&
-            user.weight.isNotEmpty &&
-            user.avatar.isNotEmpty,
-        'build_plans': user.hasBuiltPlans,
-        'share_progress': user.joinedChallenges.isNotEmpty,
-        'join_challenge': user.joinedChallenges.isNotEmpty,
-        'complete_side_hustle': user.joinedSideHustles.isNotEmpty,
-        'watch_ad': canWatchAd,
-      };
-
-      taskLoadingStates = {for (var id in taskStates.keys) id: false};
-
-      _logger.i('Task States: $taskStates');
-      _logger.i('User Completed One-Offs: ${user.completedOneOffIds}');
-      _logger.i('Last Check-In: $lastCheckIn, Can Check In: $canCheckInToday');
-      _logger.i(
-        'Ads Watched Today: $adsWatchedToday, Can Watch Ad: $canWatchAd',
-      );
-      _logger.i(
-        'Has Built Plans: ${user.hasBuiltPlans}, Has Claimed Build Plans Reward: ${user.hasClaimedBuildPlansReward}',
-      );
-
+      _updateTaskStates();
       setState(() {
         isUserDataLoaded = true;
       });
-
-      _buildRewardTasks();
     } else {
       setState(() {
         isLoading = false;
@@ -243,19 +167,117 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
     }
   }
 
+  void _updateTaskStates() {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final now = DateTime.now();
+    final user = userProvider.currentUser!;
+
+    final lastCheckIn = user.lastCheckIn;
+    currentCheckInStreak = user.checkInStreak;
+    canCheckInToday = lastCheckIn == null || !_isSameDay(lastCheckIn, now);
+    if (lastCheckIn != null && canCheckInToday) {
+      final daysSinceLastCheckIn = now.difference(lastCheckIn).inDays;
+      if (daysSinceLastCheckIn >= 2) {
+        currentCheckInStreak = 0;
+      }
+    }
+    int nextStreakDay = (currentCheckInStreak + 1) % 7;
+    if (nextStreakDay == 0) nextStreakDay = 7;
+    checkInFitCoinsToEarn = checkInFitCoins[nextStreakDay - 1];
+
+    final lastAdsWatchedDate = user.lastAdsWatchedDate;
+    lastAdWatchedTimestamp =
+        user.lastAdWatchedTimestamp is Timestamp
+            ? user.lastAdWatchedTimestamp as Timestamp?
+            : user.lastAdWatchedTimestamp != null
+            ? Timestamp.fromDate(user.lastAdWatchedTimestamp as DateTime)
+            : null;
+    adsWatchedToday =
+        lastAdsWatchedDate != null && _isSameDay(lastAdsWatchedDate, now)
+            ? user.dailyAdsWatched
+            : 0;
+    canWatchAd = adsWatchedToday < maxAdsPerPeriod;
+
+    dailyStepTarget = user.dailyStepTarget ?? 10000;
+
+    taskStates = {
+      'daily_check_in': canCheckInToday,
+      'complete_workout':
+          user.lastWorkoutCompletionDate != null &&
+          _isSameDay(user.lastWorkoutCompletionDate!, now),
+      'complete_meal_plan':
+          user.lastMealPlanCompletionDate != null &&
+          _isSameDay(user.lastMealPlanCompletionDate!, now),
+      'daily_step_goal':
+          stepCounterSupported && currentSteps >= dailyStepTarget,
+      'update_weight': _hasUnclaimedWeightUpdate(user, now),
+      'build_profile':
+          user.gender.isNotEmpty &&
+          user.age.isNotEmpty &&
+          user.height.isNotEmpty &&
+          user.weight.isNotEmpty,
+      'build_plans': user.hasBuiltPlans,
+      'share_progress': user.joinedChallenges.isNotEmpty,
+      'join_challenge': user.joinedChallenges.isNotEmpty,
+      'complete_side_hustle': user.joinedSideHustles.isNotEmpty,
+      'watch_ad': canWatchAd,
+    };
+
+    taskLoadingStates = {for (var id in taskStates.keys) id: false};
+
+    _logger.i('Task States: $taskStates');
+    _logger.i('User Completed One-Offs: ${user.completedOneOffIds}');
+    _logger.i('Last Check-In: $lastCheckIn, Can Check In: $canCheckInToday');
+    _logger.i('Ads Watched Today: $adsWatchedToday, Can Watch Ad: $canWatchAd');
+    _logger.i(
+      'Has Built Plans: ${user.hasBuiltPlans}, Has Claimed Build Plans Reward: ${user.hasClaimedBuildPlansReward}',
+    );
+
+    _buildRewardTasks();
+  }
+
   bool _isSameDay(DateTime date1, DateTime date2) {
     return date1.day == date2.day &&
         date1.month == date2.month &&
         date1.year == date2.year;
   }
 
+  DateTime _getLastMonday(DateTime date) {
+    final daysSinceMonday = date.weekday - 1;
+    return date.subtract(Duration(days: daysSinceMonday));
+  }
+
+  bool _isSameWeek(DateTime date1, DateTime date2) {
+    final lastMonday1 = _getLastMonday(date1);
+    final lastMonday2 = _getLastMonday(date2);
+    return lastMonday1.year == lastMonday2.year &&
+        lastMonday1.month == lastMonday2.month &&
+        lastMonday1.day == lastMonday2.day;
+  }
+
+  bool _hasUnclaimedWeightUpdate(AppUser user, DateTime now) {
+    final lastWeightUpdate = user.lastWeightUpdateDate;
+    final claimedReward = user.claimedRewards['update_weight'];
+    final hasClaimed =
+        claimedReward != null && claimedReward['claimed'] == true;
+    final lastClaimedDate =
+        hasClaimed
+            ? (claimedReward['lastClaimed'] as Timestamp?)?.toDate()
+            : null;
+
+    if (lastWeightUpdate == null) return false;
+
+    final isWeightUpdatedThisWeek = _isSameWeek(lastWeightUpdate, now);
+    final isClaimedThisWeek =
+        lastClaimedDate != null && _isSameWeek(lastClaimedDate, now);
+
+    return isWeightUpdatedThisWeek && !isClaimedThisWeek;
+  }
+
   void _updateDailyStepGoalState() {
     if (!stepCounterSupported) return;
-    final user = Provider.of<UserProvider>(context, listen: false).currentUser;
-    if (user != null) {
-      taskStates['daily_step_goal'] = currentSteps >= dailyStepTarget;
-      _buildRewardTasks();
-    }
+    taskStates['daily_step_goal'] = currentSteps >= dailyStepTarget;
+    _buildRewardTasks();
   }
 
   void _buildRewardTasks() {
@@ -272,7 +294,6 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
       _logger.w('NavScreenState is null, navigation may not work');
     }
 
-    // Sort tasks: daily_check_in first, then active tasks, then completed one-off tasks
     final sortedTasks = [...rewardTasks];
     sortedTasks.sort((a, b) {
       if (a.id == 'daily_check_in') return -1;
@@ -295,7 +316,6 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
           VoidCallback? onAction;
           String buttonText = task.buttonText;
 
-          // Check if the reward has been claimed
           final claimedReward = user.claimedRewards[task.id];
           bool hasClaimed =
               claimedReward != null && claimedReward['claimed'] == true;
@@ -306,7 +326,6 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
                 (claimedReward['lastClaimed'] as Timestamp).toDate();
           }
 
-          // Reset daily/weekly/ad rewards if not claimed on the current day/week
           if (lastClaimedDate != null) {
             final now = DateTime.now();
             if (task.type == RewardType.daily ||
@@ -316,8 +335,7 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
                 hasClaimed = false;
               }
             } else if (task.type == RewardType.weekly) {
-              final daysSinceLastClaim = now.difference(lastClaimedDate).inDays;
-              if (daysSinceLastClaim >= 7) {
+              if (!_isSameWeek(lastClaimedDate, now)) {
                 hasClaimed = false;
               }
             }
@@ -390,20 +408,18 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
                       : (stepGoalReached ? 'Claim Reward' : 'Check Steps');
               break;
             case 'update_weight':
-              final canUpdateWeight =
-                  user.lastWeightUpdateDate == null ||
-                  DateTime.now()
-                          .difference(user.lastWeightUpdateDate!)
-                          .inDays >=
-                      7;
-              isCompleted = hasClaimed || !canUpdateWeight;
-              isEnabled =
-                  canUpdateWeight &&
-                  !isCompleted &&
-                  !taskLoadingStates[task.id]!;
+              final hasUpdatedWeight = taskStates['update_weight']!;
+
+              // 1️⃣ completed this week? → grey / disabled
+              isCompleted = hasClaimed;
+
+              // 2️⃣ otherwise we enable the button only
+              //    – if user still has to update the weight  ➜ “Update weight”
+              //    – or if weight is updated but reward not claimed ➜ “Claim reward”
+              isEnabled = !isCompleted && !taskLoadingStates[task.id]!;
               onAction =
-                  isEnabled && navState != null
-                      ? (canUpdateWeight
+                  navState != null
+                      ? (hasUpdatedWeight && !isCompleted
                           ? () => _claimReward(task)
                           : () =>
                               navState.setDetailScreen(const ProfileScreen()))
@@ -411,22 +427,19 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
               buttonText =
                   isCompleted
                       ? 'Completed'
-                      : (canUpdateWeight ? 'Claim Reward' : 'Update Weight');
+                      : (hasUpdatedWeight ? 'Claim Reward' : 'Update Weight');
               break;
             case 'build_profile':
-              final profileBuilt =
-                  user.gender.isNotEmpty &&
-                  user.age.isNotEmpty &&
-                  user.height.isNotEmpty &&
-                  user.weight.isNotEmpty &&
-                  user.avatar.isNotEmpty;
+              final profileBuilt = taskStates['build_profile']!;
+
+              // one‑off → once claimed, never enabled again
               isCompleted =
                   hasClaimed ||
                   user.completedOneOffIds.contains('build_profile');
               isEnabled = !isCompleted && !taskLoadingStates[task.id]!;
               onAction =
-                  isEnabled && navState != null
-                      ? (profileBuilt
+                  navState != null
+                      ? (profileBuilt && !isCompleted
                           ? () => _claimReward(task)
                           : () =>
                               navState.setDetailScreen(const ProfileScreen()))
@@ -553,8 +566,6 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
             buttonText: buttonText,
           );
         }).toList();
-
-    setState(() {});
   }
 
   String _getTaskDescription(RewardTask task) {
@@ -577,8 +588,7 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
           hasClaimed = false;
         }
       } else if (task.type == RewardType.weekly) {
-        final daysSinceLastClaim = now.difference(lastClaimedDate).inDays;
-        if (daysSinceLastClaim >= 7) {
+        if (!_isSameWeek(lastClaimedDate, now)) {
           hasClaimed = false;
         }
       }
@@ -616,10 +626,7 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
         return hasClaimed
             ? "Weight updated this week. Check back next week."
             : (user.lastWeightUpdateDate != null &&
-                    DateTime.now()
-                            .difference(user.lastWeightUpdateDate!)
-                            .inDays <
-                        7
+                    _isSameWeek(user.lastWeightUpdateDate!, now)
                 ? "Weight updated! Mine your +${task.points} FitCoins (Badge: Weight Tracker)."
                 : "Update your weight to mine +${task.points} FitCoins (Badge: Weight Tracker).");
       case 'build_profile':
@@ -650,14 +657,6 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
       case 'watch_ad':
         if (canWatchAd) {
           return "Watch an ad to mine +$fitCoinsPerAd FitCoins (${maxAdsPerPeriod - adsWatchedToday}/$maxAdsPerPeriod remaining today).";
-        } else if (lastAdWatchedTimestamp != null &&
-            now.difference(lastAdWatchedTimestamp!.toDate()).inSeconds <
-                adCooldown.inSeconds) {
-          final remainingSeconds =
-              adCooldown.inSeconds -
-              now.difference(lastAdWatchedTimestamp!.toDate()).inSeconds;
-          final remainingMinutes = (remainingSeconds / 60).ceil();
-          return "Cooldown: $remainingMinutes minutes until next ad.";
         } else {
           return "Max ads watched today. Try again tomorrow.";
         }
@@ -682,7 +681,7 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
               CircleAvatar(
                 radius: 18,
                 backgroundColor:
-                    reached || today ? cs.primary : cs.surfaceVariant,
+                    reached || today ? cs.primary : cs.surfaceContainerHighest,
                 child:
                     reached
                         ? Icon(Icons.check, size: 20, color: cs.onPrimary)
@@ -766,7 +765,8 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
         taskSparkleStates[task.id] = true;
       });
 
-      await _loadUserData();
+      await userProvider.refreshUser();
+      _buildRewardTasks();
     } catch (e) {
       _logger.e("Failed to check in: $e");
       if (!mounted) return;
@@ -805,6 +805,9 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
       String? badge;
       if (task.id == 'build_plans') {
         badge = 'Plan Creator';
+        await AuthService.instance.claimBuildPlansReward(
+          userProvider.firebaseUser!.uid,
+        );
       } else if (task.id == 'build_profile') {
         badge = 'Profile Builder';
       } else if (task.id == 'update_weight') {
@@ -833,7 +836,8 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
         taskSparkleStates[task.id] = true;
       });
 
-      await _loadUserData();
+      await userProvider.refreshUser();
+      _buildRewardTasks();
     } catch (e) {
       _logger.e("Failed to earn FitCoins: $e");
       if (!mounted) return;
@@ -864,8 +868,32 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
     final colorScheme = theme.colorScheme;
     final userProvider = Provider.of<UserProvider>(context, listen: false);
 
+    final now = DateTime.now();
+    if (lastAdAttempt != null &&
+        now.difference(lastAdAttempt!).inSeconds < adDebounce.inSeconds) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: colorScheme.error,
+            content: Text(
+              "Please wait a moment before watching another ad.",
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onError,
+              ),
+            ),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
     setState(() {
       taskLoadingStates[task.id] = true;
+      lastAdAttempt = now;
     });
 
     try {
@@ -878,7 +906,6 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
                 .doc(userProvider.firebaseUser!.uid)
                 .update({
                   'dailyAdsWatched': FieldValue.increment(1),
-                  'lastAdWatchedTimestamp': FieldValue.serverTimestamp(),
                   'lastAdsWatchedDate': FieldValue.serverTimestamp(),
                 });
 
@@ -906,15 +933,44 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
               ),
             );
 
-            await _loadUserData();
+            await userProvider.refreshUser();
+            _buildRewardTasks();
           } catch (e) {
             _logger.e("Failed to process ad reward: $e");
-            if (!mounted) return;
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  backgroundColor: colorScheme.error,
+                  content: Text(
+                    "Failed to process ad reward: $e",
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onError,
+                    ),
+                  ),
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              );
+            }
+          }
+        },
+        onAdDismissed: () {
+          if (mounted) {
+            setState(() {
+              taskLoadingStates[task.id] = false;
+            });
+          }
+        },
+        onAdFailed: (AdError error) {
+          _logger.e("Ad failed to show: ${error.message}");
+          if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 backgroundColor: colorScheme.error,
                 content: Text(
-                  "Failed to process ad reward: $e",
+                  "Failed to load ad: ${error.message}",
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: colorScheme.onError,
                   ),
@@ -925,18 +981,30 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
                 ),
               ),
             );
-          } finally {
-            if (mounted) {
-              setState(() {
-                taskLoadingStates[task.id] = false;
-              });
-            }
+            setState(() {
+              taskLoadingStates[task.id] = false;
+            });
           }
         },
       );
     } catch (e) {
       _logger.e("Error showing ad: $e");
       if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: colorScheme.error,
+            content: Text(
+              "Error showing ad: $e",
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onError,
+              ),
+            ),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
         setState(() {
           taskLoadingStates[task.id] = false;
         });
@@ -947,15 +1015,6 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
   Widget _buildTaskCard(RewardTask task) {
     final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
-
-    String? badge;
-    if (task.id == 'build_plans') {
-      badge = 'Plan Creator';
-    } else if (task.id == 'build_profile') {
-      badge = 'Profile Builder';
-    } else if (task.id == 'update_weight') {
-      badge = 'Weight Tracker';
-    }
 
     _logger.i(
       'Task ${task.id}: isEnabled=${task.isEnabled}, isCompleted=${task.isCompleted}, onAction=${task.onAction != null}',
@@ -1033,7 +1092,7 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
       label: 'Action for $label',
       child: FilledButton(
         style: FilledButton.styleFrom(
-          backgroundColor: enabled ? cs.primary : cs.surfaceVariant,
+          backgroundColor: enabled ? cs.primary : cs.surfaceContainerHighest,
           foregroundColor: enabled ? cs.onPrimary : cs.onSurfaceVariant,
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -1062,9 +1121,14 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final userProvider = Provider.of<UserProvider>(context);
+    final userProvider = Provider.of<UserProvider>(context, listen: true);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+
+    // Rebuild tasks whenever user data changes
+    if (isUserDataLoaded && userProvider.currentUser != null) {
+      _updateTaskStates();
+    }
 
     if (isLoading || userProvider.currentUser == null) {
       return Container(

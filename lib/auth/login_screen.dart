@@ -17,8 +17,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
-  final forgotPasswordEmailController =
-      TextEditingController(); // Controller for forgot password email
+  final forgotPasswordEmailController = TextEditingController();
   final AuthService auth = AuthService();
 
   bool isLoading = false;
@@ -43,9 +42,8 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (user != null) {
-        await userProvider.loadUserData(user.uid); // Use stored userProvider
+        await userProvider.loadUserData(user.uid);
         if (mounted) {
-          // Guard context usage with mounted check
           Navigator.of(context).pushReplacement(
             PageRouteBuilder(
               transitionDuration: const Duration(milliseconds: 500),
@@ -98,9 +96,8 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       if (user != null) {
-        await userProvider.loadUserData(user.uid); // Use stored userProvider
+        await userProvider.loadUserData(user.uid);
         if (mounted) {
-          // Guard context usage with mounted check
           Navigator.of(context).pushReplacement(
             PageRouteBuilder(
               transitionDuration: const Duration(milliseconds: 500),
@@ -133,11 +130,15 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _forgotPassword() async {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    // Store the ScaffoldMessengerState from the parent context
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
 
     // Show dialog to enter email
     await showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
+        // Store NavigatorState for the dialog context
+        final dialogNavigator = Navigator.of(dialogContext);
         return AlertDialog(
           title: Text(
             "Forgot Password",
@@ -177,7 +178,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => dialogNavigator.pop(),
               child: Text(
                 "Cancel",
                 style: theme.textTheme.bodyMedium?.copyWith(
@@ -193,7 +194,7 @@ class _LoginScreenState extends State<LoginScreen> {
               onPressed: () async {
                 final email = forgotPasswordEmailController.text.trim();
                 if (email.isEmpty || !email.contains('@')) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  scaffoldMessenger.showSnackBar(
                     SnackBar(
                       backgroundColor: colorScheme.error,
                       content: Text(
@@ -215,42 +216,38 @@ class _LoginScreenState extends State<LoginScreen> {
                   await FirebaseAuth.instance.sendPasswordResetEmail(
                     email: email,
                   );
-                  Navigator.pop(context);
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        backgroundColor: colorScheme.primary,
-                        content: Text(
-                          "Password reset email sent to $email",
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onPrimary,
-                          ),
-                        ),
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                  dialogNavigator.pop();
+                  scaffoldMessenger.showSnackBar(
+                    SnackBar(
+                      backgroundColor: colorScheme.primary,
+                      content: Text(
+                        "Password reset email sent to $email",
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onPrimary,
                         ),
                       ),
-                    );
-                  }
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  );
                 } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        backgroundColor: colorScheme.error,
-                        content: Text(
-                          "Failed to send reset email: ${e.toString()}",
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onError,
-                          ),
-                        ),
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                  scaffoldMessenger.showSnackBar(
+                    SnackBar(
+                      backgroundColor: colorScheme.error,
+                      content: Text(
+                        "Failed to send reset email: ${e.toString()}",
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onError,
                         ),
                       ),
-                    );
-                  }
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  );
                 }
               },
               child: Text(
@@ -273,7 +270,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void dispose() {
     emailController.dispose();
     passwordController.dispose();
-    forgotPasswordEmailController.dispose(); // Dispose of the new controller
+    forgotPasswordEmailController.dispose();
     super.dispose();
   }
 

@@ -32,27 +32,19 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final Map<String, TextEditingController> controllers = {};
   bool _notificationsEnabled = true;
+  bool _fieldsInitialized = false;
   TimeOfDay _dailyReminderTime = const TimeOfDay(hour: 8, minute: 0);
   TimeOfDay _weeklyReminderTime = const TimeOfDay(hour: 9, minute: 0);
+  String _dailyReminderTimeFormatted = "8:00 AM";
+  String _weeklyReminderTimeFormatted = "9:00 AM";
   bool _isSaving = false;
   File? _selectedImage;
+  String? _selectedGender;
+  String? _selectedAge;
+  String? _selectedHeight;
+  String? _selectedWeight;
 
   final List<_Badge> _possibleBadges = [
-    _Badge(
-      name: "Profile Builder",
-      earnedImagePath: "assets/images/badge_profile_builder.png",
-      unearnedImagePath: "assets/images/badge_profile_builder_unearned.png",
-    ),
-    _Badge(
-      name: "Plan Creator",
-      earnedImagePath: "assets/images/badge_plan_creator.png",
-      unearnedImagePath: "assets/images/badge_plan_creator_unearned.png",
-    ),
-    _Badge(
-      name: "Weight Tracker",
-      earnedImagePath: "assets/images/badge_weight_tracker.png",
-      unearnedImagePath: "assets/images/badge_weight_tracker_unearned.png",
-    ),
     _Badge(
       name: "Beginner",
       earnedImagePath: "assets/images/badge_beginner.png",
@@ -75,13 +67,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ),
   ];
 
+  final List<String> _genderOptions = [
+    "Male",
+    "Female",
+    "Non-Binary",
+    "Other",
+    "Prefer not to say",
+  ];
+  final List<String> _ageOptions = List.generate(
+    83,
+    (index) => (18 + index).toString(),
+  );
+  final List<String> _heightOptions = List.generate(
+    101,
+    (index) => (120 + index).toString(),
+  );
+  final List<String> _weightOptions = List.generate(
+    171,
+    (index) => (30 + index).toString(),
+  );
+
   @override
   void initState() {
     super.initState();
-    _initializeControllers();
   }
 
-  void _initializeControllers() {
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_fieldsInitialized) {
+      _initializeFields();
+      Provider.of<UserProvider>(context, listen: false).updateStreak();
+      _fieldsInitialized = true;
+    }
+  }
+
+  void _initializeFields() {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     if (userProvider.currentUser != null) {
       controllers['name'] = TextEditingController(
@@ -90,18 +111,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
       controllers['email'] = TextEditingController(
         text: userProvider.currentUser!.email,
       );
-      controllers['gender'] = TextEditingController(
-        text: userProvider.currentUser!.gender,
-      );
-      controllers['age'] = TextEditingController(
-        text: userProvider.currentUser!.age,
-      );
-      controllers['height'] = TextEditingController(
-        text: userProvider.currentUser!.height,
-      );
-      controllers['weight'] = TextEditingController(
-        text: userProvider.currentUser!.weight,
-      );
+      _selectedGender =
+          userProvider.currentUser!.gender.isNotEmpty
+              ? userProvider.currentUser!.gender
+              : null;
+      _selectedAge =
+          userProvider.currentUser!.age.isNotEmpty
+              ? userProvider.currentUser!.age
+              : null;
+      _selectedHeight =
+          userProvider.currentUser!.height.isNotEmpty
+              ? userProvider.currentUser!.height
+              : null;
+      _selectedWeight =
+          userProvider.currentUser!.weight.isNotEmpty
+              ? userProvider.currentUser!.weight
+              : null;
       _notificationsEnabled = userProvider.currentUser!.notificationsEnabled;
       if (userProvider.currentUser!.dailyReminderTime != null) {
         final parts = userProvider.currentUser!.dailyReminderTime!.split(':');
@@ -109,6 +134,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           hour: int.parse(parts[0]),
           minute: int.parse(parts[1]),
         );
+        _dailyReminderTimeFormatted = _dailyReminderTime.format(context);
       }
       if (userProvider.currentUser!.weeklyReminderTime != null) {
         final parts = userProvider.currentUser!.weeklyReminderTime!.split(':');
@@ -116,6 +142,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           hour: int.parse(parts[0]),
           minute: int.parse(parts[1]),
         );
+        _weeklyReminderTimeFormatted = _weeklyReminderTime.format(context);
       }
     }
   }
@@ -136,26 +163,51 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final userProvider = Provider.of<UserProvider>(context, listen: false);
+    // Store ScaffoldMessengerState before async operation
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
 
     try {
+      // Update weight separately to ensure weightHistory and lastWeightUpdateDate are updated
+      if (_selectedWeight != null &&
+          _selectedWeight != userProvider.currentUser!.weight) {
+        await userProvider.updateWeight(_selectedWeight!);
+      }
+
+      // Update other profile fields
       await userProvider.updateProfileFields(
-        gender: controllers['gender']!.text,
-        age: controllers['age']!.text,
-        height: controllers['height']!.text,
-        weight: controllers['weight']!.text,
+        name: controllers['name']!.text,
+        gender: _selectedGender ?? '',
+        age: _selectedAge ?? '',
+        height: _selectedHeight ?? '',
+        weight: _selectedWeight ?? '',
         avatar: userProvider.currentUser!.avatar,
       );
 
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      // Claim reward for building profile if not already claimed and profile is complete
+      if (!userProvider.currentUser!.completedOneOffIds.contains(
+            'build_profile',
+          ) &&
+          controllers['name']!.text.isNotEmpty &&
+          _selectedGender != null &&
+          _selectedAge != null &&
+          _selectedHeight != null &&
+          _selectedWeight != null &&
+          userProvider.currentUser!.avatar.isNotEmpty) {
+        await userProvider.claimReward(
+          'build_profile',
+          15,
+          badge: 'Profile Builder',
+        );
+      }
+
+      // Refresh user data to ensure EarnPointsScreen sees updated state
+      await userProvider.refreshUser();
+
+      scaffoldMessenger.showSnackBar(
         SnackBar(
           backgroundColor: colorScheme.primary,
           content: Text(
-            userProvider.currentUser!.completedOneOffIds.contains(
-                  'build_profile',
-                )
-                ? "Profile updated successfully"
-                : "Profile updated! +15 points earned",
+            "Profile updated successfully",
             style: theme.textTheme.bodyMedium?.copyWith(
               color: colorScheme.onPrimary,
             ),
@@ -165,8 +217,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       );
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      scaffoldMessenger.showSnackBar(
         SnackBar(
           backgroundColor: colorScheme.error,
           content: Text(
@@ -195,6 +246,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    // Store ScaffoldMessengerState before async operation
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
 
     try {
       final userProvider = Provider.of<UserProvider>(context, listen: false);
@@ -208,8 +261,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   "${_weeklyReminderTime.hour}:${_weeklyReminderTime.minute}",
             });
       }
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      scaffoldMessenger.showSnackBar(
         SnackBar(
           backgroundColor: colorScheme.primary,
           content: Text(
@@ -223,8 +275,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       );
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      scaffoldMessenger.showSnackBar(
         SnackBar(
           backgroundColor: colorScheme.error,
           content: Text(
@@ -255,8 +306,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() {
         if (isDaily) {
           _dailyReminderTime = picked;
+          _dailyReminderTimeFormatted = picked.format(context);
         } else {
           _weeklyReminderTime = picked;
+          _weeklyReminderTimeFormatted = picked.format(context);
         }
       });
     }
@@ -265,37 +318,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _handleLogout() async {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    // Store ScaffoldMessengerState and NavigatorState before async operation
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
 
     try {
       await AuthService.instance.signOut();
 
-      if (!mounted) return;
-
-      Navigator.of(context).pushAndRemoveUntil(
+      navigator.pushAndRemoveUntil(
         AppTheme.createPageRoute(const NavScreen()),
         (route) => false,
       );
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: colorScheme.primary,
-            content: Text(
-              "Logged out successfully",
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onPrimary,
-              ),
-            ),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          backgroundColor: colorScheme.primary,
+          content: Text(
+            "Logged out successfully",
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onPrimary,
             ),
           ),
-        );
-      }
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      scaffoldMessenger.showSnackBar(
         SnackBar(
           backgroundColor: colorScheme.error,
           content: Text(
@@ -315,6 +364,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    // Store ScaffoldMessengerState before async operation
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
 
     const List<String> defaultAvatars = [
       'assets/images/default_avatar_1.png',
@@ -324,130 +375,129 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     await showDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            backgroundColor: colorScheme.surface,
-            title: Text(
-              "Select Default Avatar",
-              style: theme.textTheme.titleMedium?.copyWith(
-                color: colorScheme.onSurface,
-              ),
+      builder: (dialogContext) {
+        // Store NavigatorState for the dialog context
+        final dialogNavigator = Navigator.of(dialogContext);
+        return AlertDialog(
+          backgroundColor: colorScheme.surface,
+          title: Text(
+            "Select Default Avatar",
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: colorScheme.onSurface,
             ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 16.0),
-                    child: Column(
-                      children: [
-                        Text(
-                          "Current Avatar",
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurface,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        CircleAvatar(
-                          radius: 40,
-                          backgroundColor: colorScheme.primary,
-                          child: CircleAvatar(
-                            radius: 35,
-                            backgroundColor: colorScheme.surface,
-                            backgroundImage:
-                                (userProvider.currentUser?.avatar != null &&
-                                        userProvider
-                                            .currentUser!
-                                            .avatar
-                                            .isNotEmpty)
-                                    ? (userProvider.currentUser!.avatar
-                                            .startsWith('http')
-                                        ? NetworkImage(
-                                          userProvider.currentUser!.avatar,
-                                        )
-                                        : AssetImage(
-                                          userProvider.currentUser!.avatar,
-                                        ))
-                                    : const AssetImage(
-                                      'assets/images/default_avatar_1.png',
-                                    ),
-                            onBackgroundImageError: (_, __) {},
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  ...defaultAvatars.map((avatarPath) {
-                    return ListTile(
-                      leading: CircleAvatar(
-                        radius: 20,
-                        backgroundImage: AssetImage(avatarPath),
-                      ),
-                      title: Text(
-                        avatarPath.split('/').last.replaceFirst('.png', ''),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16.0),
+                  child: Column(
+                    children: [
+                      Text(
+                        "Current Avatar",
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: colorScheme.onSurface,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                      onTap: () async {
-                        try {
-                          await userProvider.updateAvatar(avatarPath);
-                          if (mounted) {
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                backgroundColor: colorScheme.primary,
-                                content: Text(
-                                  "Avatar updated successfully",
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: colorScheme.onPrimary,
+                      const SizedBox(height: 8),
+                      CircleAvatar(
+                        radius: 40,
+                        backgroundColor: colorScheme.primary,
+                        child: CircleAvatar(
+                          radius: 35,
+                          backgroundColor: colorScheme.surface,
+                          backgroundImage:
+                              (userProvider.currentUser?.avatar != null &&
+                                      userProvider
+                                          .currentUser!
+                                          .avatar
+                                          .isNotEmpty)
+                                  ? (userProvider.currentUser!.avatar
+                                          .startsWith('http')
+                                      ? NetworkImage(
+                                        userProvider.currentUser!.avatar,
+                                      )
+                                      : AssetImage(
+                                        userProvider.currentUser!.avatar,
+                                      ))
+                                  : const AssetImage(
+                                    'assets/images/default_avatar_1.png',
                                   ),
-                                ),
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                backgroundColor: colorScheme.error,
-                                content: Text(
-                                  "Failed to update avatar: $e",
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: colorScheme.onError,
-                                  ),
-                                ),
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                            );
-                          }
-                        }
-                      },
-                    );
-                  }),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text(
-                  "Cancel",
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: colorScheme.onSurface,
+                          onBackgroundImageError: (_, __) {},
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-            ],
+                ...defaultAvatars.map((avatarPath) {
+                  return ListTile(
+                    leading: CircleAvatar(
+                      radius: 20,
+                      backgroundImage: AssetImage(avatarPath),
+                    ),
+                    title: Text(
+                      avatarPath.split('/').last.replaceFirst('.png', ''),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    onTap: () async {
+                      try {
+                        await userProvider.updateAvatar(avatarPath);
+                        dialogNavigator.pop();
+                        scaffoldMessenger.showSnackBar(
+                          SnackBar(
+                            backgroundColor: colorScheme.primary,
+                            content: Text(
+                              "Avatar updated successfully",
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: colorScheme.onPrimary,
+                              ),
+                            ),
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        );
+                      } catch (e) {
+                        scaffoldMessenger.showSnackBar(
+                          SnackBar(
+                            backgroundColor: colorScheme.error,
+                            content: Text(
+                              "Failed to update avatar: $e",
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: colorScheme.onError,
+                              ),
+                            ),
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                  );
+                }),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => dialogNavigator.pop(),
+              child: Text(
+                "Cancel",
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: colorScheme.onSurface,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -455,6 +505,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    // Store ScaffoldMessengerState before async operation
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
 
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
@@ -467,41 +519,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     try {
       await userProvider.uploadCustomAvatar(_selectedImage!);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: colorScheme.primary,
-            content: Text(
-              "Avatar uploaded successfully",
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onPrimary,
-              ),
-            ),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          backgroundColor: colorScheme.primary,
+          content: Text(
+            "Avatar uploaded successfully",
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onPrimary,
             ),
           ),
-        );
-      }
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: colorScheme.error,
-            content: Text(
-              "Failed to upload avatar: $e",
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onError,
-              ),
-            ),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          backgroundColor: colorScheme.error,
+          content: Text(
+            "Failed to upload avatar: $e",
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onError,
             ),
           ),
-        );
-      }
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -516,6 +560,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final userProvider = Provider.of<UserProvider>(context);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final screenSize = MediaQuery.of(context).size;
+    final verticalPadding = screenSize.height * 0.015;
+    final horizontalPadding = screenSize.width * 0.05;
+    final sectionSpacing = screenSize.height * 0.02;
 
     if (userProvider.isLoading) {
       return Container(
@@ -556,29 +604,51 @@ class _ProfileScreenState extends State<ProfileScreen> {
         backgroundColor: Colors.transparent,
         body: SafeArea(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+            padding: EdgeInsets.symmetric(
+              horizontal: horizontalPadding,
+              vertical: verticalPadding,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildAvatar(context),
-                const SizedBox(height: 20),
-                _buildEditableField(
-                  context,
-                  'Name',
-                  controllers['name']!,
-                  readOnly: true,
-                ),
+                SizedBox(height: sectionSpacing),
+                _buildEditableField(context, 'Name', controllers['name']!),
                 _buildEditableField(
                   context,
                   'Email',
                   controllers['email']!,
                   readOnly: true,
                 ),
-                _buildEditableField(context, 'Gender', controllers['gender']!),
-                _buildEditableField(context, 'Age', controllers['age']!),
-                _buildEditableField(context, 'Height', controllers['height']!),
-                _buildEditableField(context, 'Weight', controllers['weight']!),
-                const SizedBox(height: 10),
+                _buildDropdownField(
+                  context,
+                  'Gender',
+                  _selectedGender,
+                  _genderOptions,
+                  (value) => setState(() => _selectedGender = value),
+                ),
+                _buildDropdownField(
+                  context,
+                  'Age (years)',
+                  _selectedAge,
+                  _ageOptions,
+                  (value) => setState(() => _selectedAge = value),
+                ),
+                _buildDropdownField(
+                  context,
+                  'Height (cm)',
+                  _selectedHeight,
+                  _heightOptions,
+                  (value) => setState(() => _selectedHeight = value),
+                ),
+                _buildDropdownField(
+                  context,
+                  'Weight (kg)',
+                  _selectedWeight,
+                  _weightOptions,
+                  (value) => setState(() => _selectedWeight = value),
+                ),
+                SizedBox(height: verticalPadding),
                 Align(
                   alignment: Alignment.centerRight,
                   child: ElevatedButton(
@@ -589,6 +659,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       foregroundColor: WidgetStateProperty.all(
                         colorScheme.onPrimary,
                       ),
+                      padding: WidgetStateProperty.all(
+                        EdgeInsets.symmetric(
+                          horizontal: horizontalPadding * 0.5,
+                          vertical: verticalPadding * 0.5,
+                        ),
+                      ),
                     ),
                     onPressed: _isSaving ? null : _saveProfileFields,
                     child:
@@ -596,16 +672,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ? CircularProgressIndicator(
                               color: colorScheme.onPrimary,
                             )
-                            : const Text("Save Profile"),
+                            : Text(
+                              "Save Profile",
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: colorScheme.onPrimary,
+                              ),
+                            ),
                   ),
                 ),
-                const SizedBox(height: 30),
+                SizedBox(height: sectionSpacing),
                 Card(
                   elevation: 1,
                   color: colorScheme.surfaceContainer,
-                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  margin: EdgeInsets.symmetric(vertical: verticalPadding),
                   child: Padding(
-                    padding: const EdgeInsets.all(16.0),
+                    padding: EdgeInsets.all(
+                      horizontalPadding * 0.8,
+                    ), // Reduced padding
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -616,68 +699,75 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        SizedBox(height: verticalPadding * 0.5),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Expanded(
                               child: ListTile(
-                                leading: Icon(
-                                  Icons.monetization_on,
-                                  color: colorScheme.primary,
-                                  size: 32,
+                                contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                ), // Reduced padding
+                                leading: Image.asset(
+                                  'assets/images/fitcoin_icon.png',
+                                  width: 24, // Reduced icon size
+                                  height: 24,
                                 ),
                                 title: Text(
-                                  "Points",
-                                  style: theme.textTheme.titleLarge?.copyWith(
+                                  "FitCoins",
+                                  style: theme.textTheme.titleMedium?.copyWith(
                                     color: colorScheme.onSurface,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
                                 subtitle: Text(
                                   "${userProvider.currentUser!.points ?? 0}",
-                                  style: theme.textTheme.headlineSmall
-                                      ?.copyWith(color: colorScheme.primary),
+                                  style: theme.textTheme.bodyLarge?.copyWith(
+                                    color: colorScheme.primary,
+                                  ),
                                 ),
                                 onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    AppTheme.createPageRoute(
-                                      const PointsConversionScreen(),
-                                    ),
-                                  );
+                                  context
+                                      .findAncestorStateOfType<NavScreenState>()
+                                      ?.setDetailScreen(
+                                        const PointsConversionScreen(),
+                                      );
                                 },
                               ),
                             ),
                             Expanded(
                               child: ListTile(
+                                contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                ), // Reduced padding
                                 leading: Icon(
                                   Icons.local_fire_department,
                                   color: colorScheme.primary,
-                                  size: 32,
+                                  size: 24, // Reduced icon size
                                 ),
                                 title: Text(
                                   "Streak",
-                                  style: theme.textTheme.titleLarge?.copyWith(
+                                  style: theme.textTheme.titleMedium?.copyWith(
                                     color: colorScheme.onSurface,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
                                 subtitle: Text(
-                                  "${userProvider.currentUser!.streak ?? 0} days",
-                                  style: theme.textTheme.headlineSmall
-                                      ?.copyWith(color: colorScheme.primary),
+                                  "${userProvider.currentUser!.checkInStreak} days",
+                                  style: theme.textTheme.bodyLarge?.copyWith(
+                                    color: colorScheme.primary,
+                                  ),
                                 ),
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 8),
+                        SizedBox(height: verticalPadding * 0.5),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Padding(
-                              padding: const EdgeInsets.only(left: 16.0),
+                              padding: EdgeInsets.only(left: horizontalPadding),
                               child: Text(
                                 "Balance: \$${userProvider.currentUser!.balance?.toStringAsFixed(2) ?? '0.00'}",
                                 style: theme.textTheme.bodyMedium?.copyWith(
@@ -686,7 +776,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                             ),
                             Padding(
-                              padding: const EdgeInsets.only(right: 16.0),
+                              padding: EdgeInsets.only(
+                                right: horizontalPadding,
+                              ),
                               child: ElevatedButton(
                                 style: theme.elevatedButtonTheme.style
                                     ?.copyWith(
@@ -696,21 +788,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       foregroundColor: WidgetStateProperty.all(
                                         colorScheme.onPrimary,
                                       ),
+                                      padding: WidgetStateProperty.all(
+                                        EdgeInsets.symmetric(
+                                          horizontal: horizontalPadding * 0.5,
+                                          vertical: verticalPadding * 0.5,
+                                        ),
+                                      ),
                                     ),
                                 onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    AppTheme.createPageRoute(
-                                      const PointsConversionScreen(),
-                                    ),
-                                  );
+                                  context
+                                      .findAncestorStateOfType<NavScreenState>()
+                                      ?.setDetailScreen(
+                                        const PointsConversionScreen(),
+                                      );
                                 },
-                                child: const Text("Points to Cash"),
+                                child: Text(
+                                  "FitCoins to Cash",
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    color: colorScheme.onPrimary,
+                                  ),
+                                ),
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 8),
+                        SizedBox(height: verticalPadding),
                         Text(
                           "Badges",
                           style: theme.textTheme.titleSmall?.copyWith(
@@ -718,16 +820,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        SizedBox(height: verticalPadding),
                         GridView.builder(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
                           gridDelegate:
-                              const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 4,
-                                crossAxisSpacing: 8.0,
-                                mainAxisSpacing: 8.0,
-                                childAspectRatio: 1.0,
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: screenSize.width < 360 ? 3 : 4,
+                                crossAxisSpacing: horizontalPadding * 0.5,
+                                mainAxisSpacing: verticalPadding * 0.5,
+                                childAspectRatio: 0.8,
                               ),
                           itemCount: _possibleBadges.length,
                           itemBuilder: (context, index) {
@@ -761,7 +863,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     ),
                                   ),
                                 ),
-                                const SizedBox(height: 4),
+                                SizedBox(height: verticalPadding * 0.5),
                                 Text(
                                   badge.name,
                                   style: theme.textTheme.labelSmall?.copyWith(
@@ -783,13 +885,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 10),
+                SizedBox(height: sectionSpacing),
                 Card(
                   elevation: 1,
                   color: colorScheme.surfaceContainer,
-                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  margin: EdgeInsets.symmetric(vertical: verticalPadding),
                   child: Padding(
-                    padding: const EdgeInsets.all(16.0),
+                    padding: EdgeInsets.all(horizontalPadding),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -800,7 +902,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        SizedBox(height: verticalPadding),
                         Card(
                           elevation: 0,
                           color: colorScheme.surfaceContainer,
@@ -831,7 +933,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                             ),
                             subtitle: Text(
-                              _dailyReminderTime.format(context),
+                              _dailyReminderTimeFormatted,
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 color: colorScheme.onSurfaceVariant,
                               ),
@@ -855,7 +957,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                             ),
                             subtitle: Text(
-                              _weeklyReminderTime.format(context),
+                              _weeklyReminderTimeFormatted,
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 color: colorScheme.onSurfaceVariant,
                               ),
@@ -868,7 +970,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             onTap: () => _selectTime(context, false),
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        SizedBox(height: verticalPadding),
                         Align(
                           alignment: Alignment.centerRight,
                           child: ElevatedButton(
@@ -879,6 +981,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               foregroundColor: WidgetStateProperty.all(
                                 colorScheme.onPrimary,
                               ),
+                              padding: WidgetStateProperty.all(
+                                EdgeInsets.symmetric(
+                                  horizontal: horizontalPadding * 0.5,
+                                  vertical: verticalPadding * 0.5,
+                                ),
+                              ),
                             ),
                             onPressed:
                                 _isSaving ? null : _saveNotificationPreferences,
@@ -887,23 +995,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     ? CircularProgressIndicator(
                                       color: colorScheme.onPrimary,
                                     )
-                                    : const Text("Save"),
+                                    : Text(
+                                      "Save",
+                                      style: theme.textTheme.labelMedium
+                                          ?.copyWith(
+                                            color: colorScheme.onPrimary,
+                                          ),
+                                    ),
                           ),
                         ),
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 10),
+                SizedBox(height: sectionSpacing),
                 _buildListTile(
                   icon: Icons.settings,
                   title: "Settings",
                   color: colorScheme.onSurface,
                   onTap: () {
-                    Navigator.push(
-                      context,
-                      AppTheme.createPageRoute(const SettingsScreen()),
-                    );
+                    context
+                        .findAncestorStateOfType<NavScreenState>()
+                        ?.setDetailScreen(const SettingsScreen());
                   },
                 ),
                 _buildListTile(
@@ -912,6 +1025,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   color: colorScheme.error,
                   onTap: _handleLogout,
                 ),
+                SizedBox(height: verticalPadding * 2),
               ],
             ),
           ),
@@ -924,16 +1038,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final userProvider = Provider.of<UserProvider>(context);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final screenSize = MediaQuery.of(context).size;
+    final buttonPadding = screenSize.width * 0.03;
 
     final imageUrl = userProvider.currentUser?.avatar;
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         CircleAvatar(
-          radius: 55,
+          radius: screenSize.width * 0.15,
           backgroundColor: colorScheme.primary,
           child: CircleAvatar(
-            radius: 50,
+            radius: screenSize.width * 0.135,
             backgroundColor: colorScheme.surface,
             backgroundImage:
                 (imageUrl != null && imageUrl.isNotEmpty)
@@ -944,17 +1060,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
             onBackgroundImageError: (exception, stackTrace) {},
           ),
         ),
-        const SizedBox(width: 16),
+        SizedBox(width: screenSize.width * 0.04),
         Column(
           children: [
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: colorScheme.primary,
                 foregroundColor: colorScheme.onPrimary,
-                minimumSize: const Size(0, 36),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
+                minimumSize: Size(0, screenSize.height * 0.045),
+                padding: EdgeInsets.symmetric(
+                  horizontal: buttonPadding,
+                  vertical: buttonPadding * 0.5,
                 ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
@@ -968,15 +1084,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: buttonPadding),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: colorScheme.primary,
                 foregroundColor: colorScheme.onPrimary,
-                minimumSize: const Size(0, 36),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
+                minimumSize: Size(0, screenSize.height * 0.045),
+                padding: EdgeInsets.symmetric(
+                  horizontal: buttonPadding,
+                  vertical: buttonPadding * 0.5,
                 ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
@@ -1004,9 +1120,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final screenSize = MediaQuery.of(context).size;
+    final verticalPadding = screenSize.height * 0.015;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: EdgeInsets.symmetric(vertical: verticalPadding * 0.5),
       child: TextField(
         controller: controller,
         readOnly: readOnly,
@@ -1037,6 +1155,65 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Widget _buildDropdownField(
+    BuildContext context,
+    String label,
+    String? value,
+    List<String> options,
+    ValueChanged<String?> onChanged,
+  ) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final screenSize = MediaQuery.of(context).size;
+    final verticalPadding = screenSize.height * 0.015;
+
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: verticalPadding * 0.5),
+      child: DropdownButtonFormField<String>(
+        value: value,
+        decoration: InputDecoration(
+          labelText: label.toUpperCase(),
+          labelStyle: theme.textTheme.labelLarge?.copyWith(
+            color: colorScheme.onSurface,
+          ),
+          filled: true,
+          fillColor: colorScheme.surfaceContainer,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: colorScheme.outline),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: colorScheme.outline),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: colorScheme.primary),
+          ),
+        ),
+        items:
+            options.map((option) {
+              return DropdownMenuItem<String>(
+                value: option,
+                child: Text(
+                  option,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+              );
+            }).toList(),
+        onChanged: onChanged,
+        hint: Text(
+          "Select $label",
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildListTile({
     required IconData icon,
     required String title,
@@ -1045,10 +1222,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final screenSize = MediaQuery.of(context).size;
+    final verticalPadding = screenSize.height * 0.015;
 
     return Card(
       color: colorScheme.surfaceContainer,
-      margin: const EdgeInsets.symmetric(vertical: 8),
+      margin: EdgeInsets.symmetric(vertical: verticalPadding * 0.5),
       child: ListTile(
         leading: Icon(icon, color: color),
         title: Text(

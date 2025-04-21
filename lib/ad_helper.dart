@@ -91,6 +91,8 @@ class AdHelper {
   static void showRewardedAd({
     required BuildContext context,
     required void Function(RewardItem reward) onRewarded,
+    void Function()? onAdDismissed,
+    void Function(AdError)? onAdFailed,
   }) {
     if (!shouldShowAds(context)) {
       debugPrint('🛑 Skipping rewarded ad for premium user');
@@ -107,10 +109,12 @@ class AdHelper {
           ad.fullScreenContentCallback = FullScreenContentCallback(
             onAdDismissedFullScreenContent: (ad) {
               debugPrint('🛑 Rewarded ad dismissed');
+              onAdDismissed?.call();
               ad.dispose();
             },
             onAdFailedToShowFullScreenContent: (ad, error) {
               debugPrint('❌ Rewarded failed to show: ${error.message}');
+              onAdFailed?.call(error);
               ad.dispose();
             },
             onAdShowedFullScreenContent: (ad) {
@@ -123,12 +127,12 @@ class AdHelper {
                 '🎁 User earned reward: ${reward.amount} ${reward.type}',
               );
               onRewarded(reward);
-              ad.dispose();
             },
           );
         },
         onAdFailedToLoad: (error) {
           debugPrint('❌ Rewarded failed to load: ${error.message}');
+          onAdFailed?.call(AdError(error.code, error.message, error.domain));
         },
       ),
     );

@@ -1,4 +1,4 @@
-import 'dart:async'; // Add for StreamSubscription
+import 'dart:async';
 import 'dart:io';
 import 'package:cashfit/theme.dart';
 import 'package:flutter/material.dart';
@@ -18,8 +18,7 @@ class _StepCounterWidgetState extends State<StepCounterWidget> {
   int currentSteps = 0;
   int dailyStepTarget = 10000;
   Stream<StepCount>? stepCountStream;
-  StreamSubscription<StepCount>?
-  _stepCountSubscription; // Add subscription tracking
+  StreamSubscription<StepCount>? _stepCountSubscription;
   bool stepCounterInitialized = false;
   bool stepCounterSupported = true;
 
@@ -27,12 +26,10 @@ class _StepCounterWidgetState extends State<StepCounterWidget> {
   void initState() {
     super.initState();
     _checkPlatformSupport();
-    _loadStepTarget();
   }
 
   @override
   void dispose() {
-    // Cancel the step count stream subscription to prevent updates after dispose
     _stepCountSubscription?.cancel();
     super.dispose();
   }
@@ -51,28 +48,26 @@ class _StepCounterWidgetState extends State<StepCounterWidget> {
   Future<void> _initializeStepCounter() async {
     PermissionStatus status = await Permission.activityRecognition.request();
     if (status.isGranted) {
-      if (!mounted) return; // Check if widget is still mounted
+      if (!mounted) return;
       setState(() {
         stepCounterInitialized = true;
       });
       stepCountStream = Pedometer.stepCountStream;
       _stepCountSubscription = stepCountStream?.listen(
         (StepCount event) {
-          if (!mounted) return; // Check if widget is still mounted
+          if (!mounted) return;
           setState(() {
             currentSteps = event.steps;
           });
         },
         onError: (error) {
-          if (!mounted) return; // Check if widget is still mounted
-          print("Step Counter Error: $error");
+          if (!mounted) return;
           setState(() {
             stepCounterInitialized = false;
           });
         },
       );
     } else {
-      print("Step counter permission denied");
       if (status.isPermanentlyDenied && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -93,20 +88,29 @@ class _StepCounterWidgetState extends State<StepCounterWidget> {
     }
   }
 
-  Future<void> _loadStepTarget() async {
-    final userProvider = Provider.of<UserProvider>(context, listen: false);
-    if (userProvider.currentUser != null) {
-      if (!mounted) return;
-      setState(() {
-        dailyStepTarget = userProvider.currentUser!.dailyStepTarget ?? 10000;
-      });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final userProvider = Provider.of<UserProvider>(context);
+
+    if (userProvider.isLoading) {
+      return AnimatedCard(
+        child: Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const SizedBox(
+            height: 110,
+            child: Center(child: CircularProgressIndicator()),
+          ),
+        ),
+      );
+    }
+
+    // Update dailyStepTarget reactively
+    dailyStepTarget = userProvider.currentUser?.dailyStepTarget ?? 10000;
 
     if (!stepCounterSupported) {
       return AnimatedCard(
@@ -216,7 +220,7 @@ class _StepCounterWidgetState extends State<StepCounterWidget> {
               const SizedBox(height: 4),
               LinearProgressIndicator(
                 value: progress,
-                backgroundColor: colorScheme.onSurfaceVariant.withOpacity(0.3),
+                backgroundColor: colorScheme.onSurfaceVariant.withAlpha(77),
                 valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
                 minHeight: 6,
               ),
