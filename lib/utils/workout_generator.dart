@@ -10,35 +10,81 @@ import '../providers/user_provider.dart';
 import 'dart:developer' as developer;
 
 class WorkoutGenerator {
-  /// Calculate the daily step target based on user activity level and goals.
-  static int _calculateDailyStepTarget(AppUser user) {
-    int baseSteps;
-    switch (user.activityLevel) {
-      case "Sedentary":
-        baseSteps = 5000;
+  /// Calculate the daily step target with personalization and progression.
+  static Map<String, int> _calculateDailyStepTarget(
+    AppUser user,
+    int totalDays,
+  ) {
+    double weight = double.tryParse(user.weight) ?? 70.0; // kg
+    double height = double.tryParse(user.height) ?? 170.0; // cm
+
+    // Convert units if necessary
+    if (user.height.contains("in")) height *= 2.54; // Convert inches to cm
+    if (user.weight.contains("lbs")) weight *= 0.453592; // Convert lbs to kg
+
+    // Base step calculation: Adjusted for weight, height, and activity level
+    double activityFactor;
+    switch (user.activityLevel.toLowerCase()) {
+      case "sedentary":
+        activityFactor = 1.0;
         break;
-      case "Lightly Active":
-        baseSteps = 7500;
+      case "lightly active":
+        activityFactor = 1.2;
         break;
-      case "Moderately Active":
-        baseSteps = 10000;
+      case "moderately active":
+        activityFactor = 1.4;
         break;
-      case "Very Active":
-        baseSteps = 12500;
+      case "very active":
+        activityFactor = 1.6;
         break;
       default:
-        baseSteps = 5000;
+        activityFactor = 1.0;
     }
 
-    if (user.workoutGoal.contains("Lose Fat")) baseSteps += 2000;
-    if (user.workoutGoal == "Improve Endurance") baseSteps += 3000;
-    if (user.intensity == "High") {
-      baseSteps += 1000;
-    } else if (user.intensity == "Moderate") {
-      baseSteps += 500;
+    // Base steps: (weight * 50 + height * 30) * activityFactor
+    int baseSteps = ((weight * 50 + height * 30) * activityFactor).round();
+
+    // Adjust for workout frequency (scale 1-7 days)
+    double frequencyAdjustment = user.workoutFrequency / 7.0;
+    baseSteps += (baseSteps * frequencyAdjustment * 0.2).round();
+
+    // Adjust for intensity
+    double intensityAdjustment;
+    switch (user.intensity?.toLowerCase()) {
+      case "low":
+        intensityAdjustment = 0.05;
+        break;
+      case "moderate":
+        intensityAdjustment = 0.1;
+        break;
+      case "high":
+        intensityAdjustment = 0.15;
+        break;
+      default:
+        intensityAdjustment = 0.0;
+    }
+    baseSteps += (baseSteps * intensityAdjustment).round();
+
+    // Adjust for workout goal
+    if (user.workoutGoal.contains("Lose Fat")) baseSteps += 1500;
+    if (user.workoutGoal == "Improve Endurance") baseSteps += 2000;
+
+    // Workout vs. Rest Days
+    int workoutDaySteps = baseSteps + 1000; // Extra steps on workout days
+    int restDaySteps = baseSteps;
+
+    // Progression: Increase steps by 5% per phase
+    int phaseLength = (totalDays / 3).floor();
+    Map<String, int> stepTargets = {};
+    for (int day = 1; day <= totalDays; day++) {
+      int phase = ((day - 1) / phaseLength).floor().clamp(0, 2);
+      double progressionFactor = 1.0 + (phase * 0.05); // 5% increase per phase
+      stepTargets['Day $day'] =
+          (day % 7 < user.workoutFrequency ? workoutDaySteps : restDaySteps) *
+          progressionFactor.round();
     }
 
-    return baseSteps;
+    return stepTargets;
   }
 
   /// Get compatible exercise categories based on the user's training style.
@@ -156,32 +202,81 @@ class WorkoutGenerator {
     }
   }
 
-  /// Determine rest duration (in seconds) based on workout goal.
-  static int getRestSeconds(String workoutGoal) {
+  /// Determine rest duration (in seconds) based on workout goal, phase, and experience level.
+  static int getRestSeconds(
+    String workoutGoal,
+    int phase,
+    String experienceLevel,
+  ) {
+    int baseRest;
     switch (workoutGoal) {
       case "Build Muscle":
-        return 60;
+        baseRest = 60;
+        break;
       case "Lose Fat":
-        return 30;
+        baseRest = 30;
+        break;
       case "Improve Endurance":
-        return 15;
+        baseRest = 15;
+        break;
       default:
-        return 60;
+        baseRest = 60;
     }
+
+    // Adjust rest based on experience level
+    double experienceAdjustment;
+    switch (experienceLevel.toLowerCase()) {
+      case "beginner":
+        experienceAdjustment = 1.2; // Longer rest for beginners
+        break;
+      case "intermediate":
+        experienceAdjustment = 1.0;
+        break;
+      case "advanced":
+        experienceAdjustment = 0.8; // Shorter rest for advanced
+        break;
+      default:
+        experienceAdjustment = 1.0;
+    }
+
+    // Decrease rest as phases progress (e.g., -5 seconds per phase)
+    int adjustedRest = (baseRest * experienceAdjustment - (phase * 5)).round();
+    return adjustedRest.clamp(10, 90);
   }
 
-  /// Determine reps based on workout goal and phase.
-  static String getReps(String workoutGoal, int phase) {
+  /// Determine reps based on workout goal, phase, and rep scheme.
+  static String getReps(String workoutGoal, int phase, int dayIndex) {
     int baseReps;
+    // Vary rep scheme every 3 days (e.g., strength, hypertrophy, endurance)
+    String scheme = ["strength", "hypertrophy", "endurance"][dayIndex % 3];
+
     switch (workoutGoal) {
       case "Build Muscle":
-        baseReps = 8 + phase * 2; // 8, 10, 12
+        if (scheme == "strength") {
+          baseReps = 6 + phase; // 6, 7, 8
+        } else if (scheme == "hypertrophy") {
+          baseReps = 8 + phase * 2; // 8, 10, 12
+        } else {
+          baseReps = 12 + phase * 2; // 12, 14, 16
+        }
         break;
       case "Lose Fat":
-        baseReps = 12 + phase * 2; // 12, 14, 16
+        if (scheme == "strength") {
+          baseReps = 8 + phase; // 8, 9, 10
+        } else if (scheme == "hypertrophy") {
+          baseReps = 10 + phase * 2; // 10, 12, 14
+        } else {
+          baseReps = 15 + phase * 2; // 15, 17, 19
+        }
         break;
       case "Improve Endurance":
-        baseReps = 15 + phase * 2; // 15, 17, 19
+        if (scheme == "strength") {
+          baseReps = 10 + phase; // 10, 11, 12
+        } else if (scheme == "hypertrophy") {
+          baseReps = 12 + phase * 2; // 12, 14, 16
+        } else {
+          baseReps = 20 + phase * 2; // 20, 22, 24
+        }
         break;
       default:
         baseReps = 8 + phase * 2;
@@ -190,45 +285,99 @@ class WorkoutGenerator {
     return baseReps.toString();
   }
 
-  /// Select exercises targeting specific muscle groups.
+  /// Determine sets based on workout goal, phase, and experience level.
+  static int getSets(String workoutGoal, int phase, String experienceLevel) {
+    int baseSets;
+    switch (workoutGoal) {
+      case "Build Muscle":
+        baseSets = 3 + phase; // 3, 4, 5
+        break;
+      case "Lose Fat":
+        baseSets = 3 + phase; // 3, 4, 5
+        break;
+      case "Improve Endurance":
+        baseSets = 2 + phase; // 2, 3, 4
+        break;
+      default:
+        baseSets = 3 + phase;
+        break;
+    }
+
+    // Adjust sets based on experience level
+    switch (experienceLevel.toLowerCase()) {
+      case "beginner":
+        baseSets = baseSets - 1; // Fewer sets for beginners
+        break;
+      case "advanced":
+        baseSets = baseSets + 1; // More sets for advanced
+        break;
+      default:
+        break;
+    }
+
+    return baseSets.clamp(2, 6);
+  }
+
+  /// Select exercises targeting specific muscle groups with variety and balance.
   static List<Exercise> selectExercises(
     List<Exercise> available,
     List<String> targetMuscleGroups,
     int numExercises,
+    List<String> usedExerciseIds,
+    Map<String, int> muscleGroupUsage,
   ) {
     List<Exercise> selected = [];
     Set<String> covered = {};
-    List<Exercise> candidates = List.from(available)..shuffle();
+    List<Exercise> candidates =
+        available.where((e) => !usedExerciseIds.contains(e.id)).toList();
 
-    // First pass: Prioritize exercises covering new muscle groups
-    while (selected.length < numExercises && candidates.isNotEmpty) {
-      Exercise? bestExercise;
-      int maxNewCovered = -1;
-      for (var exercise in candidates) {
-        var newCovered =
-            exercise.muscleGroups
-                .where(
-                  (mg) =>
-                      targetMuscleGroups.contains(mg) && !covered.contains(mg),
-                )
-                .toSet();
-        if (newCovered.length > maxNewCovered) {
-          maxNewCovered = newCovered.length;
-          bestExercise = exercise;
+    if (candidates.isEmpty) {
+      // Reset used exercises if we've cycled through all options
+      candidates = List.from(available);
+      usedExerciseIds.clear();
+    }
+
+    // Prioritize exercises that cover underused muscle groups
+    List<Exercise> prioritizedCandidates = [];
+    for (var exercise in candidates) {
+      // Calculate a score based on how underused the muscle groups are
+      exercise.muscleGroups
+          .where((mg) => targetMuscleGroups.contains(mg))
+          .fold(0, (sum, mg) => sum + (muscleGroupUsage[mg] ?? 0));
+      prioritizedCandidates.add(exercise);
+    }
+
+    // Sort candidates by score (lower usage = higher priority)
+    prioritizedCandidates.sort((a, b) {
+      int scoreA = a.muscleGroups
+          .where((mg) => targetMuscleGroups.contains(mg))
+          .fold(0, (sum, mg) => sum + (muscleGroupUsage[mg] ?? 0));
+      int scoreB = b.muscleGroups
+          .where((mg) => targetMuscleGroups.contains(mg))
+          .fold(0, (sum, mg) => sum + (muscleGroupUsage[mg] ?? 0));
+      return scoreA.compareTo(scoreB);
+    });
+
+    // First pass: Prioritize exercises covering new or underused muscle groups
+    while (selected.length < numExercises && prioritizedCandidates.isNotEmpty) {
+      Exercise bestExercise = prioritizedCandidates.first;
+      selected.add(bestExercise);
+      covered.addAll(
+        bestExercise.muscleGroups.where(targetMuscleGroups.contains),
+      );
+      // Update muscle group usage
+      for (var mg in bestExercise.muscleGroups) {
+        if (targetMuscleGroups.contains(mg)) {
+          muscleGroupUsage[mg] = (muscleGroupUsage[mg] ?? 0) + 1;
         }
       }
-      if (bestExercise != null && maxNewCovered > 0) {
-        selected.add(bestExercise);
-        covered.addAll(
-          bestExercise.muscleGroups.where(targetMuscleGroups.contains),
-        );
-        candidates.remove(bestExercise);
-      } else {
-        break;
-      }
+      prioritizedCandidates.remove(bestExercise);
+      usedExerciseIds.add(bestExercise.id);
     }
 
     // Second pass: Fill remaining slots with isolation exercises
+    candidates =
+        available.where((e) => !usedExerciseIds.contains(e.id)).toList();
     while (selected.length < numExercises && candidates.isNotEmpty) {
       for (var mg in targetMuscleGroups) {
         if (selected.length >= numExercises) break;
@@ -243,6 +392,12 @@ class WorkoutGenerator {
           var exercise = isolationExercises.first;
           selected.add(exercise);
           candidates.remove(exercise);
+          usedExerciseIds.add(exercise.id);
+          for (var mg in exercise.muscleGroups) {
+            if (targetMuscleGroups.contains(mg)) {
+              muscleGroupUsage[mg] = (muscleGroupUsage[mg] ?? 0) + 1;
+            }
+          }
         }
       }
     }
@@ -257,7 +412,8 @@ class WorkoutGenerator {
     required int workoutFrequency,
     required List<String> availableDays,
     required List<String> preferredWorkoutTimes,
-    Function(double)? onProgress, required AppUser user,
+    Function(double)? onProgress,
+    required AppUser user,
   }) async {
     try {
       final userProvider = Provider.of<UserProvider>(context, listen: false);
@@ -276,18 +432,25 @@ class WorkoutGenerator {
         );
       }
 
-      // Calculate daily step target and update user data
-      int dailyStepTarget = _calculateDailyStepTarget(user);
+      // Calculate daily step targets and update user data
+      Map<String, int> dailyStepTargets = _calculateDailyStepTarget(
+        user,
+        totalDays,
+      );
       List<Map<String, dynamic>> stepTargetHistory = [];
-      for (int i = 1; i <= totalDays; i++) {
-        DateTime date = DateTime.now().add(Duration(days: i - 1));
+      for (int day = 1; day <= totalDays; day++) {
+        DateTime date = DateTime.now().add(Duration(days: day - 1));
         String formattedDate =
             "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
-        stepTargetHistory.add({'date': formattedDate, 'achieved': false});
+        stepTargetHistory.add({
+          'date': formattedDate,
+          'achieved': false,
+          'target': dailyStepTargets['Day $day'],
+        });
       }
 
       await userProvider.updateUserFields({
-        'dailyStepTarget': dailyStepTarget,
+        'dailyStepTarget': dailyStepTargets['Day 1'],
         'stepTargetHistory': stepTargetHistory,
       });
 
@@ -357,7 +520,6 @@ class WorkoutGenerator {
 
       // Calculate workout parameters
       int numExercises = getNumExercises(user.workoutDuration);
-      int restSeconds = getRestSeconds(user.workoutGoal);
 
       // Define workout splits
       List<String> splitTypes = ['Push', 'Pull', 'Legs'];
@@ -368,11 +530,27 @@ class WorkoutGenerator {
         'Full Body': ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core'],
       };
 
+      // Track used exercises and muscle group usage for balance
+      List<String> usedExerciseIds = [];
+      Map<String, int> muscleGroupUsage = {
+        'Chest': 0,
+        'Shoulders': 0,
+        'Triceps': 0,
+        'Back': 0,
+        'Biceps': 0,
+        'Legs': 0,
+        'Glutes': 0,
+        'Calves': 0,
+        'Core': 0,
+        'Arms': 0,
+      };
+
       // Generate workout program
       Map<String, List<Map<String, dynamic>>> programDays = {};
       int currentDay = 1;
       int phaseLength = (totalDays / 3).floor();
       int splitIndex = 0;
+      int trainingDayCount = 0;
 
       while (currentDay <= totalDays) {
         DateTime date = DateTime.now().add(Duration(days: currentDay - 1));
@@ -390,9 +568,15 @@ class WorkoutGenerator {
         List<Map<String, dynamic>> dailyExercises = [];
 
         if (trainingDays.contains(dayOfWeek)) {
+          trainingDayCount++;
           int phase = (currentDay / phaseLength).floor().clamp(0, 2);
-          int baseSets = 3 + phase;
-          String reps = getReps(user.workoutGoal, phase);
+          int sets = getSets(user.workoutGoal, phase, user.experienceLevel);
+          String reps = getReps(user.workoutGoal, phase, trainingDayCount);
+          int restSeconds = getRestSeconds(
+            user.workoutGoal,
+            phase,
+            user.experienceLevel,
+          );
 
           String splitType;
           List<String> targetMuscleGroups;
@@ -413,18 +597,20 @@ class WorkoutGenerator {
             'restSeconds': 0,
           });
 
-          // Select exercises for the day
+          // Select exercises for the day with variety and balance
           List<Exercise> selectedExercises = selectExercises(
             availableExercises,
             targetMuscleGroups,
             numExercises,
+            usedExerciseIds,
+            muscleGroupUsage,
           );
 
           for (int i = 0; i < selectedExercises.length; i++) {
             var exercise = selectedExercises[i];
             Map<String, dynamic> config = {
               'exerciseId': exercise.id,
-              'sets': baseSets,
+              'sets': sets,
               'reps': reps,
               'restSeconds': restSeconds,
             };
@@ -441,7 +627,7 @@ class WorkoutGenerator {
                 config['supersetWith'] = nextExercise.id;
                 Map<String, dynamic> nextConfig = {
                   'exerciseId': nextExercise.id,
-                  'sets': baseSets,
+                  'sets': sets,
                   'reps': reps,
                   'restSeconds': restSeconds,
                   'supersetWith': exercise.id,
@@ -486,7 +672,7 @@ class WorkoutGenerator {
         level: user.experienceLevel,
         description: "A $totalDays-day program tailored for your goals.",
         userId: user.id,
-        preferredWorkoutTimes: preferredWorkoutTimes, // Store for scheduling
+        preferredWorkoutTimes: preferredWorkoutTimes,
       );
 
       await FirebaseFirestore.instance

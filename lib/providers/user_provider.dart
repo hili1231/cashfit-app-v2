@@ -14,6 +14,7 @@ class UserProvider with ChangeNotifier {
   bool _isSaving = false;
   String? _errorMessage;
   ThemeMode _themeMode = ThemeMode.dark;
+  static const int maxAdsPerDay = 7;
 
   final Logger _logger = Logger();
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
@@ -25,6 +26,11 @@ class UserProvider with ChangeNotifier {
   bool get isLoggedIn => fb.FirebaseAuth.instance.currentUser != null;
   fb.User? get firebaseUser => fb.FirebaseAuth.instance.currentUser;
   ThemeMode get themeMode => _themeMode;
+  int get dailyAdsWatched => _currentUser?.dailyAdsWatched ?? 0;
+  bool get canClaimAdReward {
+    _resetAdsWatchedIfNewDay();
+    return (_currentUser?.dailyAdsWatched ?? 0) < maxAdsPerDay;
+  }
 
   UserProvider() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -102,6 +108,7 @@ class UserProvider with ChangeNotifier {
         );
         _themeMode =
             _currentUser!.theme == 'light' ? ThemeMode.light : ThemeMode.dark;
+        _resetAdsWatchedIfNewDay(); // Reset ad counter if new day
       } else {
         _logger.w(
           "User document does not exist for UID: $uid. Creating default user document.",
@@ -393,9 +400,7 @@ class UserProvider with ChangeNotifier {
       }
 
       // Update Firestore
-      final updates = {
-        'checkInStreak': newStreak,
-      };
+      final updates = {'checkInStreak': newStreak};
 
       await FirebaseFirestore.instance
           .collection('users')
@@ -415,13 +420,15 @@ class UserProvider with ChangeNotifier {
   }
 
   Future<void> claimReward(String taskId, int points, {String? badge}) async {
-    if (!isLoggedIn || firebaseUser == null) {
+    if (!isLoggedIn || firebaseUser == null || _currentUser == null) {
       _errorMessage = "User not logged in";
       notifyListeners();
       return;
     }
 
     try {
+      _resetAdsWatchedIfNewDay();
+
       final updates = {
         'points': FieldValue.increment(points),
         'claimedRewards.$taskId': {
@@ -430,7 +437,16 @@ class UserProvider with ChangeNotifier {
         },
       };
 
-      if (taskId == 'daily_check_in') {
+      if (taskId == 'watch_ad') {
+        // Increment dailyAdsWatched
+        updates['dailyAdsWatched'] = FieldValue.increment(1);
+        updates['lastAdsWatchedDate'] = FieldValue.serverTimestamp();
+
+        // Only add to completedDailyIds if max ads reached
+        if (_currentUser!.dailyAdsWatched + 1 >= maxAdsPerDay) {
+          updates['completedDailyIds'] = FieldValue.arrayUnion([taskId]);
+        }
+      } else if (taskId == 'daily_check_in') {
         updates['lastCheckIn'] = FieldValue.serverTimestamp();
         updates['checkInStreak'] = FieldValue.increment(1);
       } else if (taskId == 'complete_workout') {
@@ -456,8 +472,9 @@ class UserProvider with ChangeNotifier {
         if (badge != null) {
           updates['badges'] = FieldValue.arrayUnion([badge]);
         }
-      } else if (taskId == 'watch_ad') {
-        // Reward claiming handled separately, just increment points
+      } else {
+        // For other daily tasks, add to completedDailyIds
+        updates['completedDailyIds'] = FieldValue.arrayUnion([taskId]);
       }
 
       await FirebaseFirestore.instance
@@ -474,7 +491,16 @@ class UserProvider with ChangeNotifier {
           taskId: {'claimed': true, 'lastClaimed': Timestamp.now()},
         };
 
-        if (taskId == 'daily_check_in') {
+        if (taskId == 'watch_ad') {
+          currentMap['dailyAdsWatched'] = (_currentUser!.dailyAdsWatched) + 1;
+          currentMap['lastAdsWatchedDate'] = Timestamp.now();
+          if (currentMap['dailyAdsWatched'] >= maxAdsPerDay) {
+            currentMap['completedDailyIds'] = [
+              ...(currentMap['completedDailyIds'] ?? []),
+              taskId,
+            ];
+          }
+        } else if (taskId == 'daily_check_in') {
           currentMap['lastCheckIn'] = Timestamp.now();
           currentMap['checkInStreak'] = (_currentUser!.checkInStreak) + 1;
         } else if (taskId == 'complete_workout') {
@@ -504,6 +530,11 @@ class UserProvider with ChangeNotifier {
           if (badge != null) {
             currentMap['badges'] = [...(currentMap['badges'] ?? []), badge];
           }
+        } else {
+          currentMap['completedDailyIds'] = [
+            ...(currentMap['completedDailyIds'] ?? []),
+            taskId,
+          ];
         }
 
         _currentUser = AppUser.fromMap(currentMap);
@@ -647,5 +678,37 @@ class UserProvider with ChangeNotifier {
         'theme': mode == ThemeMode.light ? 'light' : 'dark',
       });
     }
+  }
+
+  void _resetAdsWatchedIfNewDay() {
+    if (_currentUser == null) return;
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    DateTime? lastAdWatchDate = _currentUser!.lastAdsWatchedDate;
+
+    if (lastAdWatchDate == null || !lastAdWatchDate.isSameDay(today)) {
+      _currentUser!.dailyAdsWatched = 0;
+      _currentUser!.lastAdsWatchedDate = today;
+      // Remove watch_ad from completedDailyIds if present
+      if (_currentUser!.completedDailyIds.contains('watch_ad')) {
+        _currentUser!.completedDailyIds.remove('watch_ad');
+        FirebaseFirestore.instance
+            .collection('users')
+            .doc(firebaseUser!.uid)
+            .update({
+              'dailyAdsWatched': 0,
+              'lastAdsWatchedDate': Timestamp.fromDate(today),
+              'completedDailyIds': FieldValue.arrayRemove(['watch_ad']),
+            });
+      }
+      notifyListeners();
+    }
+  }
+}
+
+extension DateTimeExtension on DateTime {
+  bool isSameDay(DateTime other) {
+    return year == other.year && month == other.month && day == other.day;
   }
 }

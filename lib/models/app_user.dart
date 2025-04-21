@@ -84,8 +84,9 @@ class AppUser {
   DateTime? lastStepGoalCompletionDate;
   DateTime? lastWeightUpdateDate;
   List<String> completedOneOffIds;
+  List<String> completedDailyIds; // Added field for daily tasks
   DateTime? lastAdWatchedTimestamp;
-  Map<String, dynamic> claimedRewards; // Map to track reward claims
+  Map<String, dynamic> claimedRewards;
 
   AppUser({
     required this.id,
@@ -169,6 +170,7 @@ class AppUser {
     this.lastStepGoalCompletionDate,
     this.lastWeightUpdateDate,
     this.completedOneOffIds = const [],
+    this.completedDailyIds = const [], // Initialize new field
     this.lastAdWatchedTimestamp,
     this.claimedRewards = const {},
   });
@@ -276,11 +278,12 @@ class AppUser {
               ? Timestamp.fromDate(lastWeightUpdateDate!)
               : null,
       'completedOneOffIds': completedOneOffIds,
+      'completedDailyIds': completedDailyIds, // Serialize new field
       'lastAdWatchedTimestamp':
           lastAdWatchedTimestamp != null
               ? Timestamp.fromDate(lastAdWatchedTimestamp!)
               : null,
-      'claimedRewards': claimedRewards, // Serialize claimedRewards
+      'claimedRewards': claimedRewards,
     };
   }
 
@@ -448,6 +451,9 @@ class AppUser {
                   : DateTime.tryParse(map['lastWeightUpdateDate'] as String))
               : null,
       completedOneOffIds: List<String>.from(map['completedOneOffIds'] ?? []),
+      completedDailyIds: List<String>.from(
+        map['completedDailyIds'] ?? [],
+      ), // Deserialize new field
       lastAdWatchedTimestamp:
           map['lastAdWatchedTimestamp'] != null
               ? (map['lastAdWatchedTimestamp'] is Timestamp

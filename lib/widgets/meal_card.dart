@@ -80,7 +80,7 @@ class MealPlanCard extends StatelessWidget {
               const SizedBox(height: 4),
               Padding(
                 padding: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
-                child: FilledButton(
+                child: OutlinedButton(
                   onPressed: () {
                     final navScreenState =
                         context.findAncestorStateOfType<NavScreenState>();
@@ -97,21 +97,10 @@ class MealPlanCard extends StatelessWidget {
                       );
                     }
                   },
-                  style: FilledButton.styleFrom(
-                    backgroundColor: colorScheme.primary,
-                    foregroundColor: colorScheme.onPrimary,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 6,
-                      horizontal: 12,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
+                  // no style override—uses your outlinedButtonTheme
                   child: Text(
                     "View Plan",
                     style: theme.textTheme.labelMedium?.copyWith(
-                      color: colorScheme.onPrimary,
                       fontWeight: FontWeight.bold,
                     ),
                   ),

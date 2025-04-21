@@ -47,8 +47,33 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
   String? programLength;
 
   bool isLoading = true;
+  bool isGenerating = false;
+  String? errorMessage;
 
   final _formKey = GlobalKey<FormState>();
+  final ScrollController _scrollController = ScrollController();
+
+  // TextEditingControllers for form fields
+  final TextEditingController _ageController = TextEditingController();
+  final TextEditingController _heightController = TextEditingController();
+  final TextEditingController _weightController = TextEditingController();
+  final TextEditingController _maxPushUpsController = TextEditingController();
+  final TextEditingController _maxPullUpsController = TextEditingController();
+  final TextEditingController _mileRunTimeController = TextEditingController();
+
+  // FocusNodes for auto-scrolling to invalid fields
+  final Map<String, FocusNode> _focusNodes = {
+    'gender': FocusNode(),
+    'age': FocusNode(),
+    'height': FocusNode(),
+    'weight': FocusNode(),
+    'activity': FocusNode(),
+    'dietGoal': FocusNode(),
+    'workoutGoal': FocusNode(),
+    'experience': FocusNode(),
+    'trainingStyle': FocusNode(),
+    'programLength': FocusNode(),
+  };
 
   final List<String> genders = ["Male", "Female", "Other"];
   final List<String> activityLevels = [
@@ -168,11 +193,27 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
     _checkAuthAndLoadUser();
   }
 
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _ageController.dispose();
+    _heightController.dispose();
+    _weightController.dispose();
+    _maxPushUpsController.dispose();
+    _maxPullUpsController.dispose();
+    _mileRunTimeController.dispose();
+    _focusNodes.forEach((_, node) => node.dispose());
+    super.dispose();
+  }
+
   Future<void> _checkAuthAndLoadUser() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      if (!mounted) return; // Guard context usage
-      setState(() => isLoading = false);
+      if (!mounted) return;
+      setState(() {
+        isLoading = false;
+        errorMessage = "Please log in to continue.";
+      });
       return;
     }
 
@@ -180,38 +221,46 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
     await userProvider.loadUserData(user.uid);
     final currentUser = userProvider.currentUser;
     if (currentUser != null) {
-      if (!mounted) return; // Guard context usage
+      if (!mounted) return;
       setState(() {
         gender = currentUser.gender;
         age = currentUser.age;
+        _ageController.text = age ?? '';
         height = currentUser.height;
+        _heightController.text = height ?? '';
         weight = currentUser.weight;
+        _weightController.text = weight ?? '';
         activity = currentUser.activityLevel;
         dietGoal = currentUser.dietGoal;
         dietPreference = currentUser.dietPreference;
         workoutGoal = currentUser.workoutGoal;
         experience = currentUser.experienceLevel;
         trainingStyle = currentUser.trainingStyle;
-        availableEquipment = currentUser.availableEquipment;
-        injuryHistory = currentUser.injuryHistory;
+        availableEquipment = List.from(currentUser.availableEquipment);
+        injuryHistory = List.from(currentUser.injuryHistory);
         workoutFrequency = (currentUser.workoutFrequency).clamp(1, 7);
         hydration = currentUser.hydration;
-        dietaryRestrictions = currentUser.dietaryRestrictions;
-        workoutFocus = currentUser.workoutFocus;
+        dietaryRestrictions = List.from(currentUser.dietaryRestrictions);
+        workoutFocus = List.from(currentUser.workoutFocus);
         workoutDuration = currentUser.workoutDuration;
         intensity = currentUser.intensity;
-        availableDays = currentUser.availableDays;
+        availableDays = List.from(currentUser.availableDays);
         mealFrequency = currentUser.mealFrequency;
-        mealTimes = currentUser.mealTimes ?? [];
+        mealTimes = List.from(currentUser.mealTimes ?? []);
         maxPushUps = currentUser.maxPushUps;
+        _maxPushUpsController.text = maxPushUps?.toString() ?? '';
         maxPullUps = currentUser.maxPullUps;
+        _maxPullUpsController.text = maxPullUps?.toString() ?? '';
         mileRunTime = currentUser.mileRunTime;
-        medicalConditions = currentUser.medicalConditions;
-        preferredWorkoutTimes = currentUser.preferredWorkoutTimes ?? [];
+        _mileRunTimeController.text = mileRunTime?.toString() ?? '';
+        medicalConditions = List.from(currentUser.medicalConditions);
+        preferredWorkoutTimes = List.from(
+          currentUser.preferredWorkoutTimes ?? [],
+        );
       });
     }
     final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return; // Guard context usage
+    if (!mounted) return;
     setState(() {
       programLength = prefs.getString('programLength');
       isLoading = false;
@@ -346,13 +395,10 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
 
   Future<void> generatePersonalizedPlans() async {
     if (programLength == null) {
-      throw Exception("Program length must be selected.");
+      throw const FormatException("Program length must be selected.");
     }
 
     int totalDays = int.parse(programLength!.split(' ')[0]);
-
-    // Store Navigator and ScaffoldMessenger before async operation
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
 
     try {
       // Ensure preferredWorkoutTimes matches workoutFrequency
@@ -372,7 +418,9 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
       final userProvider = Provider.of<UserProvider>(context, listen: false);
       final currentUser = userProvider.currentUser;
 
-      if (currentUser == null) return;
+      if (currentUser == null) {
+        throw const AuthenticationException("User not authenticated.");
+      }
 
       // Generate Workout Program
       final workoutProgram = await WorkoutGenerator.generateWorkoutProgram(
@@ -390,7 +438,6 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
         totalDays: totalDays,
         mealFrequency: mealFrequency ?? 3,
         mealTimes: mealTimes,
-        // ignore: use_build_context_synchronously
         context: context,
       );
 
@@ -414,29 +461,26 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
         ),
       ];
 
-      // Save to Firestore
-      await _saveToFirestore();
-
       // Store the generated plans in SharedPreferences for PersonalizedPlanScreen
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('generatedWorkoutId', workoutProgram.id);
       await prefs.setString('generatedMealPlanId', mealPlan.id);
 
       if (!mounted) return;
-      scaffoldMessenger.showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text("Personalized Workout & Meal Plans Created!"),
           backgroundColor: Theme.of(context).colorScheme.primary,
         ),
       );
+    } on FormatException catch (e) {
+      throw FormatException(e.message);
+    } on AuthenticationException catch (e) {
+      throw AuthenticationException(e.message);
+    } on FirebaseException catch (e) {
+      throw Exception("Firestore error: ${e.message}");
     } catch (e) {
-      if (!mounted) return;
-      scaffoldMessenger.showSnackBar(
-        SnackBar(
-          content: Text("Error generating plans: $e"),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
-      );
+      throw Exception("Unexpected error: $e");
     }
   }
 
@@ -475,14 +519,30 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
       );
     }
 
+    if (errorMessage != null) {
+      return Scaffold(
+        backgroundColor: colorScheme.surface,
+        body: Center(
+          child: Text(
+            errorMessage!,
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: colorScheme.error,
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: colorScheme.surface,
       body: Stack(
         children: [
           SingleChildScrollView(
+            controller: _scrollController,
             padding: const EdgeInsets.fromLTRB(20, 40, 20, 40),
             child: Form(
               key: _formKey,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -491,53 +551,91 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
                     "Gender",
                     genders,
                     gender,
-                    (v) => gender = v,
+                    (v) => setState(() {
+                      gender = v;
+                      _formKey.currentState?.validate();
+                    }),
                     theme,
                     colorScheme,
+                    focusNode: _focusNodes['gender'],
                   ),
-                  _textInput("Age", age, (v) => age = v, theme, colorScheme),
+                  _textInput(
+                    "Age",
+                    _ageController,
+                    (v) => setState(() {
+                      age = v;
+                      _formKey.currentState?.validate();
+                    }),
+                    theme,
+                    colorScheme,
+                    focusNode: _focusNodes['age'],
+                  ),
                   _textInput(
                     "Height (cm)",
-                    height,
-                    (v) => height = v,
+                    _heightController,
+                    (v) => setState(() {
+                      height = v;
+                      _formKey.currentState?.validate();
+                    }),
                     theme,
                     colorScheme,
+                    focusNode: _focusNodes['height'],
                   ),
                   _textInput(
                     "Weight (kg)",
-                    weight,
-                    (v) => weight = v,
+                    _weightController,
+                    (v) => setState(() {
+                      weight = v;
+                      _formKey.currentState?.validate();
+                    }),
                     theme,
                     colorScheme,
+                    focusNode: _focusNodes['weight'],
                   ),
                   _dropdown(
                     "Activity Level",
                     activityLevels,
                     activity,
-                    (v) => activity = v,
+                    (v) => setState(() {
+                      activity = v;
+                      _formKey.currentState?.validate();
+                    }),
                     theme,
                     colorScheme,
+                    focusNode: _focusNodes['activity'],
                   ),
                   _textInput(
-                    "Max Push-Ups",
-                    maxPushUps?.toString(),
-                    (v) => maxPushUps = double.tryParse(v),
+                    "Max Push-Ups (Optional)",
+                    _maxPushUpsController,
+                    (v) => setState(() {
+                      maxPushUps = double.tryParse(v);
+                      _formKey.currentState?.validate();
+                    }),
                     theme,
                     colorScheme,
+                    isOptional: true,
                   ),
                   _textInput(
-                    "Max Pull-Ups",
-                    maxPullUps?.toString(),
-                    (v) => maxPullUps = double.tryParse(v),
+                    "Max Pull-Ups (Optional)",
+                    _maxPullUpsController,
+                    (v) => setState(() {
+                      maxPullUps = double.tryParse(v);
+                      _formKey.currentState?.validate();
+                    }),
                     theme,
                     colorScheme,
+                    isOptional: true,
                   ),
                   _textInput(
-                    "Mile Run Time (min)",
-                    mileRunTime?.toString(),
-                    (v) => mileRunTime = double.tryParse(v),
+                    "Mile Run Time (min) (Optional)",
+                    _mileRunTimeController,
+                    (v) => setState(() {
+                      mileRunTime = double.tryParse(v);
+                      _formKey.currentState?.validate();
+                    }),
                     theme,
                     colorScheme,
+                    isOptional: true,
                   ),
 
                   _sectionTitle("Diet Goals", theme, colorScheme),
@@ -545,25 +643,37 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
                     "Diet Goal",
                     dietGoals,
                     dietGoal,
-                    (v) => dietGoal = v,
+                    (v) => setState(() {
+                      dietGoal = v;
+                      _formKey.currentState?.validate();
+                    }),
                     theme,
                     colorScheme,
+                    focusNode: _focusNodes['dietGoal'],
                   ),
                   _dropdown(
                     "Diet Preference (Optional)",
                     dietPreferences,
                     dietPreference,
-                    (v) => dietPreference = v,
+                    (v) => setState(() {
+                      dietPreference = v;
+                      _formKey.currentState?.validate();
+                    }),
                     theme,
                     colorScheme,
+                    isOptional: true,
                   ),
                   _dropdown(
                     "Meals Per Day (Optional)",
                     mealOptions.map((e) => e.toString()).toList(),
                     mealFrequency?.toString(),
-                    (v) => mealFrequency = int.tryParse(v ?? '3'),
+                    (v) => setState(() {
+                      mealFrequency = int.tryParse(v ?? '3');
+                      _formKey.currentState?.validate();
+                    }),
                     theme,
                     colorScheme,
+                    isOptional: true,
                   ),
                   _sectionTitle("Meal Times (Optional)", theme, colorScheme),
                   _buildTimePickerInput(
@@ -577,46 +687,69 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
                     "Workout Goal",
                     workoutGoals,
                     workoutGoal,
-                    (v) => workoutGoal = v,
+                    (v) => setState(() {
+                      workoutGoal = v;
+                      _formKey.currentState?.validate();
+                    }),
                     theme,
                     colorScheme,
+                    focusNode: _focusNodes['workoutGoal'],
                   ),
                   _dropdown(
                     "Experience Level",
                     experienceLevels,
                     experience,
-                    (v) => experience = v,
+                    (v) => setState(() {
+                      experience = v;
+                      _formKey.currentState?.validate();
+                    }),
                     theme,
                     colorScheme,
+                    focusNode: _focusNodes['experience'],
                   ),
                   _dropdown(
                     "Training Style",
                     trainingStyles,
                     trainingStyle,
-                    (v) => trainingStyle = v,
+                    (v) => setState(() {
+                      trainingStyle = v;
+                      _formKey.currentState?.validate();
+                    }),
                     theme,
                     colorScheme,
+                    focusNode: _focusNodes['trainingStyle'],
                   ),
                   _dropdown(
                     "Intensity (Optional)",
                     intensityLevels,
                     intensity,
-                    (v) => intensity = v,
+                    (v) => setState(() {
+                      intensity = v;
+                      _formKey.currentState?.validate();
+                    }),
                     theme,
                     colorScheme,
+                    isOptional: true,
                   ),
                   _dropdown(
                     "Length of Program",
                     programLengthOptions,
                     programLength,
-                    (val) => setState(() => programLength = val),
+                    (val) => setState(() {
+                      programLength = val;
+                      _formKey.currentState?.validate();
+                    }),
                     theme,
                     colorScheme,
+                    focusNode: _focusNodes['programLength'],
                   ),
                   _slider(
                     "Workout Frequency (days/week)",
                     workoutFrequency.toDouble(),
-                    (val) => workoutFrequency = val.toInt(),
+                    (val) => setState(() {
+                      workoutFrequency = val.toInt();
+                      _formKey.currentState?.validate();
+                    }),
                     min: 1,
                     max: 7,
                     divisions: 6,
@@ -626,7 +759,10 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
                   _slider(
                     "Workout Duration (minutes) (Optional)",
                     workoutDuration,
-                    (val) => workoutDuration = val,
+                    (val) => setState(() {
+                      workoutDuration = val;
+                      _formKey.currentState?.validate();
+                    }),
                     min: 15,
                     max: 120,
                     divisions: 21,
@@ -684,9 +820,13 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
                     "Hydration",
                     hydrationLevels,
                     hydration,
-                    (v) => hydration = v,
+                    (v) => setState(() {
+                      hydration = v;
+                      _formKey.currentState?.validate();
+                    }),
                     theme,
                     colorScheme,
+                    isOptional: true,
                   ),
 
                   _sectionTitle(
@@ -731,16 +871,9 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
 
   Widget _sectionTitle(String title, ThemeData theme, ColorScheme colorScheme) {
     String displayTitle = title;
-    if (title == "Meal Times" ||
-        title == "Available Days" ||
-        title == "Preferred Workout Times" ||
-        title == "Available Equipment" ||
-        title == "Injury History" ||
-        title == "Medical Conditions" ||
-        title == "Hydration" ||
-        title == "Dietary Restrictions" ||
-        title == "Workout Focus") {
-      displayTitle = "$title (Optional)";
+    bool isOptional = title.contains("(Optional)");
+    if (isOptional) {
+      displayTitle = title.replaceAll("(Optional)", "");
     }
     return Padding(
       padding: const EdgeInsets.only(top: 25, bottom: 10),
@@ -750,6 +883,7 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
           color: colorScheme.onSurface,
           fontSize: 20,
           fontWeight: FontWeight.bold,
+          fontStyle: isOptional ? FontStyle.italic : FontStyle.normal,
         ),
       ),
     );
@@ -761,54 +895,65 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
     String? selected,
     ValueChanged<String?> onChanged,
     ThemeData theme,
-    ColorScheme colorScheme,
-  ) {
-    return DropdownButtonFormField<String>(
-      value: options.contains(selected) ? selected : null,
-      decoration: _inputDecoration(label, theme, colorScheme),
-      dropdownColor: colorScheme.surfaceContainer,
-      iconEnabledColor: colorScheme.primary,
-      style: theme.textTheme.bodyLarge?.copyWith(color: colorScheme.onSurface),
-      items:
-          options
-              .map(
-                (val) => DropdownMenuItem(
-                  value: val,
-                  child: Text(
-                    val,
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      color: colorScheme.onSurface,
+    ColorScheme colorScheme, {
+    bool isOptional = false,
+    FocusNode? focusNode,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: DropdownButtonFormField<String>(
+        focusNode: focusNode,
+        value: options.contains(selected) ? selected : null,
+        decoration: _inputDecoration(label, theme, colorScheme),
+        dropdownColor: colorScheme.surfaceContainer,
+        iconEnabledColor: colorScheme.primary,
+        style: theme.textTheme.bodyLarge?.copyWith(
+          color: colorScheme.onSurface,
+        ),
+        items:
+            options
+                .map(
+                  (val) => DropdownMenuItem(
+                    value: val,
+                    child: Text(
+                      val,
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: colorScheme.onSurface,
+                      ),
                     ),
                   ),
-                ),
-              )
-              .toList(),
-      onChanged: (val) => setState(() => onChanged(val)),
-      validator: (val) {
-        if (label.contains("(Optional)")) return null;
-        return val == null ? 'Please select $label' : null;
-      },
+                )
+                .toList(),
+        onChanged: onChanged,
+        validator: (val) {
+          if (isOptional) return null;
+          return val == null ? 'Please select $label' : null;
+        },
+      ),
     );
   }
 
   Widget _textInput(
     String label,
-    String? value,
+    TextEditingController controller,
     ValueChanged<String> onChanged,
     ThemeData theme,
-    ColorScheme colorScheme,
-  ) {
+    ColorScheme colorScheme, {
+    bool isOptional = false,
+    FocusNode? focusNode,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: TextFormField(
-        initialValue: value,
+        focusNode: focusNode,
+        controller: controller,
         keyboardType: TextInputType.number,
         style: theme.textTheme.bodyLarge?.copyWith(
           color: colorScheme.onSurface,
         ),
         decoration: _inputDecoration(label, theme, colorScheme),
         validator: (val) {
-          if (label.contains("(Optional)")) return null;
+          if (isOptional) return null;
           if (val == null || val.isEmpty) return 'Enter $label';
           if (label == "Age" &&
               (int.tryParse(val)! < 13 || int.tryParse(val)! > 120)) {
@@ -989,49 +1134,185 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
         ),
         minimumSize: WidgetStateProperty.all(const Size(double.infinity, 50)),
       ),
-      onPressed: () async {
-        if (_formKey.currentState?.validate() ?? false) {
-          // Store Navigator and ScaffoldMessenger before async operation
-          final navigator = Navigator.of(context);
-          ScaffoldMessenger.of(context);
+      onPressed:
+          isGenerating
+              ? null
+              : () async {
+                setState(() {
+                  errorMessage = null;
+                  isGenerating = true;
+                });
 
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder:
-                (context) => AlertDialog(
-                  backgroundColor: colorScheme.surface,
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      CircularProgressIndicator(color: colorScheme.primary),
-                      const SizedBox(height: 16),
-                      Text(
-                        "Generating Your Plan...",
-                        style: theme.textTheme.bodyLarge?.copyWith(
-                          color: colorScheme.onSurface,
+                // Store Navigator and ScaffoldMessenger before async operation
+                final navigator = Navigator.of(context);
+                final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+                try {
+                  // Validate the form
+                  if (_formKey.currentState?.validate() ?? false) {
+                    showDialog(
+                      context: context,
+                      barrierDismissible: false,
+                      builder:
+                          (context) => AlertDialog(
+                            backgroundColor: colorScheme.surface,
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                CircularProgressIndicator(
+                                  color: colorScheme.primary,
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  "Generating Your Plan...",
+                                  style: theme.textTheme.bodyLarge?.copyWith(
+                                    color: colorScheme.onSurface,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                    );
+
+                    await _storeDataLocally();
+                    await generatePersonalizedPlans();
+                    await _saveToFirestore();
+
+                    if (!mounted) return;
+                    navigator.pop(); // Dismiss loading dialog
+
+                    if (!mounted) return;
+                    navigator.push(
+                      MaterialPageRoute(
+                        builder: (context) => const PersonalizedPlanScreen(),
+                      ),
+                    );
+                  } else {
+                    // Collect validation errors for required fields only
+                    List<String> errors = [];
+                    _formKey.currentState?.validate();
+                    _formKey.currentState?.fields.forEach((field) {
+                      if (field.hasError) {
+                        final isOptionalField =
+                            (field.widget as dynamic).isOptional ??
+                            false; // Check if field is optional
+                        if (!isOptionalField) {
+                          errors.add(
+                            "${field.widget.decoration.labelText}: ${field.errorText}",
+                          );
+                        }
+                      }
+                    });
+
+                    // Scroll to the first invalid required field
+                    final firstInvalidField = _formKey.currentState?.fields
+                        .firstWhere((field) {
+                          final isOptionalField =
+                              (field.widget as dynamic).isOptional ?? false;
+                          return field.hasError && !isOptionalField;
+                        }, orElse: () => null);
+                    if (firstInvalidField != null) {
+                      final fieldKey =
+                          firstInvalidField.widget.key as GlobalKey?;
+                      final fieldContext = fieldKey?.currentContext;
+                      if (fieldContext != null) {
+                        final renderBox =
+                            fieldContext.findRenderObject() as RenderBox?;
+                        final offset = renderBox?.localToGlobal(Offset.zero);
+                        if (offset != null) {
+                          _scrollController.animateTo(
+                            offset.dy - 100, // Adjust for padding
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeInOut,
+                          );
+                        }
+                      }
+                    }
+
+                    // Show validation errors in a SnackBar
+                    scaffoldMessenger.showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          errors.isNotEmpty
+                              ? "Please fix the following required fields:\n${errors.join('\n')}"
+                              : "Please fill in all required fields.",
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onError,
+                          ),
+                        ),
+                        backgroundColor: colorScheme.error,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                } on FormatException catch (e) {
+                  if (!mounted) return;
+                  navigator.pop(); // Dismiss loading dialog
+                  scaffoldMessenger.showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        e.message,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onError,
                         ),
                       ),
-                    ],
-                  ),
-                ),
-          );
-
-          await _storeDataLocally();
-          await generatePersonalizedPlans();
-          await _saveToFirestore();
-
-          if (!mounted) return;
-          navigator.pop();
-
-          if (!mounted) return;
-          navigator.push(
-            MaterialPageRoute(
-              builder: (context) => const PersonalizedPlanScreen(),
-            ),
-          );
-        }
-      },
+                      backgroundColor: colorScheme.error,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                } on AuthenticationException catch (e) {
+                  if (!mounted) return;
+                  navigator.pop(); // Dismiss loading dialog
+                  scaffoldMessenger.showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        e.message,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onError,
+                        ),
+                      ),
+                      backgroundColor: colorScheme.error,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                } on FirebaseException catch (e) {
+                  if (!mounted) return;
+                  navigator.pop(); // Dismiss loading dialog
+                  scaffoldMessenger.showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        "Database error: ${e.message}",
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onError,
+                        ),
+                      ),
+                      backgroundColor: colorScheme.error,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                } catch (e) {
+                  if (!mounted) return;
+                  navigator.pop(); // Dismiss loading dialog
+                  scaffoldMessenger.showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        "An unexpected error occurred: $e",
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onError,
+                        ),
+                      ),
+                      backgroundColor: colorScheme.error,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                } finally {
+                  if (mounted) {
+                    setState(() {
+                      isGenerating = false;
+                    });
+                  }
+                }
+              },
       child: Text(
         "Generate My Plan",
         style: theme.textTheme.labelLarge?.copyWith(
@@ -1065,6 +1346,22 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
         borderRadius: BorderRadius.circular(10),
         borderSide: BorderSide(color: colorScheme.primary),
       ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide(color: colorScheme.error),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide(color: colorScheme.error),
+      ),
     );
   }
+}
+
+// Custom exceptions for better error handling
+class AuthenticationException implements Exception {
+  final String message;
+  const AuthenticationException(this.message);
+  @override
+  String toString() => message;
 }

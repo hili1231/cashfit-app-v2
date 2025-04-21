@@ -80,7 +80,7 @@ class WorkoutCard extends StatelessWidget {
               const SizedBox(height: 4),
               Padding(
                 padding: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
-                child: FilledButton(
+                child: OutlinedButton(
                   onPressed:
                       onDayButtonPressed ??
                       () {
@@ -90,21 +90,10 @@ class WorkoutCard extends StatelessWidget {
                           WorkoutDetailScreen(workout: workout),
                         );
                       },
-                  style: FilledButton.styleFrom(
-                    backgroundColor: colorScheme.primary,
-                    foregroundColor: colorScheme.onPrimary,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 6,
-                      horizontal: 12,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
+                  // No style: will pick up your AppTheme.outlinedButtonTheme
                   child: Text(
                     currentDay != null ? "Day $currentDay" : "View Workout",
                     style: theme.textTheme.labelMedium?.copyWith(
-                      color: colorScheme.onPrimary,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
