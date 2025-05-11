@@ -13,22 +13,53 @@ import 'screens/nav_screen.dart';
 import 'theme.dart';
 import 'providers/user_provider.dart';
 import 'screens/workouts/replace_workout_context_provider.dart';
+import 'services/cache_service.dart';
 
 /// Global key so any widget (e.g. EarnPointsScreen) can reach NavScreenState.
 final GlobalKey<NavScreenState> navKey = GlobalKey<NavScreenState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  
+  // Start Firebase initialization and cache loading in parallel
+  final firebaseInit = Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  
+  // Preload global cache data in the background
+  _preloadGlobalCache();
+  
+  // Wait for Firebase to finish initializing (required before we can continue)
+  await firebaseInit;
 
-  // Mobile‑only ad initialisation
+  // Mobile‑only ad initialisation - do this after UI is shown for better startup performance
   if (!kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS)) {
-    await MobileAds.instance.initialize();
+    // Initialize ads in the background
+    MobileAds.instance.initialize();
   }
 
   runApp(const MyApp());
+}
+
+// Preload global workout programs and meal plans in the background
+Future<void> _preloadGlobalCache() async {
+  try {
+    // Use our optimized prefetch method for better initial loading
+    final cacheService = CacheService();
+    
+    // Start with prioritized cache optimization in a background task
+    await cacheService.optimizeCache();
+    
+    // Load global cache with optimized approach
+    await cacheService.loadGlobalCache();
+    
+    // Prefetch frequently accessed data to improve user experience
+    await cacheService.prefetchFrequentlyAccessedData();
+  } catch (e) {
+    if (kDebugMode) {
+      print('Error preloading global cache: $e');
+    }
+  }
 }
 
 class MyApp extends StatelessWidget {

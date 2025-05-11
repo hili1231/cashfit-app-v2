@@ -7,6 +7,9 @@ import 'package:flutter/services.dart';
 import 'package:logger/logger.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import '../models/app_user.dart';
+import '../models/active_workout_program.dart';
+import '../models/active_diet_plan.dart';
+import '../services/cache_service.dart';
 
 class UserProvider with ChangeNotifier {
   AppUser? _currentUser;
@@ -90,7 +93,6 @@ class UserProvider with ChangeNotifier {
       _logger.e("Error updating FCM token in Firestore: $e");
     }
   }
-
   Future<void> loadUserData(String uid, {bool silent = false}) async {
     try {
       if (!silent) {
@@ -99,16 +101,68 @@ class UserProvider with ChangeNotifier {
         notifyListeners();
       }
 
+      _logger.i("Loading user data from Firestore for UID: $uid");
+      
+      // First get the user document
       final snapshot =
           await FirebaseFirestore.instance.collection('users').doc(uid).get();
+          
       if (snapshot.exists) {
         _currentUser = AppUser.fromMap(snapshot.data()!);
-        _logger.i(
-          "User data loaded from Firestore: ${_currentUser!.id}, Points: ${_currentUser!.points}",
-        );
+        
+        // Also load active workout programs from subcollection
+        _logger.i("Loading active workout programs for user: $uid");
+        
+        final activeSnapshot = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .collection('activeWorkoutPrograms')
+            .get();
+            
+        if (activeSnapshot.docs.isNotEmpty) {
+          _logger.i("Found ${activeSnapshot.docs.length} active workout programs");
+          final activePrograms = activeSnapshot.docs.map((doc) => 
+            ActiveWorkoutProgram.fromMap(doc.data())
+          ).toList();
+          
+          // Update the user's active workout programs
+          if (_currentUser != null) {
+            _currentUser = AppUser.fromMap({
+              ..._currentUser!.toMap(),
+              'activeWorkoutPrograms': activePrograms.map((p) => p.toMap()).toList(),
+            });
+            _logger.i("Updated user model with ${activePrograms.length} active workout programs");
+          }
+        }
+        
+        _logger.i("User data loaded from Firestore: ${_currentUser!.id}, Points: ${_currentUser!.points}");
+        _logger.i("User has ${_currentUser!.activeWorkoutPrograms.length} active workout programs");
+        
         _themeMode =
             _currentUser!.theme == 'light' ? ThemeMode.light : ThemeMode.dark;
         _resetAdsWatchedIfNewDay(); // Reset ad counter if new day
+          // Preload cache data for better app performance
+        _logger.i("Loading user data into cache");
+        
+        // If user has active workout programs, fetch them individually
+        if (_currentUser != null && _currentUser!.activeWorkoutPrograms.isNotEmpty) {
+          _logger.i("Caching active workout programs for user");
+          await CacheService().getUserActiveWorkouts(
+            _currentUser!.id,
+            _currentUser!.activeWorkoutPrograms,
+            forceRefresh: true
+          );
+        }
+        
+        // If user has active diet plans, fetch them individually
+        if (_currentUser != null && _currentUser!.activeDietPlans.isNotEmpty) {
+          _logger.i("Caching active diet plans for user");
+          await CacheService().getUserActiveDiets(
+            _currentUser!.id,
+            _currentUser!.activeDietPlans,
+            forceRefresh: true
+          );
+        }
       } else {
         _logger.w(
           "User document does not exist for UID: $uid. Creating default user document.",
@@ -702,6 +756,87 @@ class UserProvider with ChangeNotifier {
               'completedDailyIds': FieldValue.arrayRemove(['watch_ad']),
             });
       }
+      notifyListeners();
+    }
+  }
+
+  /// Updates only the active workout programs without reloading all user data
+  Future<void> updateActiveWorkoutPrograms(List<ActiveWorkoutProgram> programs) async {
+    if (!isLoggedIn || _currentUser == null) {
+      _errorMessage = "User not logged in";
+      notifyListeners();
+      return;
+    }
+
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      _logger.i("Updating active workout programs: ${programs.length} programs");
+      
+      // Update the current user with the new active programs
+      _currentUser = AppUser.fromMap({
+        ..._currentUser!.toMap(),
+        'activeWorkoutPrograms': programs.map((p) => p.toMap()).toList(),
+      });
+
+      // Notify listeners about the update
+      _isLoading = false;
+      notifyListeners();
+
+      // If the user has active workout programs, fetch and cache them for better performance
+      if (programs.isNotEmpty) {
+        _logger.i("Caching updated active workout programs");
+        await CacheService().getUserActiveWorkouts(
+          _currentUser!.id,
+          programs,
+          forceRefresh: true
+        );
+      }
+    } catch (e) {
+      _logger.e("Error updating active workout programs: $e");
+      _isLoading = false;
+      _errorMessage = "Failed to update active workout programs: $e";
+      notifyListeners();
+    }
+  }
+
+  /// Updates only the active diet plans without reloading all user data
+  Future<void> updateActiveDietPlans(List<ActiveDietPlan> plans) async {
+    if (!isLoggedIn || _currentUser == null) {
+      _errorMessage = "User not logged in";
+      notifyListeners();
+      return;
+    }
+
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      _logger.i("Updating active diet plans: ${plans.length} plans");
+        // Update the current user with the new active diet plans
+      _currentUser = AppUser.fromMap({
+        ..._currentUser!.toMap(),
+        'activeDietPlans': plans.map((p) => p.toMap()).toList(),
+      });
+
+      // Notify listeners about the update
+      _isLoading = false;
+      notifyListeners();
+
+      // If the user has active diet plans, fetch and cache them for better performance
+      if (plans.isNotEmpty) {
+        _logger.i("Caching updated active diet plans");
+        await CacheService().getUserActiveDiets(
+          _currentUser!.id,
+          plans,
+          forceRefresh: true
+        );
+      }
+    } catch (e) {
+      _logger.e("Error updating active diet plans: $e");
+      _isLoading = false;
+      _errorMessage = "Failed to update active diet plans: $e";
       notifyListeners();
     }
   }

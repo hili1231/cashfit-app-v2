@@ -1,3 +1,4 @@
+import 'package:cashfit/auth/login_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -46,9 +47,7 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
   List<String> preferredWorkoutTimes = [];
   String? programLength;
 
-  bool isLoading = true;
   bool isGenerating = false;
-  String? errorMessage;
 
   final _formKey = GlobalKey<FormState>();
   final ScrollController _scrollController = ScrollController();
@@ -190,7 +189,16 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
   @override
   void initState() {
     super.initState();
-    _checkAuthAndLoadUser();
+    // Load programLength from SharedPreferences
+    _loadProgramLength();
+  }
+
+  Future<void> _loadProgramLength() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      programLength = prefs.getString('programLength');
+    });
   }
 
   @override
@@ -204,67 +212,6 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
     _mileRunTimeController.dispose();
     _focusNodes.forEach((_, node) => node.dispose());
     super.dispose();
-  }
-
-  Future<void> _checkAuthAndLoadUser() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      if (!mounted) return;
-      setState(() {
-        isLoading = false;
-        errorMessage = "Please log in to continue.";
-      });
-      return;
-    }
-
-    final userProvider = Provider.of<UserProvider>(context, listen: false);
-    await userProvider.loadUserData(user.uid);
-    final currentUser = userProvider.currentUser;
-    if (currentUser != null) {
-      if (!mounted) return;
-      setState(() {
-        gender = currentUser.gender;
-        age = currentUser.age;
-        _ageController.text = age ?? '';
-        height = currentUser.height;
-        _heightController.text = height ?? '';
-        weight = currentUser.weight;
-        _weightController.text = weight ?? '';
-        activity = currentUser.activityLevel;
-        dietGoal = currentUser.dietGoal;
-        dietPreference = currentUser.dietPreference;
-        workoutGoal = currentUser.workoutGoal;
-        experience = currentUser.experienceLevel;
-        trainingStyle = currentUser.trainingStyle;
-        availableEquipment = List.from(currentUser.availableEquipment);
-        injuryHistory = List.from(currentUser.injuryHistory);
-        workoutFrequency = (currentUser.workoutFrequency).clamp(1, 7);
-        hydration = currentUser.hydration;
-        dietaryRestrictions = List.from(currentUser.dietaryRestrictions);
-        workoutFocus = List.from(currentUser.workoutFocus);
-        workoutDuration = currentUser.workoutDuration;
-        intensity = currentUser.intensity;
-        availableDays = List.from(currentUser.availableDays);
-        mealFrequency = currentUser.mealFrequency;
-        mealTimes = List.from(currentUser.mealTimes ?? []);
-        maxPushUps = currentUser.maxPushUps;
-        _maxPushUpsController.text = maxPushUps?.toString() ?? '';
-        maxPullUps = currentUser.maxPullUps;
-        _maxPullUpsController.text = maxPullUps?.toString() ?? '';
-        mileRunTime = currentUser.mileRunTime;
-        _mileRunTimeController.text = mileRunTime?.toString() ?? '';
-        medicalConditions = List.from(currentUser.medicalConditions);
-        preferredWorkoutTimes = List.from(
-          currentUser.preferredWorkoutTimes ?? [],
-        );
-      });
-    }
-    final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
-    setState(() {
-      programLength = prefs.getString('programLength');
-      isLoading = false;
-    });
   }
 
   Future<void> _storeDataLocally() async {
@@ -305,8 +252,80 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     final currentUser = userProvider.currentUser;
 
-    if (currentUser == null) return;
+    if (currentUser == null) {
+      // If currentUser is null, create a minimal AppUser object with the form data
+      final newUser = AppUser(
+        id: user.uid,
+        name: user.displayName ?? 'User',
+        email: user.email ?? '',
+        avatar: user.photoURL ?? '',
+        workoutsCompleted: 0,
+        mealsTracked: 0,
+        gender: gender ?? '',
+        age: age ?? '',
+        height: height ?? '',
+        weight: weight ?? '',
+        activityLevel: activity ?? '',
+        dietGoal: dietGoal ?? '',
+        dietPreference: dietPreference ?? '',
+        workoutGoal: workoutGoal ?? '',
+        experienceLevel: experience ?? '',
+        trainingStyle: trainingStyle ?? '',
+        availableEquipment: availableEquipment,
+        injuryHistory: injuryHistory,
+        workoutFrequency: workoutFrequency,
+        allergies: [],
+        isAdmin: false,
+        isPremium: false,
+        activeWorkoutPrograms: [],
+        activeDietPlans: [],
+        joinedChallenges: [],
+        joinedSideHustles: [],
+        lastLogin: DateTime.now(),
+        streak: 0,
+        points: 0,
+        badges: [],
+        workoutHistory: [],
+        mealHistory: [],
+        theme: 'light',
+        notifications: true,
+        language: 'en',
+        createdAt: DateTime.now(),
+        referrer: null,
+        balance: 0,
+        hydration: hydration,
+        dietaryRestrictions: dietaryRestrictions,
+        workoutFocus: workoutFocus,
+        workoutDuration: workoutDuration,
+        intensity: intensity,
+        availableDays: availableDays,
+        mealFrequency: mealFrequency,
+        mealTimes: mealTimes,
+        maxPushUps: maxPushUps,
+        maxPullUps: maxPullUps,
+        mileRunTime: mileRunTime,
+        medicalConditions: medicalConditions,
+        preferredWorkoutTimes: preferredWorkoutTimes,
+        dailyStepTarget: 0,
+        stepTargetHistory: [],
+        dailyCalorieTarget: 0,
+        dailyProteinTarget: 0,
+        dailyCarbsTarget: 0,
+        dailyFatTarget: 0,
+        macroIntakeHistory: [],
+      );
 
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .set(newUser.toMap(), SetOptions(merge: true));
+
+      // Update UserProvider with the new user data
+      userProvider.updateUser(newUser);
+      return;
+    }
+
+    // Update existing user with form data
     final updatedUser = AppUser(
       id: user.uid,
       name: currentUser.name,
@@ -393,7 +412,46 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
     userProvider.updateUser(updatedUser);
   }
 
+  // Add a method to validate user inputs
+  bool _validateInputs() {
+    if (gender == null || gender!.isEmpty) {
+      _showError("Please select your gender.");
+      return false;
+    }
+    if (age == null || int.tryParse(age!) == null) {
+      _showError("Please enter a valid age.");
+      return false;
+    }
+    if (height == null || double.tryParse(height!) == null) {
+      _showError("Please enter a valid height.");
+      return false;
+    }
+    if (weight == null || double.tryParse(weight!) == null) {
+      _showError("Please enter a valid weight.");
+      return false;
+    }
+    if (workoutFrequency <= 0) {
+      _showError("Workout frequency must be at least 1 day per week.");
+      return false;
+    }
+    if (workoutDuration <= 0) {
+      _showError("Workout duration must be greater than 0 minutes.");
+      return false;
+    }
+    return true;
+  }
+
+  // Add a helper method to show error messages
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  // Update the generatePersonalizedPlans method to include validation
   Future<void> generatePersonalizedPlans() async {
+    if (!_validateInputs()) return;
+
     if (programLength == null) {
       throw const FormatException("Program length must be selected.");
     }
@@ -422,47 +480,273 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
         throw const AuthenticationException("User not authenticated.");
       }
 
-      // Generate Workout Program
+      // Retrieve form data from SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+
+      // Remove unused local variables
+      // Removed: localWorkoutDuration, localAvailableDays, localPreferredWorkoutTimes, localIntensity, localMealFrequency, localMealTimes, localMedicalConditions, localMaxPushUps, localMaxPullUps, localMileRunTime
+
+      // Use relevant variables directly from SharedPreferences or class properties
+      final localTrainingStyle = prefs.getString('trainingStyle') ?? trainingStyle ?? "Gym";
+      final localExperienceLevel = prefs.getString('experience') ?? experience ?? "Beginner";
+      final localWorkoutGoal = prefs.getString('workoutGoal') ?? workoutGoal ?? "Build Muscle";
+      final localDietGoal = prefs.getString('dietGoal') ?? dietGoal ?? "Maintain Weight";
+      final localDietPreference = prefs.getString('dietPreference') ?? dietPreference ?? "Balanced";
+
+      // Update the AppUser with the form data
+      final updatedUserWithFormData = AppUser(
+        id: currentUser.id,
+        name: currentUser.name,
+        email: currentUser.email,
+        avatar: currentUser.avatar,
+        workoutsCompleted: currentUser.workoutsCompleted,
+        mealsTracked: currentUser.mealsTracked,
+        gender: gender ?? currentUser.gender,
+        age: age ?? currentUser.age,
+        height: height ?? currentUser.height,
+        weight: weight ?? currentUser.weight,
+        weightHistory: currentUser.weightHistory,
+        activityLevel: activity ?? currentUser.activityLevel,
+        dietGoal: localDietGoal,
+        dietPreference: localDietPreference,
+        workoutGoal: localWorkoutGoal,
+        experienceLevel: localExperienceLevel,
+        trainingStyle: localTrainingStyle,
+        availableEquipment: availableEquipment.isNotEmpty ? availableEquipment : currentUser.availableEquipment,
+        injuryHistory: injuryHistory.isNotEmpty ? injuryHistory : currentUser.injuryHistory,
+        workoutFrequency: workoutFrequency,
+        allergies: currentUser.allergies,
+        isAdmin: currentUser.isAdmin,
+        isPremium: currentUser.isPremium,
+        activeWorkoutPrograms: currentUser.activeWorkoutPrograms,
+        activeDietPlans: currentUser.activeDietPlans,
+        joinedChallenges: currentUser.joinedChallenges,
+        joinedSideHustles: currentUser.joinedSideHustles,
+        lastLogin: currentUser.lastLogin,
+        streak: currentUser.streak,
+        points: currentUser.points,
+        badges: currentUser.badges,
+        workoutHistory: currentUser.workoutHistory,
+        mealHistory: currentUser.mealHistory,
+        theme: currentUser.theme,
+        notifications: currentUser.notifications,
+        language: currentUser.language,
+        createdAt: currentUser.createdAt,
+        referrer: currentUser.referrer,
+        balance: currentUser.balance,
+        hydration: hydration ?? currentUser.hydration,
+        dietaryRestrictions: dietaryRestrictions.isNotEmpty ? dietaryRestrictions : currentUser.dietaryRestrictions,
+        workoutFocus: workoutFocus.isNotEmpty ? workoutFocus : currentUser.workoutFocus,
+        workoutDuration: workoutDuration,
+        intensity: intensity ?? currentUser.intensity,
+        availableDays: availableDays.isNotEmpty ? availableDays : currentUser.availableDays,
+        mealFrequency: mealFrequency ?? currentUser.mealFrequency,
+        mealTimes: mealTimes.isNotEmpty ? mealTimes : currentUser.mealTimes,
+        maxPushUps: maxPushUps ?? currentUser.maxPushUps,
+        maxPullUps: maxPullUps ?? currentUser.maxPullUps,
+        mileRunTime: mileRunTime ?? currentUser.mileRunTime,
+        medicalConditions: medicalConditions.isNotEmpty ? medicalConditions : currentUser.medicalConditions,
+        preferredWorkoutTimes: preferredWorkoutTimes.isNotEmpty ? preferredWorkoutTimes : currentUser.preferredWorkoutTimes,
+        dailyStepTarget: currentUser.dailyStepTarget,
+        stepTargetHistory: currentUser.stepTargetHistory,
+        dailyCalorieTarget: currentUser.dailyCalorieTarget,
+        dailyProteinTarget: currentUser.dailyProteinTarget,
+        dailyCarbsTarget: currentUser.dailyCarbsTarget,
+        dailyFatTarget: currentUser.dailyFatTarget,
+        macroIntakeHistory: currentUser.macroIntakeHistory,
+      );
+
+      // Save the updated user data to Firestore
+      debugPrint('Saving form data to Firestore before plan generation...');
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.id)
+          .set(updatedUserWithFormData.toMap(), SetOptions(merge: true));
+
+      // Update UserProvider with the updated user data
+      userProvider.updateUser(updatedUserWithFormData);
+      debugPrint(
+        'User data updated: trainingStyle=${updatedUserWithFormData.trainingStyle}, experienceLevel=${updatedUserWithFormData.experienceLevel}',
+      );
+
+      // Use the updated user for plan generation
+      final userForPlanGeneration = updatedUserWithFormData;
+
+      // Guard the use of 'BuildContext' with a 'mounted' check
+      if (!mounted) return;
+
+      // Generate Workout Program using userForPlanGeneration
+      debugPrint('Starting workout program generation...');
       final workoutProgram = await WorkoutGenerator.generateWorkoutProgram(
-        user: currentUser,
+        user: userForPlanGeneration,
         totalDays: totalDays,
         workoutFrequency: workoutFrequency,
         availableDays: availableDays,
         preferredWorkoutTimes: preferredWorkoutTimes,
         context: context,
       );
+      debugPrint('Workout program generated: ${workoutProgram.id}');
 
-      // Generate Diet Plan
+      // Guard the use of 'BuildContext' with a 'mounted' check
+      if (!mounted) return;
+
+      // Generate Diet Plan using userForPlanGeneration
+      debugPrint('Starting diet plan generation...');
       final mealPlan = await DietGenerator.generateDietPlan(
-        user: currentUser,
+        user: userForPlanGeneration,
         totalDays: totalDays,
         mealFrequency: mealFrequency ?? 3,
         mealTimes: mealTimes,
         context: context,
       );
+      debugPrint('Diet plan generated: ${mealPlan.id}');
 
-      // Update user's active programs and plans
-      currentUser.activeWorkoutPrograms = [
-        ActiveWorkoutProgram(
-          workoutProgramId: workoutProgram.id,
-          startDate: DateTime.now(),
-          currentDay: 1,
-          isCompleted: false,
-          completedDays: const [],
-        ),
-      ];
-      currentUser.activeDietPlans = [
-        ActiveDietPlan(
-          dietPlanId: mealPlan.id,
-          startDate: DateTime.now(),
-          currentDay: 1,
-          isCompleted: false,
-          completedDays: const [],
-        ),
-      ];
+      // Prepare the new active workout and diet plans
+      final newActiveWorkoutProgram = ActiveWorkoutProgram(
+        workoutProgramId: workoutProgram.id,
+        startDate: DateTime.now(),
+        currentDay: 1,
+        isCompleted: false,
+        completedDays: const [],
+      );
+
+      final newActiveDietPlan = ActiveDietPlan(
+        dietPlanId: mealPlan.id,
+        startDate: DateTime.now(),
+        currentDay: 1,
+        isCompleted: false,
+        completedDays: const [],
+      );
+
+      // Update existing plans to set isActive: false
+      List<ActiveWorkoutProgram> updatedWorkoutPrograms =
+          userForPlanGeneration.activeWorkoutPrograms.map((program) {
+            return ActiveWorkoutProgram(
+              workoutProgramId: program.workoutProgramId,
+              startDate: program.startDate,
+              currentDay: program.currentDay,
+              isCompleted: program.isCompleted,
+              completedDays: program.completedDays,
+            );
+          }).toList();
+
+      List<ActiveDietPlan> updatedDietPlans =
+          userForPlanGeneration.activeDietPlans.map((plan) {
+            return ActiveDietPlan(
+              dietPlanId: plan.dietPlanId,
+              startDate: plan.startDate,
+              currentDay: plan.currentDay,
+              isCompleted: plan.isCompleted,
+              completedDays: plan.completedDays,
+            );
+          }).toList();
+
+      // Append the new plans
+      updatedWorkoutPrograms.add(newActiveWorkoutProgram);
+      updatedDietPlans.add(newActiveDietPlan);
+
+      // Update user's active programs and plans in Firestore
+      final finalUpdatedUser = AppUser(
+        id: userForPlanGeneration.id,
+        name: userForPlanGeneration.name,
+        email: userForPlanGeneration.email,
+        avatar: userForPlanGeneration.avatar,
+        workoutsCompleted: userForPlanGeneration.workoutsCompleted,
+        mealsTracked: userForPlanGeneration.mealsTracked,
+        gender: userForPlanGeneration.gender,
+        age: userForPlanGeneration.age,
+        height: userForPlanGeneration.height,
+        weight: userForPlanGeneration.weight,
+        weightHistory: userForPlanGeneration.weightHistory,
+        activityLevel: userForPlanGeneration.activityLevel,
+        dietGoal: userForPlanGeneration.dietGoal,
+        dietPreference: userForPlanGeneration.dietPreference,
+        workoutGoal: userForPlanGeneration.workoutGoal,
+        experienceLevel: userForPlanGeneration.experienceLevel,
+        trainingStyle: userForPlanGeneration.trainingStyle,
+        availableEquipment: userForPlanGeneration.availableEquipment,
+        injuryHistory: userForPlanGeneration.injuryHistory,
+        workoutFrequency: userForPlanGeneration.workoutFrequency,
+        allergies: userForPlanGeneration.allergies,
+        isAdmin: userForPlanGeneration.isAdmin,
+        isPremium: userForPlanGeneration.isPremium,
+        premiumExpiryDate: userForPlanGeneration.premiumExpiryDate,
+        autoRenew: userForPlanGeneration.autoRenew,
+        activeWorkoutPrograms: updatedWorkoutPrograms, // Updated list
+        activeDietPlans: updatedDietPlans, // Updated list
+        joinedChallenges: userForPlanGeneration.joinedChallenges,
+        activeChallengeId: userForPlanGeneration.activeChallengeId,
+        joinedSideHustles: userForPlanGeneration.joinedSideHustles,
+        lastLogin: userForPlanGeneration.lastLogin,
+        streak: userForPlanGeneration.streak,
+        points: userForPlanGeneration.points,
+        badges: userForPlanGeneration.badges,
+        workoutHistory: userForPlanGeneration.workoutHistory,
+        mealHistory: userForPlanGeneration.mealHistory,
+        theme: userForPlanGeneration.theme,
+        notifications: userForPlanGeneration.notifications,
+        language: userForPlanGeneration.language,
+        createdAt: userForPlanGeneration.createdAt,
+        referrer: userForPlanGeneration.referrer,
+        balance: userForPlanGeneration.balance,
+        hydration: userForPlanGeneration.hydration,
+        dietaryRestrictions: userForPlanGeneration.dietaryRestrictions,
+        workoutFocus: userForPlanGeneration.workoutFocus,
+        workoutDuration: userForPlanGeneration.workoutDuration,
+        intensity: userForPlanGeneration.intensity,
+        availableDays: userForPlanGeneration.availableDays,
+        mealFrequency: userForPlanGeneration.mealFrequency,
+        mealTimes: userForPlanGeneration.mealTimes,
+        maxPushUps: userForPlanGeneration.maxPushUps,
+        maxPullUps: userForPlanGeneration.maxPullUps,
+        mileRunTime: userForPlanGeneration.mileRunTime,
+        medicalConditions: userForPlanGeneration.medicalConditions,
+        preferredWorkoutTimes: userForPlanGeneration.preferredWorkoutTimes,
+        challengeCheckIns: userForPlanGeneration.challengeCheckIns,
+        challengeProgress: userForPlanGeneration.challengeProgress,
+        dailyStepTarget: userForPlanGeneration.dailyStepTarget,
+        stepTargetHistory: userForPlanGeneration.stepTargetHistory,
+        dailyCalorieTarget: userForPlanGeneration.dailyCalorieTarget,
+        dailyProteinTarget: userForPlanGeneration.dailyProteinTarget,
+        dailyCarbsTarget: userForPlanGeneration.dailyCarbsTarget,
+        dailyFatTarget: userForPlanGeneration.dailyFatTarget,
+        macroIntakeHistory: userForPlanGeneration.macroIntakeHistory,
+        preferredWorkoutStyle: userForPlanGeneration.preferredWorkoutStyle,
+        isBanned: userForPlanGeneration.isBanned,
+        notificationsEnabled: userForPlanGeneration.notificationsEnabled,
+        dailyReminderTime: userForPlanGeneration.dailyReminderTime,
+        weeklyReminderTime: userForPlanGeneration.weeklyReminderTime,
+        fcmToken: userForPlanGeneration.fcmToken,
+        lastCheckIn: userForPlanGeneration.lastCheckIn,
+        dailyAdsWatched: userForPlanGeneration.dailyAdsWatched,
+        lastAdsWatchedDate: userForPlanGeneration.lastAdsWatchedDate,
+        hasBuiltPlans: userForPlanGeneration.hasBuiltPlans,
+        hasClaimedBuildPlansReward:
+            userForPlanGeneration.hasClaimedBuildPlansReward,
+        checkInStreak: userForPlanGeneration.checkInStreak,
+        lastWorkoutCompletionDate:
+            userForPlanGeneration.lastWorkoutCompletionDate,
+        lastMealPlanCompletionDate:
+            userForPlanGeneration.lastMealPlanCompletionDate,
+        lastStepGoalCompletionDate:
+            userForPlanGeneration.lastStepGoalCompletionDate,
+        lastWeightUpdateDate: userForPlanGeneration.lastWeightUpdateDate,
+        completedOneOffIds: userForPlanGeneration.completedOneOffIds,
+        completedDailyIds: userForPlanGeneration.completedDailyIds,
+        lastAdWatchedTimestamp: userForPlanGeneration.lastAdWatchedTimestamp,
+        claimedRewards: userForPlanGeneration.claimedRewards,
+      );
+
+      // Update Firestore with the updated active programs and plans
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.id)
+          .set(finalUpdatedUser.toMap(), SetOptions(merge: true));
+
+      // Update UserProvider
+      userProvider.updateUser(finalUpdatedUser);
 
       // Store the generated plans in SharedPreferences for PersonalizedPlanScreen
-      final prefs = await SharedPreferences.getInstance();
       await prefs.setString('generatedWorkoutId', workoutProgram.id);
       await prefs.setString('generatedMealPlanId', mealPlan.id);
 
@@ -510,24 +794,35 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    if (isLoading || FirebaseAuth.instance.currentUser == null) {
+    // Check if the user is authenticated
+    if (FirebaseAuth.instance.currentUser == null) {
       return Scaffold(
         backgroundColor: colorScheme.surface,
         body: Center(
-          child: CircularProgressIndicator(color: colorScheme.primary),
-        ),
-      );
-    }
-
-    if (errorMessage != null) {
-      return Scaffold(
-        backgroundColor: colorScheme.surface,
-        body: Center(
-          child: Text(
-            errorMessage!,
-            style: theme.textTheme.bodyLarge?.copyWith(
-              color: colorScheme.error,
-            ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                "Please log in to continue.",
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: colorScheme.error,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: colorScheme.primary,
+                  foregroundColor: colorScheme.onPrimary,
+                ),
+                child: const Text("Log In"),
+              ),
+            ],
           ),
         ),
       );
@@ -1120,6 +1415,54 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
     );
   }
 
+  // Helper method to get the current value of a field
+  dynamic _getFieldValue(String fieldName) {
+    switch (fieldName) {
+      case 'gender':
+        return gender;
+      case 'age':
+        return age;
+      case 'height':
+        return height;
+      case 'weight':
+        return weight;
+      case 'activity':
+        return activity;
+      case 'dietGoal':
+        return dietGoal;
+      case 'workoutGoal':
+        return workoutGoal;
+      case 'experience':
+        return experience;
+      case 'trainingStyle':
+        return trainingStyle;
+      case 'programLength':
+        return programLength;
+      default:
+        return null;
+    }
+  }
+
+  // Helper method to validate a field
+  bool _validateField(String fieldName, dynamic value) {
+    if (value == null || (value is String && value.isEmpty)) {
+      return false;
+    }
+    if (fieldName == 'age') {
+      final ageValue = int.tryParse(value);
+      return ageValue != null && ageValue >= 13 && ageValue <= 120;
+    }
+    if (fieldName == 'height') {
+      final heightValue = double.tryParse(value);
+      return heightValue != null && heightValue >= 100 && heightValue <= 250;
+    }
+    if (fieldName == 'weight') {
+      final weightValue = double.tryParse(value);
+      return weightValue != null && weightValue >= 30 && weightValue <= 300;
+    }
+    return true;
+  }
+
   Widget _buildGenerateButton(
     BuildContext context,
     ThemeData theme,
@@ -1139,7 +1482,6 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
               ? null
               : () async {
                 setState(() {
-                  errorMessage = null;
                   isGenerating = true;
                 });
 
@@ -1174,9 +1516,13 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
                           ),
                     );
 
+                    // Save form data to SharedPreferences
                     await _storeDataLocally();
+                    // Generate plans using local data
                     await generatePersonalizedPlans();
                     await _saveToFirestore();
+
+                    // Save to Firestore (already handled in generatePersonalizedPlans)
 
                     if (!mounted) return;
                     navigator.pop(); // Dismiss loading dialog
@@ -1188,33 +1534,25 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
                       ),
                     );
                   } else {
-                    // Collect validation errors for required fields only
+                    // Collect validation errors for required fields
                     List<String> errors = [];
-                    _formKey.currentState?.validate();
-                    _formKey.currentState?.fields.forEach((field) {
-                      if (field.hasError) {
-                        final isOptionalField =
-                            (field.widget as dynamic).isOptional ??
-                            false; // Check if field is optional
-                        if (!isOptionalField) {
-                          errors.add(
-                            "${field.widget.decoration.labelText}: ${field.errorText}",
-                          );
-                        }
+                    FocusNode? firstInvalidFocusNode;
+
+                    // Check each required field for validation errors
+                    _focusNodes.forEach((fieldName, focusNode) {
+                      final fieldValue = _getFieldValue(fieldName);
+                      final isValid = _validateField(fieldName, fieldValue);
+                      if (!isValid) {
+                        errors.add(
+                          "$fieldName: Please provide a valid $fieldName",
+                        );
+                        firstInvalidFocusNode ??= focusNode;
                       }
                     });
 
-                    // Scroll to the first invalid required field
-                    final firstInvalidField = _formKey.currentState?.fields
-                        .firstWhere((field) {
-                          final isOptionalField =
-                              (field.widget as dynamic).isOptional ?? false;
-                          return field.hasError && !isOptionalField;
-                        }, orElse: () => null);
-                    if (firstInvalidField != null) {
-                      final fieldKey =
-                          firstInvalidField.widget.key as GlobalKey?;
-                      final fieldContext = fieldKey?.currentContext;
+                    // Scroll to the first invalid field
+                    if (firstInvalidFocusNode != null) {
+                      final fieldContext = firstInvalidFocusNode!.context;
                       if (fieldContext != null) {
                         final renderBox =
                             fieldContext.findRenderObject() as RenderBox?;

@@ -3,11 +3,13 @@ import 'package:cashfit/models/workout_program.dart';
 import 'package:cashfit/providers/user_provider.dart';
 import 'package:cashfit/screens/nav_screen.dart';
 import 'package:cashfit/screens/workouts/workout_day_detail_screen.dart';
+import 'package:cashfit/services/cache_service.dart';
 import 'package:cashfit/theme.dart';
 import 'package:cashfit/widgets/workout_card.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
+import 'package:logger/logger.dart';
 import 'workout_detail_screen.dart';
 
 class RemovedWorkoutProgram {
@@ -48,6 +50,7 @@ class WorkoutsScreen extends StatefulWidget {
 }
 
 class _WorkoutsScreenState extends State<WorkoutsScreen> {
+  final Logger _logger = Logger();
   late Future<List<WorkoutProgram>> _fetchFuture;
   final Map<String, bool> _deactivatedWorkouts = {};
   final bool _isLoadingActiveWorkouts = false;
@@ -63,32 +66,14 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
         return value;
       });
     }
-  }
-
-  Future<List<WorkoutProgram>> _fetchAllWorkouts() async {
+  }  Future<List<WorkoutProgram>> _fetchAllWorkouts() async {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     List<WorkoutProgram> allWorkouts = [];
-
+    
     try {
-      debugPrint('Fetching all workout programs');
-      final snapshot = await FirebaseFirestore.instance
-          .collection('workoutPrograms')
-          .get(GetOptions(source: Source.cache));
-      allWorkouts =
-          snapshot.docs
-              .map((doc) => WorkoutProgram.fromMap(doc.data(), doc.id))
-              .toList();
-
-      if (allWorkouts.isEmpty) {
-        debugPrint('Cache empty, fetching from server');
-        final serverSnapshot = await FirebaseFirestore.instance
-            .collection('workoutPrograms')
-            .get(GetOptions(source: Source.server));
-        allWorkouts =
-            serverSnapshot.docs
-                .map((doc) => WorkoutProgram.fromMap(doc.data(), doc.id))
-                .toList();
-      }
+      debugPrint('Fetching all workout programs using CacheService');
+      // Use the cache service to retrieve workout programs
+      allWorkouts = await CacheService().getWorkoutPrograms();
 
       if (userProvider.isLoggedIn && userProvider.firebaseUser != null) {
         final uid = userProvider.firebaseUser!.uid;
@@ -142,8 +127,19 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
 
   Future<void> _setActiveWorkout(String workoutProgramId) async {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final navState = context.findAncestorStateOfType<NavScreenState>();
     if (!userProvider.isLoggedIn || userProvider.firebaseUser == null) {
       debugPrint('User not logged in or firebaseUser is null');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please log in to add workouts to your active programs'),
+          ),
+        );
+        if (navState != null) {
+          navState.navigateToLogin();
+        }
+      }
       return;
     }
 
@@ -175,13 +171,29 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
         'completedDays': [],
       });
 
-      debugPrint('Removing workout program from removedWorkoutPrograms');
-      await FirebaseFirestore.instance
+      debugPrint('Removing workout program from removedWorkoutPrograms');      await FirebaseFirestore.instance
           .collection('users')
           .doc(userProvider.firebaseUser!.uid)
           .collection('removedWorkoutPrograms')
           .doc(workoutProgramId)
           .delete();
+
+      // Invalidate the cache to force a refresh
+      await CacheService().invalidateUserWorkoutsCache(userProvider.firebaseUser!.uid);
+      
+      // Optimized approach - only fetch and update active programs
+      final activePrograms = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userProvider.firebaseUser!.uid)
+          .collection('activeWorkoutPrograms')
+          .get();
+          
+      final mappedPrograms = activePrograms.docs
+          .map((doc) => ActiveWorkoutProgram.fromMap(doc.data()))
+          .toList();
+          
+      // Update just the active workouts instead of refreshing all user data
+      await userProvider.updateActiveWorkoutPrograms(mappedPrograms);
 
       if (mounted) {
         debugPrint('Showing success snackbar');
@@ -201,7 +213,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Failed to set active workout: $e',
+              'Failed to add active workout: $e',
               style: TextStyle(color: Theme.of(context).colorScheme.onError),
             ),
             backgroundColor: Theme.of(context).colorScheme.error,
@@ -296,10 +308,25 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
           removedDate: DateTime.now(),
           uid: userProvider.firebaseUser!.uid,
         ).toMap(),
-      );
-
-      debugPrint('Deleting active workout program from Firestore');
+      );      debugPrint('Deleting active workout program from Firestore');
       await activeProgramRef.delete();
+
+      // Invalidate the cache to force a refresh
+      await CacheService().invalidateUserWorkoutsCache(userProvider.firebaseUser!.uid);
+      
+      // Optimized approach - only fetch and update active programs
+      final activePrograms = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userProvider.firebaseUser!.uid)
+          .collection('activeWorkoutPrograms')
+          .get();
+          
+      final mappedPrograms = activePrograms.docs
+          .map((doc) => ActiveWorkoutProgram.fromMap(doc.data()))
+          .toList();
+          
+      // Update just the active workouts instead of refreshing all user data
+      await userProvider.updateActiveWorkoutPrograms(mappedPrograms);
 
       if (mounted) {
         debugPrint('Showing success snackbar for removal');
@@ -328,45 +355,77 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
       }
     }
   }
-
   Future<Map<String, WorkoutProgram>> _fetchWorkoutPrograms(
     List<String> programIds,
   ) async {
-    final Map<String, WorkoutProgram> workoutMap = {};
-    if (programIds.isEmpty) return workoutMap;
-
-    const batchSize = 10;
-    for (var i = 0; i < programIds.length; i += batchSize) {
-      final batchIds = programIds.sublist(
-        i,
-        i + batchSize > programIds.length ? programIds.length : i + batchSize,
+    final Map<String, WorkoutProgram> workoutMap = {};    if (programIds.isEmpty) {
+      _logger.w('No program IDs provided to fetch');
+      return workoutMap;
+    }
+    
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    if (!userProvider.isLoggedIn || userProvider.firebaseUser == null) {
+      _logger.w('User not logged in, cannot fetch workout programs');
+      return workoutMap;
+    }
+    
+    // Use CacheService to get active workouts for the user
+    final activeWorkoutPrograms = userProvider.currentUser?.activeWorkoutPrograms ?? [];
+    
+    if (activeWorkoutPrograms.isEmpty) {
+      _logger.w('No active workout programs in currentUser object');
+      return workoutMap;
+    }
+      try {
+      _logger.d('Using CacheService to fetch active workouts for user: ${userProvider.firebaseUser!.uid}');
+      _logger.d('Active workout IDs: ${programIds.join(', ')}');
+        _logger.i('Fetching active workouts for user: ${userProvider.firebaseUser!.uid}');
+      _logger.d('Active workout IDs from params: ${programIds.join(', ')}');
+      _logger.d('Active workout IDs from user object: ${activeWorkoutPrograms.map((wp) => wp.workoutProgramId).join(', ')}');
+      
+      // Force refresh to ensure we get the latest data
+      final cachedWorkouts = await CacheService().getUserActiveWorkouts(
+        userProvider.firebaseUser!.uid,
+        activeWorkoutPrograms,
+        forceRefresh: true // Force refresh to get updated data
       );
-      debugPrint('Fetching workout programs batch: $batchIds');
-      final programSnapshot = await FirebaseFirestore.instance
-          .collection('workoutPrograms')
-          .where(FieldPath.documentId, whereIn: batchIds)
-          .get(GetOptions(source: Source.cache));
+      
+      _logger.i('Retrieved ${cachedWorkouts.length} workout programs from cache');
+      
+      // We still need to apply the deactivation status
+      for (final entry in cachedWorkouts.entries) {
+        workoutMap[entry.key] = entry.value;
+        _deactivatedWorkouts[entry.key] = false;
+      }
+    } catch (e) {
+      _logger.e('Error fetching workout programs from cache: $e');
+      // Fallback to direct Firestore query if cache fails
+      if (programIds.isNotEmpty) {
+        const batchSize = 10;
+        for (var i = 0; i < programIds.length; i += batchSize) {
+          final batchIds = programIds.sublist(
+            i,
+            i + batchSize > programIds.length ? programIds.length : i + batchSize,
+          );
+          
+          try {
+            final programSnapshot = await FirebaseFirestore.instance
+                .collection('workoutPrograms')
+                .where(FieldPath.documentId, whereIn: batchIds)
+                .get();
 
-      var batchWorkouts =
-          programSnapshot.docs
-              .map((doc) => WorkoutProgram.fromMap(doc.data(), doc.id))
-              .toList();
-
-      if (batchWorkouts.isEmpty) {
-        debugPrint('Cache empty, fetching batch from server');
-        final serverSnapshot = await FirebaseFirestore.instance
-            .collection('workoutPrograms')
-            .where(FieldPath.documentId, whereIn: batchIds)
-            .get(GetOptions(source: Source.server));
-        batchWorkouts =
-            serverSnapshot.docs
+            final batchWorkouts = programSnapshot.docs
                 .map((doc) => WorkoutProgram.fromMap(doc.data(), doc.id))
                 .toList();
-      }
 
-      for (var workout in batchWorkouts) {
-        workoutMap[workout.id] = workout;
-        _deactivatedWorkouts[workout.id] = false;
+            for (var workout in batchWorkouts) {
+              workoutMap[workout.id] = workout;
+              _deactivatedWorkouts[workout.id] = false;
+            }
+          } catch (e) {
+            _logger.e('Error fetching workout batch: $e');
+          }
+        }
       }
     }
 
@@ -501,36 +560,13 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 12),
-                                StreamBuilder<QuerySnapshot>(
-                                  stream:
-                                      FirebaseFirestore.instance
-                                          .collection('users')
-                                          .doc(userProvider.firebaseUser!.uid)
-                                          .collection('activeWorkoutPrograms')
-                                          .snapshots(),
-                                  builder: (context, snapshot) {
-                                    if (snapshot.hasError) {
-                                      return Center(
-                                        child: Text(
-                                          'Error: ${snapshot.error}',
-                                          style: theme.textTheme.bodyMedium
-                                              ?.copyWith(
-                                                color:
-                                                    colorScheme
-                                                        .onSurfaceVariant,
-                                              ),
-                                        ),
-                                      );
-                                    }
-                                    if (snapshot.connectionState ==
-                                        ConnectionState.waiting) {
-                                      return const Center(
-                                        child: CircularProgressIndicator(),
-                                      );
-                                    }
-                                    if (!snapshot.hasData ||
-                                        snapshot.data!.docs.isEmpty) {
+                                const SizedBox(height: 12),                                Builder(
+                                  builder: (context) {
+                                    final activePrograms = userProvider.currentUser?.activeWorkoutPrograms ?? [];
+                                    
+                                    _logger.i('User has ${activePrograms.length} active workout programs');
+                                    
+                                    if (activePrograms.isEmpty) {
                                       return Center(
                                         child: Text(
                                           "No active programs",
@@ -542,20 +578,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                                               ),
                                         ),
                                       );
-                                    }
-
-                                    final activePrograms =
-                                        snapshot.data!.docs
-                                            .map(
-                                              (doc) =>
-                                                  ActiveWorkoutProgram.fromMap(
-                                                    doc.data()
-                                                        as Map<String, dynamic>,
-                                                  ),
-                                            )
-                                            .toList();
-
-                                    return FutureBuilder<
+                                    }return FutureBuilder<
                                       Map<String, WorkoutProgram>
                                     >(
                                       future: _fetchWorkoutPrograms(
@@ -571,6 +594,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                                           );
                                         }
                                         if (workoutSnapshot.hasError) {
+                                          _logger.e('Error fetching active workout programs: ${workoutSnapshot.error}');
                                           return Center(
                                             child: Text(
                                               'Error: ${workoutSnapshot.error}',
@@ -585,6 +609,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                                         }
                                         if (!workoutSnapshot.hasData ||
                                             workoutSnapshot.data!.isEmpty) {
+                                          _logger.w('No active workout programs found in cache');
                                           return Center(
                                             child: Text(
                                               "No active programs found",
@@ -596,18 +621,23 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                                                   ),
                                             ),
                                           );
-                                        }
-
-                                        final workoutMap =
+                                        }                                        final workoutMap =
                                             workoutSnapshot.data!;
+                                        
+                                        _logger.i('Retrieved ${workoutMap.length} workout programs from cache');
+                                        _logger.d('Workout IDs in map: ${workoutMap.keys.join(", ")}');
+                                        
                                         final activeData =
                                             activePrograms
                                                 .where(
-                                                  (program) =>
-                                                      workoutMap.containsKey(
-                                                        program
-                                                            .workoutProgramId,
-                                                      ),
+                                                  (program) {
+                                                    final hasWorkout = workoutMap.containsKey(
+                                                        program.workoutProgramId);
+                                                    if (!hasWorkout) {
+                                                      _logger.w('Active workout ${program.workoutProgramId} not found in cache');
+                                                    }
+                                                    return hasWorkout;
+                                                  },
                                                 )
                                                 .map(
                                                   (program) => {

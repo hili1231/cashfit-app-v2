@@ -8,6 +8,7 @@ import '../../models/removed_diet_plan.dart';
 import '../../widgets/meal_card.dart';
 import '../../theme.dart';
 import '../../providers/user_provider.dart';
+import '../../services/cache_service.dart';
 import '../nav_screen.dart';
 import 'meal_plan_screen.dart';
 
@@ -36,34 +37,13 @@ class _DietSelectorScreenState extends State<DietSelectorScreen> {
       });
     }
   }
-
   Future<List<MealPlan>> _fetchAllDiets() async {
     List<MealPlan> allDiets = [];
 
     try {
-      debugPrint('Fetching all diet plans');
-      final snapshot = await FirebaseFirestore.instance
-          .collection('mealPlans')
-          .get(GetOptions(source: Source.cache));
-      allDiets =
-          snapshot.docs.map((doc) {
-            final data = doc.data();
-            data['id'] = doc.id;
-            return MealPlan.fromMap(data);
-          }).toList();
-
-      if (allDiets.isEmpty) {
-        debugPrint('Cache empty, fetching from server');
-        final serverSnapshot = await FirebaseFirestore.instance
-            .collection('mealPlans')
-            .get(GetOptions(source: Source.server));
-        allDiets =
-            serverSnapshot.docs.map((doc) {
-              final data = doc.data();
-              data['id'] = doc.id;
-              return MealPlan.fromMap(data);
-            }).toList();
-      }
+      debugPrint('Fetching all diet plans using CacheService');
+      // Use the cache service to retrieve meal plans
+      allDiets = await CacheService().getMealPlans();
     } catch (e) {
       debugPrint('Error fetching diet plans: $e');
       if (mounted) {
@@ -176,6 +156,23 @@ class _DietSelectorScreenState extends State<DietSelectorScreen> {
           .collection('removedDietPlans')
           .doc(dietPlanId)
           .delete();
+          
+      // Invalidate the cache to force a refresh
+      await CacheService().invalidateUserDietsCache(userProvider.firebaseUser!.uid);
+      
+      // Optimized approach - only fetch and update active diet plans
+      final activePlans = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userProvider.firebaseUser!.uid)
+          .collection('activeDietPlans')
+          .get();
+          
+      final mappedPlans = activePlans.docs
+          .map((doc) => ActiveDietPlan.fromMap(doc.data()))
+          .toList();
+          
+      // Update just the active diet plans instead of refreshing all user data
+      await userProvider.updateActiveDietPlans(mappedPlans);
 
       if (mounted) {
         debugPrint('Showing success snackbar');
@@ -295,6 +292,23 @@ class _DietSelectorScreenState extends State<DietSelectorScreen> {
       debugPrint('Deleting active diet plan from Firestore');
       await activePlanRef.delete();
 
+      // Invalidate the cache to force a refresh
+      await CacheService().invalidateUserDietsCache(userProvider.firebaseUser!.uid);
+      
+      // Optimized approach - only fetch and update active diet plans
+      final activePlans = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userProvider.firebaseUser!.uid)
+          .collection('activeDietPlans')
+          .get();
+          
+      final mappedPlans = activePlans.docs
+          .map((doc) => ActiveDietPlan.fromMap(doc.data()))
+          .toList();
+          
+      // Update just the active diet plans instead of refreshing all user data
+      await userProvider.updateActiveDietPlans(mappedPlans);
+
       if (mounted) {
         debugPrint('Showing success snackbar for removal');
         ScaffoldMessenger.of(context).showSnackBar(
@@ -322,50 +336,24 @@ class _DietSelectorScreenState extends State<DietSelectorScreen> {
       }
     }
   }
-
   Future<Map<String, MealPlan>> _fetchMealPlans(List<String> planIds) async {
     final Map<String, MealPlan> planMap = {};
     if (planIds.isEmpty) return planMap;
-
-    const batchSize = 10;
-    for (var i = 0; i < planIds.length; i += batchSize) {
-      final batchIds = planIds.sublist(
-        i,
-        i + batchSize > planIds.length ? planIds.length : i + batchSize,
-      );
-      debugPrint('Fetching meal plans batch: $batchIds');
-      final planSnapshot = await FirebaseFirestore.instance
-          .collection('mealPlans')
-          .where(FieldPath.documentId, whereIn: batchIds)
-          .get(GetOptions(source: Source.cache));
-
-      var batchDiets =
-          planSnapshot.docs.map((doc) {
-            final data = doc.data();
-            data['id'] = doc.id;
-            return MealPlan.fromMap(data);
-          }).toList();
-
-      if (batchDiets.isEmpty) {
-        debugPrint('Cache empty, fetching batch from server');
-        final serverSnapshot = await FirebaseFirestore.instance
-            .collection('mealPlans')
-            .where(FieldPath.documentId, whereIn: batchIds)
-            .get(GetOptions(source: Source.server));
-        batchDiets =
-            serverSnapshot.docs.map((doc) {
-              final data = doc.data();
-              data['id'] = doc.id;
-              return MealPlan.fromMap(data);
-            }).toList();
-      }
-
-      for (var diet in batchDiets) {
-        planMap[diet.id] = diet;
-      }
+    
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    if (!userProvider.isLoggedIn || userProvider.firebaseUser == null) {
+      return planMap;
     }
-
-    return planMap;
+    
+    // Use CacheService to get active diet plans for the user
+    final activeDietPlans = userProvider.currentUser?.activeDietPlans ?? [];
+    
+    final cachedDiets = await CacheService().getUserActiveDiets(
+      userProvider.firebaseUser!.uid,
+      activeDietPlans
+    );
+    
+    return cachedDiets;
   }
 
   @override

@@ -26,6 +26,7 @@ class _StepCounterWidgetState extends State<StepCounterWidget> {
   void initState() {
     super.initState();
     _checkPlatformSupport();
+    _resetStepsAtMidnight();
   }
 
   @override
@@ -86,6 +87,20 @@ class _StepCounterWidgetState extends State<StepCounterWidget> {
         stepCounterInitialized = false;
       });
     }
+  }
+
+  void _resetStepsAtMidnight() {
+    final now = DateTime.now();
+    final nextMidnight = DateTime(now.year, now.month, now.day + 1);
+    final durationUntilMidnight = nextMidnight.difference(now);
+
+    Future.delayed(durationUntilMidnight, () {
+      setState(() {
+        currentSteps = 0;
+        // Reset any other state variables related to step goal reward here
+      });
+      _resetStepsAtMidnight(); // Schedule the next reset
+    });
   }
 
   @override

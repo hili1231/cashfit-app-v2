@@ -614,7 +614,7 @@ class MealPlanScreen extends StatelessWidget {
       ),
       alignment: Alignment.center,
       child: Icon(
-        Icons.fastfood,
+        Icons.restaurant,
         size: 40,
         color: colorScheme.onSurfaceVariant,
       ),

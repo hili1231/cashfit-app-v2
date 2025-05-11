@@ -25,10 +25,18 @@ class CommunityFeedScreenState extends State<CommunityFeedScreen> {
   void initState() {
     super.initState();
     // Configure Firestore settings to use the main thread for callbacks
-    FirebaseFirestore.instance.settings = const Settings(
-      persistenceEnabled: true,
-      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      FirebaseFirestore.instance.settings = const Settings(
+        persistenceEnabled: true,
+        cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+      );
+
+      FirebaseFirestore.instance.settings = FirebaseFirestore.instance.settings.copyWith(
+        host: FirebaseFirestore.instance.settings.host,
+        sslEnabled: FirebaseFirestore.instance.settings.sslEnabled,
+        persistenceEnabled: FirebaseFirestore.instance.settings.persistenceEnabled,
+      );
+    });
   }
 
   @override

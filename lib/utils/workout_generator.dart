@@ -89,30 +89,49 @@ class WorkoutGenerator {
 
   /// Get compatible exercise categories based on the user's training style.
   static List<String> _getCompatibleCategories(String? trainingStyle) {
-    switch (trainingStyle) {
-      case "Gym":
-        return ["Gym", "dumbbells"];
-      case "Home":
-        return ["dumbbells", "Bodyweight"];
-      case "Bodyweight":
-        return ["Bodyweight"];
-      case "CrossFit":
-        return ["Gym", "Bodyweight"];
+    switch (trainingStyle?.toLowerCase()) {
+      case "gym":
+        return ["gym", "dumbbells"];
+      case "home":
+        return ["dumbbells", "bodyweight"];
+      case "bodyweight":
+        return ["bodyweight"];
+      case "crossfit":
+        return ["gym", "bodyweight"];
       default:
-        return ["Gym", "dumbbells", "Bodyweight"];
+        return ["gym", "dumbbells", "bodyweight"];
     }
   }
 
   /// Check if an exercise's difficulty is suitable for the user's experience level.
+  /// Beginners can now perform intermediate exercises.
   static bool _isDifficultySuitable(
     String? exerciseDifficulty,
     String userExperienceLevel,
   ) {
     final difficulty =
-        exerciseDifficulty?.isEmpty ?? true ? "Beginner" : exerciseDifficulty!;
-    const difficultyOrder = ["Beginner", "Intermediate", "Advanced"];
-    return difficultyOrder.indexOf(difficulty) <=
-        difficultyOrder.indexOf(userExperienceLevel);
+        (exerciseDifficulty?.isEmpty ?? true)
+            ? "beginner"
+            : exerciseDifficulty!.toLowerCase();
+    final userLevel =
+        userExperienceLevel.isEmpty
+            ? "beginner"
+            : userExperienceLevel.toLowerCase();
+    const difficultyOrder = ["beginner", "intermediate", "advanced"];
+    int exerciseIndex = difficultyOrder.indexOf(difficulty);
+    int userIndex = difficultyOrder.indexOf(userLevel);
+
+    if (exerciseIndex == -1) {
+      debugPrint('Invalid exercise difficulty: $difficulty');
+      return false;
+    }
+    if (userIndex == -1) {
+      debugPrint('Invalid user experience level: $userLevel');
+      return false;
+    }
+
+    // Beginners can perform intermediate exercises
+    return exerciseIndex <= userIndex + (userLevel == "beginner" ? 1 : 0);
   }
 
   /// Create a placeholder exercise in Firestore if a special exercise is missing.
@@ -319,6 +338,7 @@ class WorkoutGenerator {
   }
 
   /// Select exercises targeting specific muscle groups with variety and balance.
+  /// Ensure exercises are meaningful and tailored to user goals.
   static List<Exercise> selectExercises(
     List<Exercise> available,
     List<String> targetMuscleGroups,
@@ -343,7 +363,7 @@ class WorkoutGenerator {
       // Calculate a score based on how underused the muscle groups are
       exercise.muscleGroups
           .where((mg) => targetMuscleGroups.contains(mg))
-          .fold(0, (sum, mg) => sum + (muscleGroupUsage[mg] ?? 0));
+          .fold(0, (currentSum, mg) => currentSum + (muscleGroupUsage[mg] ?? 0));
       prioritizedCandidates.add(exercise);
     }
 
@@ -351,10 +371,10 @@ class WorkoutGenerator {
     prioritizedCandidates.sort((a, b) {
       int scoreA = a.muscleGroups
           .where((mg) => targetMuscleGroups.contains(mg))
-          .fold(0, (sum, mg) => sum + (muscleGroupUsage[mg] ?? 0));
+          .fold(0, (currentSum, mg) => currentSum + (muscleGroupUsage[mg] ?? 0));
       int scoreB = b.muscleGroups
           .where((mg) => targetMuscleGroups.contains(mg))
-          .fold(0, (sum, mg) => sum + (muscleGroupUsage[mg] ?? 0));
+          .fold(0, (currentSum, mg) => currentSum + (muscleGroupUsage[mg] ?? 0));
       return scoreA.compareTo(scoreB);
     });
 
@@ -405,7 +425,6 @@ class WorkoutGenerator {
     return selected;
   }
 
-  /// Generate a personalized workout program for the user.
   static Future<WorkoutProgram> generateWorkoutProgram({
     required BuildContext context,
     required int totalDays,
@@ -422,6 +441,11 @@ class WorkoutGenerator {
       if (user == null) {
         throw Exception("User not found. Please ensure you are logged in.");
       }
+
+      // Log user data for debugging
+      debugPrint(
+        'User data: trainingStyle=${user.trainingStyle}, experienceLevel=${user.experienceLevel}, workoutFocus=${user.workoutFocus}, injuryHistory=${user.injuryHistory}',
+      );
 
       // Validate user data
       if (user.workoutDuration <= 0 ||
@@ -454,19 +478,18 @@ class WorkoutGenerator {
         'stepTargetHistory': stepTargetHistory,
       });
 
-      // Determine training days
-      List<String> trainingDays =
-          availableDays.isNotEmpty
-              ? availableDays.take(workoutFrequency).toList()
-              : [
-                "Monday",
-                "Tuesday",
-                "Wednesday",
-                "Thursday",
-                "Friday",
-                "Saturday",
-                "Sunday",
-              ].take(workoutFrequency).toList();
+      // Adjust training days based on workoutFrequency
+      List<String> trainingDays = availableDays.isNotEmpty
+          ? availableDays.take(workoutFrequency).toList()
+          : [
+              "Monday",
+              "Tuesday",
+              "Wednesday",
+              "Thursday",
+              "Friday",
+              "Saturday",
+              "Sunday",
+            ].take(workoutFrequency).toList();
 
       // Initialize special exercises (rest, warm-up, cool-down)
       final specialExercises = await _initializeSpecialExercises();
@@ -477,17 +500,8 @@ class WorkoutGenerator {
       // Fetch available exercises from Firestore
       Query<Map<String, dynamic>> exerciseQuery = FirebaseFirestore.instance
           .collection('exercises');
-      final compatibleCategories =
-          _getCompatibleCategories(user.trainingStyle)
-              .where((cat) => !['Rest', 'Warm-Up', 'Cool-Down'].contains(cat))
-              .toList();
-      if (compatibleCategories.isNotEmpty) {
-        exerciseQuery = exerciseQuery.where(
-          'category',
-          whereIn: compatibleCategories,
-        );
-      }
       if (user.workoutFocus.isNotEmpty) {
+        debugPrint('Filtering by workout focus: ${user.workoutFocus}');
         exerciseQuery = exerciseQuery.where(
           'muscleGroups',
           arrayContainsAny: user.workoutFocus,
@@ -498,10 +512,21 @@ class WorkoutGenerator {
           exerciseSnapshot.docs
               .map((doc) => Exercise.fromMap(doc.data()..['id'] = doc.id))
               .toList();
+      debugPrint('Total exercises fetched: ${allExercises.length}');
+      if (allExercises.isNotEmpty) {
+        debugPrint('Sample exercise: ${allExercises.first.toMap()}');
+      }
 
-      // Filter exercises based on difficulty and injury risks
+      // Filter exercises based on category, difficulty, and injury risks
+      final compatibleCategories = _getCompatibleCategories(user.trainingStyle);
+      debugPrint('Compatible categories: $compatibleCategories');
       List<Exercise> availableExercises =
           allExercises.where((exercise) {
+            bool categoryMatch = compatibleCategories.any(
+              (cat) =>
+                  (exercise.category).toLowerCase() ==
+                  cat.toLowerCase(),
+            );
             bool difficultyMatch = _isDifficultySuitable(
               exercise.difficulty,
               user.experienceLevel,
@@ -511,15 +536,22 @@ class WorkoutGenerator {
                 !exercise.injuryRisks.any(
                   (risk) => user.injuryHistory.contains(risk),
                 );
-            return difficultyMatch && injuryMatch;
+            debugPrint(
+              'Exercise: ${exercise.name}, Category Match: $categoryMatch, Difficulty Match: $difficultyMatch, Injury Match: $injuryMatch',
+            );
+            return categoryMatch && difficultyMatch && injuryMatch;
           }).toList();
 
       if (availableExercises.isEmpty) {
+        debugPrint(
+          'User criteria: trainingStyle=${user.trainingStyle}, experienceLevel=${user.experienceLevel}, workoutFocus=${user.workoutFocus}, injuryHistory=${user.injuryHistory}',
+        );
         throw Exception("No exercises available for the given criteria.");
       }
 
-      // Calculate workout parameters
-      int numExercises = getNumExercises(user.workoutDuration);
+      // Calculate the number of exercises based on workoutDuration
+      int numExercises = (user.workoutDuration / 10).round(); // 1 exercise per 10 minutes
+      if (numExercises < 1) numExercises = 1; // Ensure at least 1 exercise per session
 
       // Define workout splits
       List<String> splitTypes = ['Push', 'Pull', 'Legs'];

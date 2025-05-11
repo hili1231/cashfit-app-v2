@@ -190,6 +190,13 @@ class NavScreenState extends State<NavScreen> {
     });
   }
 
+  void navigateToLogin() {
+    setState(() {
+      detailStack.clear();
+      detailScreen = const LoginScreen();
+    });
+  }
+
   void replaceWithScreen(Widget screen) {
     setState(() {
       detailStack.clear();
@@ -315,7 +322,7 @@ class NavScreenState extends State<NavScreen> {
                 label: "Workouts",
               ),
               NavigationDestination(
-                icon: Icon(Icons.lunch_dining, size: 28),
+                icon: Icon(Icons.restaurant_menu, size: 28), // Updated icon
                 label: "Diet",
               ),
               NavigationDestination(

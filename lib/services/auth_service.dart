@@ -1,3 +1,4 @@
+// Merged and fixed auth_service implementation
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -8,13 +9,16 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:uuid/uuid.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import '../models/app_user.dart';
 import '../models/challenge.dart';
 import '../models/post.dart';
 import '../models/meal_plan.dart';
 import '../models/workout_program.dart';
+import '../services/cache_service.dart';
 import '../services/challenge_calculator.dart';
 
+/// A fixed version of AuthService that properly uses the new CacheService
 class AuthService {
   static final AuthService instance = AuthService._internal();
   factory AuthService() => instance;
@@ -23,6 +27,29 @@ class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
+
+  // Helper method to preload cache data for better performance
+  Future<void> preloadCacheForUser(AppUser user) async {
+    try {
+      // Load global cache data
+      await CacheService().loadGlobalCache();
+
+      // Load user-specific cache data if they have active programs
+      if (user.activeWorkoutPrograms.isNotEmpty ||
+          user.activeDietPlans.isNotEmpty) {
+        await CacheService().loadUserCache(
+          user.id,
+          user.activeWorkoutPrograms,
+          user.activeDietPlans,
+        );
+      }
+    } catch (e) {
+      // Don't fail if cache fails
+      if (kDebugMode) {
+        print("Warning: Cache preloading failed: $e");
+      }
+    }
+  }
 
   Stream<User?> get authState => _auth.authStateChanges();
 
@@ -253,6 +280,12 @@ class AuthService {
           'lastLogin': DateTime.now().toIso8601String(),
           'fcmToken': fcmToken, // Will be null if retrieval failed
         });
+
+        // Preload cache data for better performance
+        final appUser = await getAppUser(user.uid);
+        if (appUser != null) {
+          await preloadCacheForUser(appUser);
+        }
       }
 
       return user;
@@ -287,7 +320,13 @@ class AuthService {
 
       if (user != null) {
         final existingUser = await getAppUser(user.uid);
-        String? fcmToken = await _messaging.getToken();
+        String? fcmToken;
+        try {
+          fcmToken = await _messaging.getToken();
+        } catch (e) {
+          // If FCM token retrieval fails, proceed without it
+          fcmToken = null;
+        }
 
         if (existingUser == null) {
           final appUser = AppUser(
@@ -352,6 +391,9 @@ class AuthService {
             'lastLogin': DateTime.now().toIso8601String(),
             'fcmToken': fcmToken,
           });
+
+          // Preload cache data for better performance
+          await preloadCacheForUser(existingUser);
         }
       }
       return user;
@@ -457,6 +499,9 @@ class AuthService {
             'lastLogin': DateTime.now().toIso8601String(),
             'fcmToken': fcmToken,
           });
+
+          // Preload cache data for better performance
+          await preloadCacheForUser(existingUser);
         }
       }
       return user;
@@ -556,6 +601,9 @@ class AuthService {
             'lastLogin': DateTime.now().toIso8601String(),
             'fcmToken': fcmToken,
           });
+
+          // Preload cache data for better performance
+          await preloadCacheForUser(existingUser);
         }
       }
       return user;

@@ -172,6 +172,7 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
     final now = DateTime.now();
     final user = userProvider.currentUser!;
 
+    // Daily Check-In Logic
     final lastCheckIn = user.lastCheckIn;
     currentCheckInStreak = user.checkInStreak;
     canCheckInToday = lastCheckIn == null || !_isSameDay(lastCheckIn, now);
@@ -185,6 +186,7 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
     if (nextStreakDay == 0) nextStreakDay = 7;
     checkInFitCoinsToEarn = checkInFitCoins[nextStreakDay - 1];
 
+    // Ad Watching Logic
     final lastAdsWatchedDate = user.lastAdsWatchedDate;
     lastAdWatchedTimestamp =
         user.lastAdWatchedTimestamp is Timestamp
@@ -198,8 +200,11 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
             : 0;
     canWatchAd = adsWatchedToday < maxAdsPerPeriod;
 
+    // Daily Step Goal Logic
     dailyStepTarget = user.dailyStepTarget ?? 10000;
+    taskStates['daily_step_goal'] = stepCounterSupported && currentSteps >= dailyStepTarget;
 
+    // Other Tasks Logic
     taskStates = {
       'daily_check_in': canCheckInToday,
       'complete_workout':
@@ -208,8 +213,6 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
       'complete_meal_plan':
           user.lastMealPlanCompletionDate != null &&
           _isSameDay(user.lastMealPlanCompletionDate!, now),
-      'daily_step_goal':
-          stepCounterSupported && currentSteps >= dailyStepTarget,
       'update_weight': _hasUnclaimedWeightUpdate(user, now),
       'build_profile':
           user.gender.isNotEmpty &&

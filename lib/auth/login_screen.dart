@@ -1,7 +1,7 @@
+import 'package:cashfit/services/auth_service.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
-import '../services/auth_service.dart';
 import '../screens/nav_screen.dart';
 import '../auth/register_screen.dart';
 import '../providers/user_provider.dart';

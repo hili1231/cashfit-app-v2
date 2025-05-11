@@ -46,37 +46,38 @@ class DietGenerator {
     // Calculate BMR using Katch-McArdle (preferred) or Mifflin-St Jeor
     double bmr;
     if (lbm > 0) {
-      // Katch-McArdle: BMR = 370 + (21.6 * LBM)
       bmr = 370 + (21.6 * lbm);
     } else {
-      // Fall back to Mifflin-St Jeor
       bmr =
           gender == "male"
               ? 10 * weight + 6.25 * height - 5 * age + 5
               : 10 * weight + 6.25 * height - 5 * age - 161;
     }
 
-    // Adjust for activity level, workout frequency, and intensity
+    // Adjust for activity level
     double activityMultiplier;
-    switch (user.activityLevel) {
-      case "Sedentary":
+    switch (user.activityLevel.toLowerCase()) {
+      case "sedentary":
         activityMultiplier = 1.2;
         break;
-      case "Lightly Active":
+      case "lightly active":
         activityMultiplier = 1.375;
         break;
-      case "Moderately Active":
+      case "moderately active":
         activityMultiplier = 1.55;
         break;
-      case "Very Active":
+      case "very active":
         activityMultiplier = 1.725;
+        break;
+      case "extra active":
+        activityMultiplier = 1.9;
         break;
       default:
         activityMultiplier = 1.2;
     }
 
-    // Adjust activity multiplier based on workout frequency and intensity
-    double frequencyAdjustment = user.workoutFrequency / 7.0; // Scale 1-7 days
+    // Adjust for workout frequency and intensity
+    double frequencyAdjustment = user.workoutFrequency / 7.0;
     double intensityAdjustment;
     switch (user.intensity?.toLowerCase()) {
       case "low":
@@ -94,23 +95,19 @@ class DietGenerator {
     activityMultiplier += frequencyAdjustment * intensityAdjustment;
 
     // Calculate TDEE for workout and rest days
-    double workoutDayCalories =
-        bmr * (activityMultiplier + 0.1); // Extra for workout
+    double workoutDayCalories = bmr * (activityMultiplier + 0.1);
     double restDayCalories = bmr * activityMultiplier;
 
     // Adjust for diet goal
     double deficitOrSurplus;
-    switch (user.dietGoal) {
-      case "Lose Fat":
-        deficitOrSurplus = -0.15; // 15% deficit
+    switch (user.dietGoal.toLowerCase()) {
+      case "lose fat":
+        deficitOrSurplus = -0.15;
         break;
-      case "Build Muscle":
-        deficitOrSurplus = 0.1; // 10% surplus
+      case "build muscle":
+        deficitOrSurplus = 0.1;
         break;
-      case "Lose Fat & Build Muscle":
-        deficitOrSurplus = -0.05; // 5% deficit
-        break;
-      case "Maintain Weight":
+      case "maintain weight":
       default:
         deficitOrSurplus = 0.0;
     }
@@ -303,14 +300,16 @@ class DietGenerator {
           user.availableDays.isNotEmpty
               ? user.availableDays.take(user.workoutFrequency).toList()
               : [
-                "Monday",
-                "Tuesday",
-                "Wednesday",
-                "Thursday",
-                "Friday",
-                "Saturday",
-                "Sunday",
-              ].take(user.workoutFrequency).toList();
+                    "Monday",
+                    "Tuesday",
+                    "Wednesday",
+                    "Thursday",
+                    "Friday",
+                    "Saturday",
+                    "Sunday",
+                  ]
+                  .take(user.workoutFrequency)
+                  .toList(); // Keep track of meals used across the plan to prevent too frequent repetition
 
       // Generate meal days
       List<MealDay> mealDays = [];
@@ -328,11 +327,14 @@ class DietGenerator {
             ][date.weekday - 1];
         bool isWorkoutDay = trainingDays.contains(dayOfWeek);
 
-        // Use appropriate calorie target for the day
+        // Use appropriate calorie target for the day (round to nearest 10)
         double dailyCalories =
             isWorkoutDay
                 ? macroTargets['workoutDay']!['calories']!
                 : macroTargets['restDay']!['calories']!;
+
+        // Round total calories to nearest 10
+        dailyCalories = (dailyCalories / 10).round() * 10;
         double caloriesPerMeal = dailyCalories / mealFrequency;
 
         Map<String, MealPortion?> mealsForDay = {
@@ -411,10 +413,13 @@ class DietGenerator {
           Meal selectedMeal = unusedMeals.first;
 
           // Add to used meals
-          usedMealIdsByType[mealType]!.add(selectedMeal.id);
+          usedMealIdsByType[mealType]!.add(
+            selectedMeal.id,
+          ); // Round target calories to nearest 10 (e.g., 370 instead of 368.7)
+          double roundedCalories = (caloriesPerMeal / 10).round() * 10;
 
-          // Scale meal to target calories per meal
-          Meal scaledMeal = selectedMeal.scaledToCalories(caloriesPerMeal);
+          // Scale meal to target calories per meal with proper rounding
+          Meal scaledMeal = selectedMeal.scaledToCalories(roundedCalories);
           MealPortion mealPortion = MealPortion(
             meal: scaledMeal,
             portionMultiplier: 1.0,

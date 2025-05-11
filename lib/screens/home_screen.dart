@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:cashfit/services/cache_service.dart';
 import 'package:cashfit/theme.dart';
 import 'package:cashfit/widgets/step_counter.dart';
 import 'package:flutter/material.dart';
@@ -14,8 +15,6 @@ import '../screens/nav_screen.dart';
 import '../widgets/workout_card.dart';
 import '../widgets/meal_card.dart';
 import '../screens/personalize/workout_diet_builder_screen.dart' as personalize;
-import '../screens/personalize/workout_builder_screen.dart';
-import '../screens/personalize/diet_builder_screen.dart';
 import '../screens/side_hustle/side_hustle_detail_screen.dart';
 import '../screens/diets/diet_selector_screen.dart';
 import '../providers/user_provider.dart';
@@ -58,30 +57,37 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late Future<Map<String, dynamic>> _homeDataFuture;
+  bool _isAdRewardButtonEnabled = true;
 
   @override
   void initState() {
     super.initState();
-    if (HomeScreen.cachedHomeData != null) {
-      _homeDataFuture = Future.value(HomeScreen.cachedHomeData);
-    } else {
-      _homeDataFuture = fetchAllHomeData().then((data) {
-        HomeScreen.cachedHomeData = data;
-        return data;
+    _homeDataFuture = fetchAllHomeData();
+  }
+
+  void _handleAdWatched() {
+    setState(() {
+      _isAdRewardButtonEnabled = false; // Disable button after watching ad
+    });
+    // Simulate ad reward logic
+    Future.delayed(Duration(seconds: 5), () {
+      setState(() {
+        _isAdRewardButtonEnabled = true; // Re-enable button after reward
       });
-    }
+    });
   }
 
   Future<Map<String, dynamic>> fetchAllHomeData() async {
-    // Use Future.wait to fetch all data concurrently
-    final workoutsFuture =
-        FirebaseFirestore.instance.collection('workoutPrograms').get();
-    final mealPlansFuture =
-        FirebaseFirestore.instance.collection('mealPlans').get();
-    final challengesFuture =
-        FirebaseFirestore.instance.collection('challenges').get();
-    final hustlesFuture =
-        FirebaseFirestore.instance.collection('sideHustles').get();
+    final cacheService = CacheService();
+
+    // Use cache service to get workout programs and meal plans
+    final workoutsFuture = cacheService.getWorkoutPrograms();
+    final mealPlansFuture = cacheService.getMealPlans();
+
+    // Batch Firestore queries for challenges and side hustles
+    final firestore = FirebaseFirestore.instance;
+    final challengesFuture = firestore.collection('challenges').get();
+    final hustlesFuture = firestore.collection('sideHustles').get();
 
     final results = await Future.wait([
       workoutsFuture,
@@ -90,34 +96,17 @@ class _HomeScreenState extends State<HomeScreen> {
       hustlesFuture,
     ]);
 
-    final workoutsSnapshot = results[0] as QuerySnapshot;
-    final mealPlansSnapshot = results[1] as QuerySnapshot;
+    final workoutPrograms = results[0] as List<WorkoutProgram>;
+    final mealPlans = results[1] as List<MealPlan>;
     final challengesSnapshot = results[2] as QuerySnapshot;
     final hustlesSnapshot = results[3] as QuerySnapshot;
 
-    final workoutPrograms =
-        workoutsSnapshot.docs
-            .map(
-              (doc) => WorkoutProgram.fromMap(
-                doc.data() as Map<String, dynamic>,
-                doc.id,
-              ),
-            )
-            .toList();
-    final mealPlans =
-        mealPlansSnapshot.docs
-            .map((doc) => MealPlan.fromMap(doc.data() as Map<String, dynamic>))
-            .toList();
-    final challenges =
-        challengesSnapshot.docs
-            .map((doc) => Challenge.fromMap(doc.data() as Map<String, dynamic>))
-            .toList();
-    final sideHustles =
-        hustlesSnapshot.docs
-            .map(
-              (doc) => SideHustle.fromMap(doc.data() as Map<String, dynamic>),
-            )
-            .toList();
+    final challenges = challengesSnapshot.docs
+        .map((doc) => Challenge.fromMap(doc.data() as Map<String, dynamic>))
+        .toList();
+    final sideHustles = hustlesSnapshot.docs
+        .map((doc) => SideHustle.fromMap(doc.data() as Map<String, dynamic>))
+        .toList();
 
     return {
       'workouts': workoutPrograms,
@@ -199,8 +188,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     allChallenges
                         .where(
                           (ch) =>
-                              ch.id ==
-                              (userProvider.currentUser?.activeChallengeId ??
+                              ch.id == 
+                              (userProvider.currentUser?.activeChallengeId ?? 
                                   ''),
                         )
                         .toList();
@@ -231,6 +220,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           _buildSideHustleRow(context, sideHustles),
                           const SizedBox(height: 8),
                         ],
+                        ElevatedButton(
+                          onPressed: _isAdRewardButtonEnabled ? _handleAdWatched : null,
+                          child: Text(_isAdRewardButtonEnabled ? 'Watch Ad' : 'Ad Loading...'),
+                        ),
                       ],
                     );
                   },
@@ -270,18 +263,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   context: context,
                   screen: const personalize.WorkoutDietBuilderScreen(),
                 ),
-                const SizedBox(width: 8),
-                _buildTabButton(
-                  label: "Workout",
-                  context: context,
-                  screen: const WorkoutBuilderScreen(buildBoth: false),
-                ),
-                const SizedBox(width: 8),
-                _buildTabButton(
-                  label: "Diet",
-                  context: context,
-                  screen: const DietBuilderScreen(),
-                ),
               ],
             ),
           ),
@@ -306,11 +287,16 @@ class _HomeScreenState extends State<HomeScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       onPressed: () {
+        debugPrint('Button "$label" pressed');
         final navState = context.findAncestorStateOfType<NavScreenState>();
         if (navState != null) {
+          debugPrint('NavScreenState found, using setDetailScreen');
           navState.setDetailScreen(screen);
         } else {
-          Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+          debugPrint('NavScreenState not found, using Navigator.push');
+          Navigator.push(context, MaterialPageRoute(builder: (_) => screen))
+              .then((_) => debugPrint('Navigation completed'))
+              .catchError((e) => debugPrint('Navigation error: $e'));
         }
       },
       child: Text(
@@ -578,6 +564,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 color: colorScheme.primary,
               ),
     );
+  }
+
+  void _onAdWatched() {
+    setState(() {
+      _isAdRewardButtonEnabled = true;
+    });
   }
 }
 
