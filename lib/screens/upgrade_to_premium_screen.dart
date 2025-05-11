@@ -110,7 +110,6 @@ class _UpgradeToPremierScreenState extends State<UpgradeToPremierScreen> {
             ),
             const SizedBox(height: 30),
             _buildFeature(context, "No Ads"),
-            _buildFeature(context, "Access to Premium Challenges"),
             _buildFeature(context, "Eligible for Side Hustle Earnings"),
             _buildFeature(context, "Priority Support"),
             _buildFeature(context, "Early Access to New Features"),

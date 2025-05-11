@@ -197,8 +197,6 @@ class UserProvider with ChangeNotifier {
           autoRenew: false,
           activeWorkoutPrograms: [],
           activeDietPlans: [],
-          joinedChallenges: [],
-          activeChallengeId: null,
           joinedSideHustles: [],
           lastLogin: DateTime.now(),
           streak: 0,
@@ -225,8 +223,6 @@ class UserProvider with ChangeNotifier {
           mileRunTime: null,
           medicalConditions: [],
           preferredWorkoutTimes: [],
-          challengeCheckIns: [],
-          challengeProgress: 0,
           dailyStepTarget: null,
           stepTargetHistory: [],
           dailyCalorieTarget: null,
@@ -499,10 +495,13 @@ class UserProvider with ChangeNotifier {
         // Only add to completedDailyIds if max ads reached
         if (_currentUser!.dailyAdsWatched + 1 >= maxAdsPerDay) {
           updates['completedDailyIds'] = FieldValue.arrayUnion([taskId]);
-        }
-      } else if (taskId == 'daily_check_in') {
+        }      } else if (taskId == 'daily_check_in') {
         updates['lastCheckIn'] = FieldValue.serverTimestamp();
-        updates['checkInStreak'] = FieldValue.increment(1);
+        
+        // Handle streak reset when hitting day 7
+        int newStreak = _currentUser!.checkInStreak + 1;
+        if (newStreak > 7) newStreak = 1;
+        updates['checkInStreak'] = newStreak;
       } else if (taskId == 'complete_workout') {
         updates['lastWorkoutCompletionDate'] = FieldValue.serverTimestamp();
         updates['workoutsCompleted'] = FieldValue.increment(1);
@@ -519,7 +518,6 @@ class UserProvider with ChangeNotifier {
       } else if ([
         'build_profile',
         'share_progress',
-        'join_challenge',
         'complete_side_hustle',
       ].contains(taskId)) {
         updates['completedOneOffIds'] = FieldValue.arrayUnion([taskId]);
@@ -574,7 +572,6 @@ class UserProvider with ChangeNotifier {
         } else if ([
           'build_profile',
           'share_progress',
-          'join_challenge',
           'complete_side_hustle',
         ].contains(taskId)) {
           currentMap['completedOneOffIds'] = [

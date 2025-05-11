@@ -4,19 +4,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:image_picker/image_picker.dart';
-import 'dart:io';
 import 'package:uuid/uuid.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import '../models/app_user.dart';
-import '../models/challenge.dart';
 import '../models/post.dart';
 import '../models/meal_plan.dart';
 import '../models/workout_program.dart';
 import '../services/cache_service.dart';
-import '../services/challenge_calculator.dart';
 
 /// A fixed version of AuthService that properly uses the new CacheService
 class AuthService {
@@ -207,7 +202,6 @@ class AuthService {
           isPremium: false,
           activeWorkoutPrograms: [],
           activeDietPlans: [],
-          joinedChallenges: [],
           joinedSideHustles: [],
           lastLogin: DateTime.now(),
           streak: 0,
@@ -232,8 +226,6 @@ class AuthService {
           mealFrequency: 3,
           mealTimes: [],
           medicalConditions: [],
-          challengeCheckIns: [],
-          challengeProgress: 0,
           stepTargetHistory: [],
           macroIntakeHistory: [],
           isBanned: false,
@@ -354,7 +346,6 @@ class AuthService {
             isPremium: false,
             activeWorkoutPrograms: [],
             activeDietPlans: [],
-            joinedChallenges: [],
             joinedSideHustles: [],
             lastLogin: DateTime.now(),
             streak: 0,
@@ -379,8 +370,6 @@ class AuthService {
             mealFrequency: 3,
             mealTimes: [],
             medicalConditions: [],
-            challengeCheckIns: [],
-            challengeProgress: 0,
             stepTargetHistory: [],
             macroIntakeHistory: [],
             isBanned: false,
@@ -462,7 +451,6 @@ class AuthService {
             isPremium: false,
             activeWorkoutPrograms: [],
             activeDietPlans: [],
-            joinedChallenges: [],
             joinedSideHustles: [],
             lastLogin: DateTime.now(),
             streak: 0,
@@ -487,8 +475,6 @@ class AuthService {
             mealFrequency: 3,
             mealTimes: [],
             medicalConditions: [],
-            challengeCheckIns: [],
-            challengeProgress: 0,
             stepTargetHistory: [],
             macroIntakeHistory: [],
             isBanned: false,
@@ -564,7 +550,6 @@ class AuthService {
             isPremium: false,
             activeWorkoutPrograms: [],
             activeDietPlans: [],
-            joinedChallenges: [],
             joinedSideHustles: [],
             lastLogin: DateTime.now(),
             streak: 0,
@@ -589,8 +574,6 @@ class AuthService {
             mealFrequency: 3,
             mealTimes: [],
             medicalConditions: [],
-            challengeCheckIns: [],
-            challengeProgress: 0,
             stepTargetHistory: [],
             macroIntakeHistory: [],
             isBanned: false,
@@ -629,183 +612,6 @@ class AuthService {
     }
   }
 
-  // CHALLENGE-RELATED METHODS
-  Future<void> signUpForChallenge(String userId, Challenge challenge) async {
-    final challengeRef = _firestore.collection('challenges').doc(challenge.id);
-    final updatedParticipants = List<String>.from(challenge.participants)
-      ..add(userId);
-
-    await challengeRef.set({
-      'participants': updatedParticipants,
-    }, SetOptions(merge: true));
-
-    final user = await getAppUser(userId);
-    if (user == null) throw Exception("User not found.");
-
-    final userUpdates = {
-      'joinedChallenges': FieldValue.arrayUnion([challenge.id]),
-      'weightHistory': FieldValue.arrayUnion([
-        {
-          'date': DateTime.now().toIso8601String(),
-          'weight': double.tryParse(user.weight) ?? 0.0,
-        },
-      ]),
-      'challengeCheckIns': [],
-      'challengeProgress': 0,
-    };
-    await updateUserFields(userId, userUpdates);
-  }
-
-  Future<void> submitWeeklyPhoto(
-    String userId,
-    double weight,
-    XFile image,
-  ) async {
-    final user = await getAppUser(userId);
-    if (user == null) throw Exception("User not found.");
-
-    final today = DateTime.now();
-    final todayString = today.toIso8601String().split('T')[0];
-
-    final weekStart = today.subtract(Duration(days: today.weekday - 1));
-    final hasSubmittedThisWeek = user.challengeCheckIns.any((checkIn) {
-      final checkInDate = DateTime.parse(checkIn['date']);
-      return checkIn['type'] == 'weekly' &&
-          checkInDate.isAfter(weekStart) &&
-          checkInDate.isBefore(weekStart.add(const Duration(days: 7)));
-    });
-
-    if (hasSubmittedThisWeek) {
-      throw Exception('You have already submitted a weekly photo this week.');
-    }
-
-    try {
-      final storageRef = FirebaseStorage.instance.ref().child(
-        'weight_check_ins/$userId/$todayString.jpg',
-      );
-      await storageRef.putFile(File(image.path));
-      final photoUrl = await storageRef.getDownloadURL();
-
-      await updateUserFields(userId, {
-        'weight': weight.toString(),
-        'weightHistory': FieldValue.arrayUnion([
-          {'date': today.toIso8601String(), 'weight': weight},
-        ]),
-        'challengeCheckIns': FieldValue.arrayUnion([
-          {
-            'date': today.toIso8601String(),
-            'type': 'weekly',
-            'photoUrl': photoUrl,
-          },
-        ]),
-        'points': FieldValue.increment(20), // 20 points for weekly photo update
-      });
-
-      await updateChallengeProgress(userId, weight);
-    } catch (e) {
-      throw Exception("Failed to upload photo: $e");
-    }
-  }
-
-  Future<void> updateChallengeProgress(
-    String userId,
-    double currentWeight,
-  ) async {
-    final user = await getAppUser(userId);
-    if (user == null) throw Exception("User not found.");
-
-    final challengeId =
-        user.joinedChallenges.isNotEmpty ? user.joinedChallenges.last : null;
-    if (challengeId == null) return;
-
-    final challenge = await getChallenge(challengeId);
-    if (challenge == null) return;
-
-    final List<Map<String, dynamic>> weightHistory = user.weightHistory;
-    if (weightHistory.length >= 2) {
-      final lastEntry = weightHistory[weightHistory.length - 2];
-      final double lastWeight = lastEntry['weight']?.toDouble() ?? 0.0;
-      final DateTime lastDate = DateTime.parse(lastEntry['date']);
-      final int daysSinceLastUpdate =
-          DateTime.now().difference(lastDate).inDays;
-
-      final double weightChange = (currentWeight - lastWeight).abs();
-      if (daysSinceLastUpdate > 0 && weightChange / daysSinceLastUpdate > 1.0) {
-        await _firestore.collection('flagged_users').doc(userId).set({
-          'reason':
-              'Unrealistic weight change: $weightChange kg in $daysSinceLastUpdate days',
-          'timestamp': DateTime.now().toIso8601String(),
-        }, SetOptions(merge: true));
-        return;
-      }
-    }
-
-    final int progress = ChallengeCalculator.calculateProgress(
-      challenge,
-      currentWeight,
-    );
-    await updateUserFields(userId, {'challengeProgress': progress});
-
-    if (progress >= 100 && DateTime.now().isAfter(challenge.endDate)) {
-      await completeChallenge(userId, challenge);
-    }
-  }
-
-  Future<void> completeChallenge(String userId, Challenge challenge) async {
-    final user = await getAppUser(userId);
-    if (user == null) throw Exception("User not found.");
-
-    final dailyCheckIns =
-        user.challengeCheckIns
-            .where((checkIn) => checkIn['type'] == 'daily')
-            .length;
-    final weeklyCheckIns =
-        user.challengeCheckIns
-            .where((checkIn) => checkIn['type'] == 'weekly')
-            .length;
-
-    final requiredDailyCheckIns = challenge.durationDays;
-    final requiredWeeklyCheckIns = (challenge.durationDays / 7).ceil();
-
-    if (dailyCheckIns < requiredDailyCheckIns * 0.9 ||
-        weeklyCheckIns < requiredWeeklyCheckIns) {
-      await _firestore.collection('flagged_users').doc(userId).set({
-        'reason':
-            'Insufficient check-ins: $dailyCheckIns/$requiredDailyCheckIns daily, $weeklyCheckIns/$requiredWeeklyCheckIns weekly',
-        'timestamp': DateTime.now().toIso8601String(),
-      }, SetOptions(merge: true));
-      return;
-    }
-
-    DateTime? newExpiryDate = user.premiumExpiryDate;
-    if (newExpiryDate == null || newExpiryDate.isBefore(DateTime.now())) {
-      newExpiryDate = DateTime.now();
-    }
-    newExpiryDate = newExpiryDate.add(
-      Duration(days: challenge.rewardPremiumMonths * 30),
-    );
-
-    await updateUserFields(userId, {
-      'points': FieldValue.increment(
-        challenge.rewardCoins + 100,
-      ), // 100 points for completing a challenge
-      'isPremium': true,
-      'premiumExpiryDate': newExpiryDate.toIso8601String(),
-      'joinedChallenges': FieldValue.arrayRemove([challenge.id]),
-      'challengeProgress': 0,
-      'challengeCheckIns': [],
-    });
-  }
-
-  Future<Challenge?> getChallenge(String challengeId) async {
-    final doc =
-        await _firestore.collection('challenges').doc(challengeId).get();
-    if (doc.exists) {
-      return Challenge.fromMap(doc.data()!);
-    }
-    return null;
-  }
-
   Future<void> markMealAsDone(String userId, String mealId) async {
     DateTime.now().toIso8601String();
     await updateUserFields(userId, {
@@ -834,7 +640,6 @@ class AuthService {
     required String userAvatar,
     required String content,
     String? imageUrl,
-    String? challengeId,
     String? workoutId,
   }) async {
     final post = Post(
@@ -845,7 +650,6 @@ class AuthService {
       content: content,
       imageUrl: imageUrl,
       timestamp: DateTime.now(),
-      challengeId: challengeId,
       workoutId: workoutId,
     );
 
@@ -925,22 +729,6 @@ class AuthService {
     await updateUserFields(userId, {'isBanned': false});
   }
 
-  Future<void> deleteChallenge(String challengeId) async {
-    final usersSnapshot = await usersRef.get();
-    for (var doc in usersSnapshot.docs) {
-      final user = AppUser.fromMap(doc.data() as Map<String, dynamic>);
-      if (user.joinedChallenges.contains(challengeId)) {
-        await updateUserFields(user.id, {
-          'joinedChallenges': FieldValue.arrayRemove([challengeId]),
-          'challengeCheckIns': [],
-          'challengeProgress': 0,
-        });
-      }
-    }
-
-    await _firestore.collection('challenges').doc(challengeId).delete();
-  }
-
   Future<void> dismissFlag(String userId) async {
     await _firestore.collection('flagged_users').doc(userId).delete();
   }
@@ -960,18 +748,6 @@ class AuthService {
     if (user == null) return;
 
     List<String> updatedBadges = List.from(user.badges ?? []);
-
-    // Check for "Beginner" badge: Complete 1 challenge
-    int completedChallenges = 0;
-    for (String challengeId in user.joinedChallenges) {
-      final challenge = await getChallenge(challengeId);
-      if (challenge != null && user.challengeProgress >= 100) {
-        completedChallenges++;
-      }
-    }
-    if (completedChallenges >= 1 && !updatedBadges.contains("Beginner")) {
-      updatedBadges.add("Beginner");
-    }
 
     // Check for "Consistent" badge: Achieve a streak of 7 days
     if ((user.streak ?? 0) >= 7 && !updatedBadges.contains("Consistent")) {

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/auth_service.dart';
 import '../../models/app_user.dart';
-import '../../models/challenge.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -45,7 +44,6 @@ class AdminDashboardScreenState extends State<AdminDashboardScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               _buildTabButton("Users", 0, theme, colorScheme),
-              _buildTabButton("Challenges", 1, theme, colorScheme),
               _buildTabButton("Flagged", 2, theme, colorScheme),
             ],
           ),
@@ -55,7 +53,7 @@ class AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 _selectedTab == 0
                     ? _buildUsersTab()
                     : _selectedTab == 1
-                    ? _buildChallengesTab()
+                    ? _buildFlaggedTab()
                     : _buildFlaggedTab(),
           ),
         ],
@@ -217,108 +215,6 @@ class AdminDashboardScreenState extends State<AdminDashboardScreen> {
                             ),
                           ),
                         ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildChallengesTab() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: _authService.firestore.collection('challenges').snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snapshot.hasError) {
-          debugPrint("Error fetching challenges: ");
-          return Center(
-            child: Text(
-              "Error loading challenges",
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.error,
-              ),
-            ),
-          );
-        }
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return Center(
-            child: Text(
-              "No challenges found",
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          );
-        }
-
-        final challenges =
-            snapshot.data!.docs
-                .map(
-                  (doc) =>
-                      Challenge.fromMap(doc.data() as Map<String, dynamic>),
-                )
-                .toList();
-
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: challenges.length,
-          itemBuilder: (context, index) {
-            final challenge = challenges[index];
-            final theme = Theme.of(context);
-            final colorScheme = theme.colorScheme;
-            // Store ScaffoldMessengerState before async operation
-            final scaffoldMessenger = ScaffoldMessenger.of(context);
-
-            return Card(
-              color: colorScheme.surfaceContainer,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              elevation: 1,
-              child: ListTile(
-                title: Text(
-                  challenge.name,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: colorScheme.onSurface,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                subtitle: Text(
-                  "${challenge.participants.length} participants",
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                trailing: TextButton(
-                  onPressed: () async {
-                    try {
-                      await _authService.deleteChallenge(challenge.id);
-                      scaffoldMessenger.showSnackBar(
-                        SnackBar(
-                          content: Text("${challenge.name} deleted"),
-                          backgroundColor: colorScheme.error,
-                        ),
-                      );
-                    } catch (e) {
-                      debugPrint("Error deleting challenge: $e");
-                      scaffoldMessenger.showSnackBar(
-                        SnackBar(
-                          content: Text("Error deleting challenge: $e"),
-                          backgroundColor: colorScheme.error,
-                        ),
-                      );
-                    }
-                  },
-                  child: Text(
-                    "Delete",
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      color: colorScheme.error,
-                    ),
-                  ),
-                ),
               ),
             );
           },

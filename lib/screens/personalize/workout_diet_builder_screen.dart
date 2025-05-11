@@ -279,7 +279,6 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
         isPremium: false,
         activeWorkoutPrograms: [],
         activeDietPlans: [],
-        joinedChallenges: [],
         joinedSideHustles: [],
         lastLogin: DateTime.now(),
         streak: 0,
@@ -355,7 +354,6 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
       isPremium: currentUser.isPremium,
       activeWorkoutPrograms: currentUser.activeWorkoutPrograms,
       activeDietPlans: currentUser.activeDietPlans,
-      joinedChallenges: currentUser.joinedChallenges,
       joinedSideHustles: currentUser.joinedSideHustles,
       lastLogin: currentUser.lastLogin,
       streak: currentUser.streak,
@@ -697,8 +695,6 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
         autoRenew: userForPlanGeneration.autoRenew,
         activeWorkoutPrograms: updatedWorkoutPrograms, // Updated list
         activeDietPlans: updatedDietPlans, // Updated list
-        joinedChallenges: userForPlanGeneration.joinedChallenges,
-        activeChallengeId: userForPlanGeneration.activeChallengeId,
         joinedSideHustles: userForPlanGeneration.joinedSideHustles,
         lastLogin: userForPlanGeneration.lastLogin,
         streak: userForPlanGeneration.streak,
@@ -725,8 +721,6 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
         mileRunTime: userForPlanGeneration.mileRunTime,
         medicalConditions: userForPlanGeneration.medicalConditions,
         preferredWorkoutTimes: userForPlanGeneration.preferredWorkoutTimes,
-        challengeCheckIns: userForPlanGeneration.challengeCheckIns,
-        challengeProgress: userForPlanGeneration.challengeProgress,
         dailyStepTarget: userForPlanGeneration.dailyStepTarget,
         stepTargetHistory: userForPlanGeneration.stepTargetHistory,
         dailyCalorieTarget: userForPlanGeneration.dailyCalorieTarget,

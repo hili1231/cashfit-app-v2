@@ -11,6 +11,9 @@ import '../../providers/user_provider.dart';
 import '../../services/cache_service.dart';
 import '../nav_screen.dart';
 import 'meal_plan_screen.dart';
+import '../personalize/workout_diet_builder_screen.dart';
+import 'diet_day_detail_screen.dart';
+import 'package:logger/logger.dart';
 
 class DietSelectorScreen extends StatefulWidget {
   const DietSelectorScreen({super.key});
@@ -22,7 +25,9 @@ class DietSelectorScreen extends StatefulWidget {
 }
 
 class _DietSelectorScreenState extends State<DietSelectorScreen> {
+  final Logger _logger = Logger();
   late Future<List<MealPlan>> _fetchFuture;
+  final Map<String, bool> _deactivatedDiets = {};
   final bool _isLoadingActiveDiets = false;
 
   @override
@@ -37,13 +42,47 @@ class _DietSelectorScreenState extends State<DietSelectorScreen> {
       });
     }
   }
+
   Future<List<MealPlan>> _fetchAllDiets() async {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
     List<MealPlan> allDiets = [];
 
     try {
       debugPrint('Fetching all diet plans using CacheService');
-      // Use the cache service to retrieve meal plans
       allDiets = await CacheService().getMealPlans();
+
+      if (userProvider.isLoggedIn && userProvider.firebaseUser != null) {
+        final uid = userProvider.firebaseUser!.uid;
+        debugPrint('Fetching deactivation status for user: $uid');
+
+        const batchSize = 10;
+        for (var i = 0; i < allDiets.length; i += batchSize) {
+          final batchIds =
+              allDiets
+                  .sublist(
+                    i,
+                    i + batchSize > allDiets.length
+                        ? allDiets.length
+                        : i + batchSize,
+                  )
+                  .map((diet) => diet.id)
+                  .toList();
+          final batchSnapshot =
+              await FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(uid)
+                  .collection('removedDietPlans')
+                  .where(FieldPath.documentId, whereIn: batchIds)
+                  .get();
+          for (var doc in batchSnapshot.docs) {
+            _deactivatedDiets[doc.id] = true;
+          }
+        }
+
+        for (var diet in allDiets) {
+          _deactivatedDiets.putIfAbsent(diet.id, () => false);
+        }
+      }
     } catch (e) {
       debugPrint('Error fetching diet plans: $e');
       if (mounted) {
@@ -156,23 +195,30 @@ class _DietSelectorScreenState extends State<DietSelectorScreen> {
           .collection('removedDietPlans')
           .doc(dietPlanId)
           .delete();
-          
+
       // Invalidate the cache to force a refresh
-      await CacheService().invalidateUserDietsCache(userProvider.firebaseUser!.uid);
-      
-      // Optimized approach - only fetch and update active diet plans
-      final activePlans = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userProvider.firebaseUser!.uid)
-          .collection('activeDietPlans')
-          .get();
-          
-      final mappedPlans = activePlans.docs
-          .map((doc) => ActiveDietPlan.fromMap(doc.data()))
-          .toList();
-          
-      // Update just the active diet plans instead of refreshing all user data
+      await CacheService().invalidateUserDietsCache(
+        userProvider.firebaseUser!.uid,
+      );
+
+      // Refresh active diet plans
+      final activePlans =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(userProvider.firebaseUser!.uid)
+              .collection('activeDietPlans')
+              .get();
+
+      final mappedPlans =
+          activePlans.docs
+              .map((doc) => ActiveDietPlan.fromMap(doc.data()))
+              .toList();
+
       await userProvider.updateActiveDietPlans(mappedPlans);
+
+      setState(() {
+        _deactivatedDiets[dietPlanId] = false;
+      });
 
       if (mounted) {
         debugPrint('Showing success snackbar');
@@ -293,21 +339,28 @@ class _DietSelectorScreenState extends State<DietSelectorScreen> {
       await activePlanRef.delete();
 
       // Invalidate the cache to force a refresh
-      await CacheService().invalidateUserDietsCache(userProvider.firebaseUser!.uid);
-      
-      // Optimized approach - only fetch and update active diet plans
-      final activePlans = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userProvider.firebaseUser!.uid)
-          .collection('activeDietPlans')
-          .get();
-          
-      final mappedPlans = activePlans.docs
-          .map((doc) => ActiveDietPlan.fromMap(doc.data()))
-          .toList();
-          
-      // Update just the active diet plans instead of refreshing all user data
+      await CacheService().invalidateUserDietsCache(
+        userProvider.firebaseUser!.uid,
+      );
+
+      // Refresh active diet plans
+      final activePlans =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(userProvider.firebaseUser!.uid)
+              .collection('activeDietPlans')
+              .get();
+
+      final mappedPlans =
+          activePlans.docs
+              .map((doc) => ActiveDietPlan.fromMap(doc.data()))
+              .toList();
+
       await userProvider.updateActiveDietPlans(mappedPlans);
+
+      setState(() {
+        _deactivatedDiets[dietPlanId] = true;
+      });
 
       if (mounted) {
         debugPrint('Showing success snackbar for removal');
@@ -336,24 +389,69 @@ class _DietSelectorScreenState extends State<DietSelectorScreen> {
       }
     }
   }
+
   Future<Map<String, MealPlan>> _fetchMealPlans(List<String> planIds) async {
     final Map<String, MealPlan> planMap = {};
-    if (planIds.isEmpty) return planMap;
-    
-    final userProvider = Provider.of<UserProvider>(context, listen: false);
-    if (!userProvider.isLoggedIn || userProvider.firebaseUser == null) {
+    if (planIds.isEmpty) {
+      _logger.w('No plan IDs provided to fetch');
       return planMap;
     }
-    
-    // Use CacheService to get active diet plans for the user
-    final activeDietPlans = userProvider.currentUser?.activeDietPlans ?? [];
-    
-    final cachedDiets = await CacheService().getUserActiveDiets(
-      userProvider.firebaseUser!.uid,
-      activeDietPlans
-    );
-    
-    return cachedDiets;
+
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    if (!userProvider.isLoggedIn || userProvider.firebaseUser == null) {
+      _logger.w('User not logged in, cannot fetch meal plans');
+      return planMap;
+    }
+
+    try {
+      _logger.d(
+        'Using CacheService to fetch active diets for user: ${userProvider.firebaseUser!.uid}',
+      );
+      _logger.d('Active diet IDs: ${planIds.join(', ')}');
+
+      // Force refresh to ensure we get the latest data
+      final cachedDiets = await CacheService().getUserActiveDiets(
+        userProvider.firebaseUser!.uid,
+        userProvider.currentUser?.activeDietPlans ?? [],
+        forceRefresh: true,
+      );
+
+      _logger.i('Retrieved ${cachedDiets.length} meal plans from cache');
+
+      for (final entry in cachedDiets.entries) {
+        // Skip user-specific diets if needed
+        planMap[entry.key] = entry.value;
+      }
+    } catch (e) {
+      _logger.e('Error fetching meal plans from cache: $e');
+      // Fallback to direct Firestore query
+      const batchSize = 10;
+      for (var i = 0; i < planIds.length; i += batchSize) {
+        final batchIds = planIds.sublist(
+          i,
+          i + batchSize > planIds.length ? planIds.length : i + batchSize,
+        );
+
+        try {
+          final planSnapshot =
+              await FirebaseFirestore.instance
+                  .collection('mealPlans')
+                  .where(FieldPath.documentId, whereIn: batchIds)
+                  .get();
+
+          for (var doc in planSnapshot.docs) {
+            final data = doc.data();
+            data['id'] = doc.id;
+            final mealPlan = MealPlan.fromMap(data);
+            planMap[mealPlan.id] = mealPlan;
+          }
+        } catch (e) {
+          _logger.e('Error fetching meal plans batch: $e');
+        }
+      }
+    }
+
+    return planMap;
   }
 
   @override
@@ -410,6 +508,21 @@ class _DietSelectorScreenState extends State<DietSelectorScreen> {
                 }
 
                 final allDiets = snapshot.data!;
+                final Map<String, List<MealPlan>> categoryMap = {};
+
+                // Group meal plans by category
+                for (var diet in allDiets) {
+                  // Skip user-specific diets
+                  if (diet.userId != null && diet.userId!.isNotEmpty) {
+                    continue;
+                  }
+                  final category = diet.type?.trim().toUpperCase() ?? 'GENERAL';
+                  categoryMap.putIfAbsent(category, () => []).add(diet);
+                }
+
+                // Sort categories alphabetically
+                final sortedCategories = categoryMap.keys.toList()..sort();
+
                 return SingleChildScrollView(
                   physics: const BouncingScrollPhysics(),
                   child: SafeArea(
@@ -418,330 +531,404 @@ class _DietSelectorScreenState extends State<DietSelectorScreen> {
                         horizontal: 16,
                         vertical: 20,
                       ),
-                      child: StreamBuilder<QuerySnapshot>(
-                        stream:
-                            userProvider.isLoggedIn &&
-                                    userProvider.firebaseUser != null
-                                ? FirebaseFirestore.instance
-                                    .collection('users')
-                                    .doc(userProvider.firebaseUser!.uid)
-                                    .collection('activeDietPlans')
-                                    .snapshots()
-                                : null,
-                        builder: (context, snapshot) {
-                          final activeIds =
-                              snapshot.hasData
-                                  ? snapshot.data!.docs
-                                      .map((doc) => doc.id)
-                                      .toSet()
-                                  : <String>{};
-
-                          // Group meal plans by category
-                          final categoryMap = <String, List<MealPlan>>{};
-                          for (var diet in allDiets) {
-                            if (!activeIds.contains(diet.id)) {
-                              final category =
-                                  diet.type?.trim().isNotEmpty == true
-                                      ? diet.type!
-                                      : 'General';
-                              categoryMap
-                                  .putIfAbsent(category, () => [])
-                                  .add(diet);
-                            }
-                          }
-
-                          // Sort categories alphabetically, with "General" last
-                          final sortedCategories =
-                              categoryMap.keys
-                                  .toList()
-                                  .where((cat) => cat != 'General')
-                                  .toList()
-                                ..sort()
-                                ..addAll(
-                                  categoryMap.keys.where(
-                                    (cat) => cat == 'General',
-                                  ),
-                                );
-
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                "DIET PLANS",
-                                style: theme.textTheme.titleLarge?.copyWith(
-                                  color: colorScheme.onSurface,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 20,
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              if (userProvider.isLoggedIn &&
-                                  userProvider.firebaseUser != null)
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "DIET PLANS",
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              color: colorScheme.onSurface,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 20,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          if (userProvider.isLoggedIn &&
+                              userProvider.firebaseUser != null)
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(
-                                          "Your Active Diet Plans",
-                                          style: theme.textTheme.titleMedium
-                                              ?.copyWith(
-                                                color: colorScheme.onSurface,
-                                              ),
-                                        ),
-                                        IconButton(
-                                          icon: Icon(
-                                            Icons.delete_sweep,
-                                            color: colorScheme.primary,
+                                    Text(
+                                      "ACTIVE DIET PLANS",
+                                      style: theme.textTheme.titleMedium
+                                          ?.copyWith(
+                                            color: colorScheme.onSurface,
+                                            fontWeight: FontWeight.bold,
                                           ),
-                                          tooltip:
-                                              'View Deactivated Diet Plans',
-                                          onPressed: () {
-                                            final navState =
-                                                context
-                                                    .findAncestorStateOfType<
-                                                      NavScreenState
-                                                    >();
-                                            navState?.setDetailScreen(
-                                              const DeactivatedDietPlansScreen(),
-                                            );
-                                          },
-                                        ),
-                                      ],
                                     ),
-                                    const SizedBox(height: 12),
-                                    if (snapshot.hasError)
-                                      Center(
-                                        child: Text(
-                                          'Error: ${snapshot.error}',
-                                          style: theme.textTheme.bodyMedium
-                                              ?.copyWith(
-                                                color:
-                                                    colorScheme
-                                                        .onSurfaceVariant,
-                                              ),
-                                        ),
-                                      )
-                                    else if (snapshot.connectionState ==
-                                        ConnectionState.waiting)
-                                      const Center(
-                                        child: CircularProgressIndicator(),
-                                      )
-                                    else if (!snapshot.hasData ||
-                                        snapshot.data!.docs.isEmpty)
-                                      Center(
-                                        child: Text(
-                                          "No active diet plans",
-                                          style: theme.textTheme.bodyMedium
-                                              ?.copyWith(
-                                                color:
-                                                    colorScheme
-                                                        .onSurfaceVariant,
-                                              ),
-                                        ),
-                                      )
-                                    else
-                                      FutureBuilder<Map<String, MealPlan>>(
-                                        future: _fetchMealPlans(
-                                          activeIds.toList(),
-                                        ),
-                                        builder: (context, planSnapshot) {
-                                          if (planSnapshot.connectionState ==
-                                              ConnectionState.waiting) {
-                                            return const Center(
-                                              child:
-                                                  CircularProgressIndicator(),
-                                            );
-                                          }
-                                          if (planSnapshot.hasError) {
-                                            return Center(
-                                              child: Text(
-                                                'Error: ${planSnapshot.error}',
-                                                style: theme
-                                                    .textTheme
-                                                    .bodyMedium
-                                                    ?.copyWith(
-                                                      color:
-                                                          colorScheme
-                                                              .onSurfaceVariant,
-                                                    ),
-                                              ),
-                                            );
-                                          }
-                                          if (!planSnapshot.hasData ||
-                                              planSnapshot.data!.isEmpty) {
-                                            return Center(
-                                              child: Text(
-                                                "No active diet plans found",
-                                                style: theme
-                                                    .textTheme
-                                                    .bodyMedium
-                                                    ?.copyWith(
-                                                      color:
-                                                          colorScheme
-                                                              .onSurfaceVariant,
-                                                    ),
-                                              ),
-                                            );
-                                          }
+                                    IconButton(
+                                      icon: Icon(
+                                        Icons.delete_sweep,
+                                        color: colorScheme.primary,
+                                      ),
+                                      tooltip: 'View Deactivated Diet Plans',
+                                      onPressed: () {
+                                        final navState =
+                                            context
+                                                .findAncestorStateOfType<
+                                                  NavScreenState
+                                                >();
+                                        navState?.setDetailScreen(
+                                          const DeactivatedDietPlansScreen(),
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Builder(
+                                  builder: (context) {
+                                    final activeDietPlans =
+                                        userProvider
+                                            .currentUser
+                                            ?.activeDietPlans ??
+                                        [];
 
-                                          final planMap = planSnapshot.data!;
-                                          final activeData =
-                                              activeIds
-                                                  .where(
-                                                    (id) =>
-                                                        planMap.containsKey(id),
-                                                  )
-                                                  .map(
-                                                    (id) => {
-                                                      'plan': ActiveDietPlan(
-                                                        dietPlanId: id, // Added the missing dietPlanId argument
-                                                        startDate: DateTime.now(),
-                                                        currentDay: 1,
-                                                      ),
-                                                      'diet': planMap[id]!,
-                                                    },
-                                                  )
-                                                  .toList();
+                                    _logger.i(
+                                      'User has ${activeDietPlans.length} active diet plans',
+                                    );
 
-                                          if (activeData.isEmpty) {
-                                            return Center(
-                                              child: Text(
-                                                "No active diet plans found",
-                                                style: theme
-                                                    .textTheme
-                                                    .bodyMedium
-                                                    ?.copyWith(
-                                                      color:
-                                                          colorScheme
-                                                              .onSurfaceVariant,
-                                                    ),
-                                              ),
-                                            );
-                                          }
-
-                                          return SizedBox(
-                                            height: 200,
-                                            child: ListView.separated(
-                                              scrollDirection: Axis.horizontal,
-                                              physics:
-                                                  const BouncingScrollPhysics(),
-                                              itemCount: activeData.length,
-                                              separatorBuilder:
-                                                  (_, __) =>
-                                                      const SizedBox(width: 14),
-                                              itemBuilder: (context, index) {
-                                                final diet =
-                                                    activeData[index]['diet']
-                                                        as MealPlan;
-                                                return GestureDetector(
-                                                  onTap: () {
-                                                    final navState =
-                                                        context
-                                                            .findAncestorStateOfType<
-                                                              NavScreenState
-                                                            >();
-                                                    navState?.setDetailScreen(
-                                                      MealPlanScreen(
-                                                        plan: diet,
-                                                      ),
-                                                    );
+                                    return FutureBuilder<Map<String, MealPlan>>(
+                                      future: _fetchMealPlans(
+                                        activeDietPlans
+                                            .map((p) => p.dietPlanId)
+                                            .toList(),
+                                      ),
+                                      builder: (context, planSnapshot) {
+                                        if (planSnapshot.connectionState ==
+                                            ConnectionState.waiting) {
+                                          return const Center(
+                                            child: CircularProgressIndicator(),
+                                          );
+                                        }
+                                        if (planSnapshot.hasError) {
+                                          _logger.e(
+                                            'Error fetching active diet plans: ${planSnapshot.error}',
+                                          );
+                                          return Center(
+                                            child: Text(
+                                              'Error: ${planSnapshot.error}',
+                                              style: theme.textTheme.bodyMedium
+                                                  ?.copyWith(
+                                                    color:
+                                                        colorScheme
+                                                            .onSurfaceVariant,
+                                                  ),
+                                            ),
+                                          );
+                                        }
+                                        final planMap = planSnapshot.data ?? {};
+                                        final activeData =
+                                            activeDietPlans
+                                                .where(
+                                                  (plan) => planMap.containsKey(
+                                                    plan.dietPlanId,
+                                                  ),
+                                                )
+                                                .map(
+                                                  (plan) => {
+                                                    'plan': plan,
+                                                    'diet':
+                                                        planMap[plan
+                                                            .dietPlanId]!,
                                                   },
-                                                  child: Stack(
-                                                    children: [
-                                                      Container(
-                                                        decoration: BoxDecoration(
-                                                          border: Border.all(
+                                                )
+                                                .toList();
+                                        // If no active plans, show only the build card
+                                        if (activeData.isEmpty) {
+                                          return SizedBox(
+                                            height: 208,
+                                            child: Row(
+                                              children: [
+                                                SizedBox(
+                                                  width: 180,
+                                                  child: Card(
+                                                    elevation: 4,
+                                                    shape: RoundedRectangleBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            12,
+                                                          ),
+                                                    ),
+                                                    color: colorScheme.surface,
+                                                    child: InkWell(
+                                                      onTap: () {
+                                                        final navState =
+                                                            context
+                                                                .findAncestorStateOfType<
+                                                                  NavScreenState
+                                                                >();
+                                                        navState?.setDetailScreen(
+                                                          const WorkoutDietBuilderScreen(),
+                                                        );
+                                                      },
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            12,
+                                                          ),
+                                                      child: Column(
+                                                        mainAxisAlignment:
+                                                            MainAxisAlignment
+                                                                .center,
+                                                        children: [
+                                                          Icon(
+                                                            Icons
+                                                                .add_circle_outline,
+                                                            size: 48,
                                                             color:
                                                                 colorScheme
                                                                     .primary,
-                                                            width: 2,
                                                           ),
-                                                          borderRadius:
-                                                              BorderRadius.circular(
-                                                                12,
-                                                              ),
-                                                        ),
-                                                        child: MealPlanCard(
-                                                          mealPlan: diet,
-                                                        ),
-                                                      ),
-                                                      Positioned(
-                                                        top: 8,
-                                                        right: 8,
-                                                        child: Container(
-                                                          padding:
-                                                              const EdgeInsets.symmetric(
-                                                                horizontal: 8,
-                                                                vertical: 4,
-                                                              ),
-                                                          decoration: BoxDecoration(
-                                                            color:
-                                                                colorScheme
-                                                                    .primary,
-                                                            borderRadius:
-                                                                BorderRadius.circular(
-                                                                  8,
-                                                                ),
+                                                          const SizedBox(
+                                                            height: 8,
                                                           ),
-                                                          child: Text(
-                                                            'Active',
+                                                          Text(
+                                                            'Build More Plans',
                                                             style: theme
                                                                 .textTheme
-                                                                .labelSmall
+                                                                .titleMedium
                                                                 ?.copyWith(
                                                                   color:
                                                                       colorScheme
-                                                                          .onPrimary,
+                                                                          .primary,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .bold,
                                                                 ),
+                                                            textAlign:
+                                                                TextAlign
+                                                                    .center,
                                                           ),
-                                                        ),
+                                                        ],
                                                       ),
-                                                      Positioned(
-                                                        top: 8,
-                                                        left: 8,
-                                                        child: IconButton(
-                                                          icon: Icon(
-                                                            Icons.close,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        }
+                                        // Otherwise, show all active plans plus the build card at the end
+                                        return SizedBox(
+                                          height: 208,
+                                          child: ListView.separated(
+                                            scrollDirection: Axis.horizontal,
+                                            physics:
+                                                const BouncingScrollPhysics(),
+                                            itemCount: activeData.length + 1,
+                                            separatorBuilder:
+                                                (_, __) =>
+                                                    const SizedBox(width: 14),
+                                            itemBuilder: (context, index) {
+                                              if (index == activeData.length) {
+                                                // Build More Plans Card always at the end
+                                                return SizedBox(
+                                                  width: 180,
+                                                  child: Card(
+                                                    elevation: 4,
+                                                    shape: RoundedRectangleBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            12,
+                                                          ),
+                                                    ),
+                                                    color: colorScheme.surface,
+                                                    child: InkWell(
+                                                      onTap: () {
+                                                        final navState =
+                                                            context
+                                                                .findAncestorStateOfType<
+                                                                  NavScreenState
+                                                                >();
+                                                        navState?.setDetailScreen(
+                                                          const WorkoutDietBuilderScreen(),
+                                                        );
+                                                      },
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            12,
+                                                          ),
+                                                      child: Column(
+                                                        mainAxisAlignment:
+                                                            MainAxisAlignment
+                                                                .center,
+                                                        children: [
+                                                          Icon(
+                                                            Icons
+                                                                .add_circle_outline,
+                                                            size: 48,
                                                             color:
                                                                 colorScheme
                                                                     .primary,
-                                                            size: 20,
                                                           ),
-                                                          tooltip:
-                                                              'Remove Active Diet Plan',
-                                                          onPressed:
-                                                              () =>
-                                                                  _removeActiveDiet(
-                                                                    diet.id,
-                                                                  ),
-                                                        ),
+                                                          const SizedBox(
+                                                            height: 8,
+                                                          ),
+                                                          Text(
+                                                            'Build More Plans',
+                                                            style: theme
+                                                                .textTheme
+                                                                .titleMedium
+                                                                ?.copyWith(
+                                                                  color:
+                                                                      colorScheme
+                                                                          .primary,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .bold,
+                                                                ),
+                                                            textAlign:
+                                                                TextAlign
+                                                                    .center,
+                                                          ),
+                                                        ],
                                                       ),
-                                                    ],
+                                                    ),
                                                   ),
                                                 );
-                                              },
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    const SizedBox(height: 20),
-                                  ],
+                                              }
+
+                                              final diet =
+                                                  activeData[index]['diet']
+                                                      as MealPlan;
+                                              final plan =
+                                                  activeData[index]['plan']
+                                                      as ActiveDietPlan;
+                                              final int dayIndex =
+                                                  (plan.currentDay - 1).clamp(
+                                                    0,
+                                                    diet.days.length - 1,
+                                                  );
+                                              final currentMealDay =
+                                                  diet.days[dayIndex];
+
+                                              return GestureDetector(
+                                                onTap: () {
+                                                  final navState =
+                                                      context
+                                                          .findAncestorStateOfType<
+                                                            NavScreenState
+                                                          >();
+                                                  navState?.setDetailScreen(
+                                                    DietDayDetailScreen(
+                                                      plan: diet,
+                                                      day: currentMealDay,
+                                                    ),
+                                                  );
+                                                },
+                                                child: Stack(
+                                                  children: [
+                                                    Container(
+                                                      decoration: BoxDecoration(
+                                                        border: Border.all(
+                                                          color:
+                                                              colorScheme
+                                                                  .primary,
+                                                          width: 2,
+                                                        ),
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              12,
+                                                            ),
+                                                      ),
+                                                      child: MealPlanCard(
+                                                        mealPlan: diet,
+                                                        currentDay:
+                                                            plan.currentDay,
+                                                        onDayButtonPressed: () {
+                                                          final navState =
+                                                              context
+                                                                  .findAncestorStateOfType<
+                                                                    NavScreenState
+                                                                  >();
+                                                          navState?.setDetailScreen(
+                                                            DietDayDetailScreen(
+                                                              plan: diet,
+                                                              day:
+                                                                  currentMealDay,
+                                                            ),
+                                                          );
+                                                        },
+                                                      ),
+                                                    ),
+                                                    Positioned(
+                                                      top: 8,
+                                                      right: 8,
+                                                      child: Container(
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 8,
+                                                              vertical: 4,
+                                                            ),
+                                                        decoration: BoxDecoration(
+                                                          color:
+                                                              colorScheme
+                                                                  .primary,
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                8,
+                                                              ),
+                                                        ),
+                                                        child: Text(
+                                                          'Active',
+                                                          style: theme
+                                                              .textTheme
+                                                              .labelSmall
+                                                              ?.copyWith(
+                                                                color:
+                                                                    colorScheme
+                                                                        .onPrimary,
+                                                              ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    Positioned(
+                                                      top: 8,
+                                                      left: 8,
+                                                      child: IconButton(
+                                                        icon: Icon(
+                                                          Icons.close,
+                                                          color:
+                                                              colorScheme
+                                                                  .primary,
+                                                          size: 20,
+                                                        ),
+                                                        tooltip:
+                                                            'Remove Active Diet Plan',
+                                                        onPressed:
+                                                            () =>
+                                                                _removeActiveDiet(
+                                                                  diet.id,
+                                                                ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                        );
+                                      },
+                                    );
+                                  },
                                 ),
-                              // Render dynamic categories
-                              for (var category in sortedCategories)
-                                if (categoryMap[category]!.isNotEmpty)
-                                  _buildDietCategorySection(
-                                    theme,
-                                    colorScheme,
-                                    category,
-                                    categoryMap[category]!,
-                                  ),
-                            ],
-                          );
-                        },
+                                const SizedBox(height: 20),
+                              ],
+                            ),
+                          // Render dynamic categories
+                          for (var category in sortedCategories)
+                            if (categoryMap[category]!.isNotEmpty)
+                              _buildDietCategorySection(
+                                theme,
+                                colorScheme,
+                                category,
+                                categoryMap[category]!,
+                              ),
+                        ],
                       ),
                     ),
                   ),
@@ -770,7 +957,7 @@ class _DietSelectorScreenState extends State<DietSelectorScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          category,
+          category.toUpperCase(),
           style: theme.textTheme.titleMedium?.copyWith(
             color: colorScheme.onSurface,
             fontWeight: FontWeight.bold,
@@ -778,14 +965,16 @@ class _DietSelectorScreenState extends State<DietSelectorScreen> {
         ),
         const SizedBox(height: 12),
         SizedBox(
-          height: 200,
+          height: 208,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
-            physics: BouncingScrollPhysics(),
+            physics: const BouncingScrollPhysics(),
             itemCount: diets.length,
             separatorBuilder: (_, __) => const SizedBox(width: 14),
             itemBuilder: (context, index) {
               final diet = diets[index];
+              final isActive = _deactivatedDiets[diet.id] == false;
+
               return GestureDetector(
                 onTap: () {
                   final navState =
@@ -794,7 +983,16 @@ class _DietSelectorScreenState extends State<DietSelectorScreen> {
                 },
                 child: Stack(
                   children: [
-                    MealPlanCard(mealPlan: diet),
+                    SizedBox(
+                      width: 180,
+                      child: Card(
+                        elevation: 4,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: MealPlanCard(mealPlan: diet),
+                      ),
+                    ),
                     Positioned(
                       bottom: 8,
                       right: 8,
@@ -803,7 +1001,8 @@ class _DietSelectorScreenState extends State<DietSelectorScreen> {
                           Icons.play_circle,
                           color: colorScheme.primary,
                         ),
-                        onPressed: () => _setActiveDiet(diet.id),
+                        onPressed:
+                            isActive ? null : () => _setActiveDiet(diet.id),
                         tooltip: 'Set as Active',
                       ),
                     ),
@@ -894,7 +1093,7 @@ class DeactivatedDietPlansScreen extends StatelessWidget {
 
                       final deactivatedDocs = snapshot.data!.docs;
                       return ListView.builder(
-                        physics: BouncingScrollPhysics(),
+                        physics: const BouncingScrollPhysics(),
                         itemCount: deactivatedDocs.length,
                         itemBuilder: (context, index) {
                           final removedPlan = RemovedDietPlan.fromMap(
@@ -972,6 +1171,35 @@ class DeactivatedDietPlansScreen extends StatelessWidget {
                                           .collection('removedDietPlans')
                                           .doc(dietPlan.id)
                                           .delete();
+
+                                      // Invalidate cache
+                                      await CacheService()
+                                          .invalidateUserDietsCache(
+                                            userProvider.firebaseUser!.uid,
+                                          );
+
+                                      // Refresh active diet plans
+                                      final activePlans =
+                                          await FirebaseFirestore.instance
+                                              .collection('users')
+                                              .doc(
+                                                userProvider.firebaseUser!.uid,
+                                              )
+                                              .collection('activeDietPlans')
+                                              .get();
+
+                                      final mappedPlans =
+                                          activePlans.docs
+                                              .map(
+                                                (doc) => ActiveDietPlan.fromMap(
+                                                  doc.data(),
+                                                ),
+                                              )
+                                              .toList();
+
+                                      await userProvider.updateActiveDietPlans(
+                                        mappedPlans,
+                                      );
 
                                       if (context.mounted) {
                                         ScaffoldMessenger.of(

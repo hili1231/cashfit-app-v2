@@ -13,7 +13,6 @@ import '../personalize/workout_diet_builder_screen.dart';
 import '../../theme.dart';
 import '../../models/reward_task.dart';
 import '../diets/diet_selector_screen.dart';
-import '../community_feed/community_feed_screen.dart';
 import '../side_hustle/side_hustle_screen.dart';
 import '../profile_screen.dart';
 import '../nav_screen.dart';
@@ -166,7 +165,6 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
       });
     }
   }
-
   void _updateTaskStates() {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     final now = DateTime.now();
@@ -175,6 +173,12 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
     // Daily Check-In Logic
     final lastCheckIn = user.lastCheckIn;
     currentCheckInStreak = user.checkInStreak;
+    
+    // Fix for new users - ensure we show Day 1 for first-time users
+    if (lastCheckIn == null) {
+      currentCheckInStreak = 0;
+    }
+    
     canCheckInToday = lastCheckIn == null || !_isSameDay(lastCheckIn, now);
     if (lastCheckIn != null && canCheckInToday) {
       final daysSinceLastCheckIn = now.difference(lastCheckIn).inDays;
@@ -202,9 +206,8 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
 
     // Daily Step Goal Logic
     dailyStepTarget = user.dailyStepTarget ?? 10000;
-    taskStates['daily_step_goal'] = stepCounterSupported && currentSteps >= dailyStepTarget;
-
-    // Other Tasks Logic
+    taskStates['daily_step_goal'] =
+        stepCounterSupported && currentSteps >= dailyStepTarget;    // Other Tasks Logic
     taskStates = {
       'daily_check_in': canCheckInToday,
       'complete_workout':
@@ -219,10 +222,8 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
           user.age.isNotEmpty &&
           user.height.isNotEmpty &&
           user.weight.isNotEmpty,
-      'build_plans': user.hasBuiltPlans,
-      'share_progress': user.joinedChallenges.isNotEmpty,
-      'join_challenge': user.joinedChallenges.isNotEmpty,
       'complete_side_hustle': user.joinedSideHustles.isNotEmpty,
+      'share_on_social': false, // Default to false, will be controlled by user interaction
       'watch_ad': canWatchAd,
     };
 
@@ -296,16 +297,15 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
     if (navState == null) {
       _logger.w('NavScreenState is null, navigation may not work');
     }
-
     final sortedTasks = [...rewardTasks];
     sortedTasks.sort((a, b) {
       if (a.id == 'daily_check_in') return -1;
       if (b.id == 'daily_check_in') return 1;
       bool aCompleted =
-          !taskStates[a.id]! &&
+          !(taskStates[a.id] ?? false) &&
           (a.type == RewardType.oneOff || a.type == RewardType.weekly);
       bool bCompleted =
-          !taskStates[b.id]! &&
+          !(taskStates[b.id] ?? false) &&
           (b.type == RewardType.oneOff || b.type == RewardType.weekly);
       if (aCompleted && !bCompleted) return 1;
       if (!aCompleted && bCompleted) return -1;
@@ -350,7 +350,7 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
               isEnabled =
                   canCheckInToday &&
                   !isCompleted &&
-                  !taskLoadingStates[task.id]!;
+                  !(taskLoadingStates[task.id] ?? false);
               onAction = isEnabled ? () => _checkIn(task) : null;
               buttonText = isCompleted ? 'Completed' : 'Check In';
               break;
@@ -359,7 +359,8 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
                   user.lastWorkoutCompletionDate != null &&
                   _isSameDay(user.lastWorkoutCompletionDate!, DateTime.now());
               isCompleted = hasClaimed;
-              isEnabled = !isCompleted && !taskLoadingStates[task.id]!;
+              isEnabled =
+                  !isCompleted && !(taskLoadingStates[task.id] ?? false);
               onAction =
                   isEnabled && navState != null
                       ? (workoutCompleted
@@ -377,7 +378,8 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
                   user.lastMealPlanCompletionDate != null &&
                   _isSameDay(user.lastMealPlanCompletionDate!, DateTime.now());
               isCompleted = hasClaimed;
-              isEnabled = !isCompleted && !taskLoadingStates[task.id]!;
+              isEnabled =
+                  !isCompleted && !(taskLoadingStates[task.id] ?? false);
               onAction =
                   isEnabled && navState != null
                       ? (mealPlanCompleted
@@ -393,7 +395,7 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
               break;
             case 'daily_step_goal':
               if (!stepCounterSupported) {
-                isCompleted = true;
+                isCompleted = false;  // Changed from true to false
                 isEnabled = false;
                 buttonText = 'Not Supported';
                 break;
@@ -403,7 +405,7 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
               isEnabled =
                   stepGoalReached &&
                   !isCompleted &&
-                  !taskLoadingStates[task.id]!;
+                  !(taskLoadingStates[task.id] ?? false);
               onAction = isEnabled ? () => _claimReward(task) : null;
               buttonText =
                   isCompleted
@@ -411,7 +413,7 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
                       : (stepGoalReached ? 'Claim Reward' : 'Check Steps');
               break;
             case 'update_weight':
-              final hasUpdatedWeight = taskStates['update_weight']!;
+              final hasUpdatedWeight = taskStates['update_weight'] ?? false;
 
               // 1️⃣ completed this week? → grey / disabled
               isCompleted = hasClaimed;
@@ -419,7 +421,8 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
               // 2️⃣ otherwise we enable the button only
               //    – if user still has to update the weight  ➜ “Update weight”
               //    – or if weight is updated but reward not claimed ➜ “Claim reward”
-              isEnabled = !isCompleted && !taskLoadingStates[task.id]!;
+              isEnabled =
+                  !isCompleted && !(taskLoadingStates[task.id] ?? false);
               onAction =
                   navState != null
                       ? (hasUpdatedWeight && !isCompleted
@@ -433,13 +436,14 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
                       : (hasUpdatedWeight ? 'Claim Reward' : 'Update Weight');
               break;
             case 'build_profile':
-              final profileBuilt = taskStates['build_profile']!;
+              final profileBuilt = taskStates['build_profile'] ?? false;
 
               // one‑off → once claimed, never enabled again
               isCompleted =
                   hasClaimed ||
                   user.completedOneOffIds.contains('build_profile');
-              isEnabled = !isCompleted && !taskLoadingStates[task.id]!;
+              isEnabled =
+                  !isCompleted && !(taskLoadingStates[task.id] ?? false);
               onAction =
                   navState != null
                       ? (profileBuilt && !isCompleted
@@ -451,11 +455,11 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
                   isCompleted
                       ? 'Completed'
                       : (profileBuilt ? 'Claim Reward' : 'Build Profile');
-              break;
-            case 'build_plans':
+              break;            case 'build_plans':
               final built = user.hasBuiltPlans;
               isCompleted = hasClaimed || user.hasClaimedBuildPlansReward;
-              isEnabled = !isCompleted && !taskLoadingStates[task.id]!;
+              isEnabled =
+                  !isCompleted && !(taskLoadingStates[task.id] ?? false);
               onAction =
                   navState != null
                       ? (built
@@ -467,54 +471,23 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
               buttonText =
                   isCompleted
                       ? 'Completed'
-                      : (built ? 'Claim Reward' : 'Build Plan');
+                      : (built ? 'Claim Reward' : 'Build Plan');              break;
+              
+            case 'share_on_social':
+              isCompleted = hasClaimed || 
+                  user.completedOneOffIds.contains('share_on_social');
+              isEnabled = !isCompleted && !(taskLoadingStates[task.id] ?? false);
+              onAction = isEnabled ? () => _shareOnSocial(task) : null;
+              buttonText = isCompleted ? 'Completed' : 'Share Now';
               break;
-            case 'share_progress':
-              final hasShared = user.joinedChallenges.isNotEmpty;
-              isCompleted =
-                  hasClaimed ||
-                  user.completedOneOffIds.contains('share_progress');
-              isEnabled = !isCompleted && !taskLoadingStates[task.id]!;
-              onAction =
-                  isEnabled && navState != null
-                      ? (hasShared
-                          ? () => _claimReward(task)
-                          : () => navState.setDetailScreen(
-                            const CommunityFeedScreen(),
-                          ))
-                      : null;
-              buttonText =
-                  isCompleted
-                      ? 'Completed'
-                      : (hasShared ? 'Claim Reward' : 'Share Progress');
-              break;
-            case 'join_challenge':
-              final hasJoinedChallenge = user.joinedChallenges.isNotEmpty;
-              isCompleted =
-                  hasClaimed ||
-                  user.completedOneOffIds.contains('join_challenge');
-              isEnabled = !isCompleted && !taskLoadingStates[task.id]!;
-              onAction =
-                  isEnabled && navState != null
-                      ? (hasJoinedChallenge
-                          ? () => _claimReward(task)
-                          : () => navState.setDetailScreen(
-                            const CommunityFeedScreen(),
-                          ))
-                      : null;
-              buttonText =
-                  isCompleted
-                      ? 'Completed'
-                      : (hasJoinedChallenge
-                          ? 'Claim Reward'
-                          : 'Join Challenge');
-              break;
+
             case 'complete_side_hustle':
               final hasCompletedHustle = user.joinedSideHustles.isNotEmpty;
               isCompleted =
                   hasClaimed ||
                   user.completedOneOffIds.contains('complete_side_hustle');
-              isEnabled = !isCompleted && !taskLoadingStates[task.id]!;
+              isEnabled =
+                  !isCompleted && !(taskLoadingStates[task.id] ?? false);
               onAction =
                   isEnabled && navState != null
                       ? (hasCompletedHustle
@@ -537,7 +510,7 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
               isEnabled =
                   (canWatchAd || adWatched) &&
                   !isCompleted &&
-                  !taskLoadingStates[task.id]!;
+                  !(taskLoadingStates[task.id] ?? false);
               onAction =
                   isEnabled
                       ? (adWatched
@@ -595,12 +568,10 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
           hasClaimed = false;
         }
       }
-    }
-
-    switch (task.id) {
+    }    switch (task.id) {
       case 'daily_check_in':
         return canCheckInToday
-            ? "Check in to mine +$checkInFitCoinsToEarn FitCoins (Day ${currentCheckInStreak + 1}/7)"
+            ? "Check in to mine +$checkInFitCoinsToEarn FitCoins (Day ${currentCheckInStreak == 0 ? 1 : (currentCheckInStreak % 7) == 0 ? 7 : (currentCheckInStreak % 7) + 1}/7)"
             : "Completed for today. Come back tomorrow!";
       case 'complete_workout':
         return hasClaimed
@@ -636,22 +607,15 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
         return hasClaimed || user.completedOneOffIds.contains('build_profile')
             ? "Profile completed! FitCoins mined (Badge: Profile Builder)."
             : "Complete your profile to mine +${task.points} FitCoins (Badge: Profile Builder).";
-      case 'build_plans':
-        return hasClaimed || user.hasClaimedBuildPlansReward
+      case 'build_plans':        return hasClaimed || user.hasClaimedBuildPlansReward
             ? "Plans built! FitCoins mined (Badge: Plan Creator)."
             : (user.hasBuiltPlans
                 ? "Plans built! Mine your +${task.points} FitCoins (Badge: Plan Creator)."
                 : "Build your workout and diet plan to mine +${task.points} FitCoins (Badge: Plan Creator).");
-      case 'share_progress':
-        return hasClaimed
-            ? "Progress shared! FitCoins mined."
-            : (user.joinedChallenges.isNotEmpty
-                ? "Progress shared! Mine your +${task.points} FitCoins."
-                : "Share your progress to mine +${task.points} FitCoins.");
-      case 'join_challenge':
-        return hasClaimed || user.completedOneOffIds.contains('join_challenge')
-            ? "Challenge joined! FitCoins mined."
-            : "Join a challenge to mine +${task.points} FitCoins.";
+      case 'share_on_social':
+        return hasClaimed || user.completedOneOffIds.contains('share_on_social')
+            ? "Thank you for sharing! FitCoins mined."
+            : "Share CashFit on your social network to mine +${task.points} FitCoins!";
       case 'complete_side_hustle':
         return hasClaimed ||
                 user.completedOneOffIds.contains('complete_side_hustle')
@@ -667,15 +631,15 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
         return task.description;
     }
   }
-
   Widget _progressWheel() {
     final cs = Theme.of(context).colorScheme;
-    final todayIdx = currentCheckInStreak + (canCheckInToday ? 1 : 0);
+    // Calculate today's index for the circle properly, accounting for first-time users
+    final todayIdx = currentCheckInStreak == 0 ? 1 : ((currentCheckInStreak % 7) == 0 ? 7 : (currentCheckInStreak % 7) + (canCheckInToday ? 1 : 0));
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: List.generate(7, (i) {
         final idx = i + 1;
-        final reached = idx <= currentCheckInStreak;
+        final reached = idx <= (currentCheckInStreak == 0 ? 0 : (currentCheckInStreak % 7 == 0 ? 7 : currentCheckInStreak % 7));
         final today = idx == todayIdx;
         return Expanded(
           child: Column(
@@ -736,8 +700,8 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
           taskLoadingStates[task.id] = false;
         });
         return;
-      }
-
+      }      // For new users (currentCheckInStreak == 0), we want to set the streak to 1
+      // For everyone else, increment and handle day 7 to day 1 transition
       int newStreak = currentCheckInStreak + 1;
       if (newStreak > 7) newStreak = 1;
       int fitCoinsAwarded = checkInFitCoins[newStreak - 1];
@@ -1014,6 +978,115 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
       }
     }
   }
+  Future<void> _shareOnSocial(RewardTask task) async {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    setState(() {
+      taskLoadingStates[task.id] = true;
+    });
+
+    try {
+      // This would normally use a share plugin like share_plus
+      // But for demo purposes, we'll just simulate the sharing action
+      await Future.delayed(const Duration(seconds: 1)); // Simulate sharing
+      
+      // Since we don't have an actual share plugin imported, we'll show a dialog
+      if (!mounted) return;
+      
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Share on Social Media'),
+          content: const Text('Share your fitness journey with CashFit on your favorite social network!'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _completeSharing(task);
+              },
+              child: const Text('I\'ve Shared'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      _logger.e("Failed to share: $e");
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: colorScheme.error,
+          content: Text(
+            "Failed to share: $e",
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onError,
+            ),
+          ),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          taskLoadingStates[task.id] = false;
+        });
+      }
+    }
+  }
+  
+  Future<void> _completeSharing(RewardTask task) async {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+
+    try {
+      await userProvider.claimReward(task.id, task.points);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: colorScheme.primary,
+          content: Text(
+            "Thank you for sharing! +${task.points} FitCoins mined!",
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onPrimary,
+            ),
+          ),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
+
+      setState(() {
+        taskStates[task.id] = false;
+        taskSparkleStates[task.id] = true;
+      });
+
+      await userProvider.refreshUser();
+      _buildRewardTasks();
+    } catch (e) {
+      _logger.e("Failed to claim share reward: $e");
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: colorScheme.error,
+          content: Text(
+            "Failed to claim reward: $e",
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onError,
+            ),
+          ),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
+    }
+  }
 
   Widget _buildTaskCard(RewardTask task) {
     final cs = Theme.of(context).colorScheme;
@@ -1073,7 +1146,8 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
                 alignment: Alignment.centerRight,
                 child: _actionButton(
                   label: task.buttonText,
-                  enabled: task.isEnabled && !taskLoadingStates[task.id]!,
+                  enabled:
+                      task.isEnabled && !(taskLoadingStates[task.id] ?? false),
                   onTap: task.onAction,
                 ),
               ),

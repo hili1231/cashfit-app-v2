@@ -146,7 +146,6 @@ class NotificationService {
       'type': message.data['type'] ?? '',
       'postId': message.data['postId'] ?? '',
       'userId': message.data['userId'] ?? '',
-      'challengeId': message.data['challengeId'] ?? '',
     };
     final payload = jsonEncode(payloadData);
 

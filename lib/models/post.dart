@@ -9,7 +9,6 @@ class Post {
   final List<String> likes; // List of user IDs who liked the post
   final List<Map<String, dynamic>>
   comments; // [{"userId": "id", "userName": "name", "content": "comment", "timestamp": "2025-04-10T..."}]
-  final String? challengeId; // Optional: Link to a challenge
   final String? workoutId; // Optional: Link to a workout
 
   Post({
@@ -22,7 +21,6 @@ class Post {
     required this.timestamp,
     this.likes = const [],
     this.comments = const [],
-    this.challengeId,
     this.workoutId,
   });
 
@@ -37,7 +35,6 @@ class Post {
       'timestamp': timestamp.toIso8601String(),
       'likes': likes,
       'comments': comments,
-      'challengeId': challengeId,
       'workoutId': workoutId,
     };
   }
@@ -53,7 +50,6 @@ class Post {
       timestamp: DateTime.parse(map['timestamp']),
       likes: List<String>.from(map['likes'] ?? []),
       comments: List<Map<String, dynamic>>.from(map['comments'] ?? []),
-      challengeId: map['challengeId'],
       workoutId: map['workoutId'],
     );
   }

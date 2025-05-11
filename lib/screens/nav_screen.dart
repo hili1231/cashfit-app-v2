@@ -6,6 +6,9 @@ import 'home_screen.dart';
 import 'workouts/workouts_screen.dart';
 import 'workouts/workout_detail_screen.dart';
 import 'diets/diet_selector_screen.dart';
+import 'diets/meal_plan_screen.dart';
+import 'diets/diet_day_detail_screen.dart';
+import 'diets/meal_detail_screen.dart';
 import 'community_feed/community_feed_screen.dart';
 import 'side_hustle/side_hustle_screen.dart';
 import 'profile_screen.dart';
@@ -165,6 +168,19 @@ class NavScreenState extends State<NavScreen> {
             _pageController.jumpToPage(1);
           }
         });
+      } else if (detailScreen is MealPlanScreen ||
+          detailScreen is DietDayDetailScreen ||
+          detailScreen is MealDetailScreen ||
+          detailScreen is DeactivatedDietPlansScreen) {
+        selectedIndex = 2; // Diets tab index
+        detailScreen = null;
+        detailStack.clear();
+        // Defer jumpToPage until after the PageView is rendered
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_pageController.hasClients) {
+            _pageController.jumpToPage(2);
+          }
+        });
       } else {
         detailScreen = detailStack.isNotEmpty ? detailStack.removeLast() : null;
       }
@@ -322,7 +338,7 @@ class NavScreenState extends State<NavScreen> {
                 label: "Workouts",
               ),
               NavigationDestination(
-                icon: Icon(Icons.restaurant_menu, size: 28), // Updated icon
+                icon: Icon(Icons.restaurant_menu, size: 28),
                 label: "Diet",
               ),
               NavigationDestination(

@@ -160,7 +160,6 @@ class CacheService {
     return workoutMap;
   }
 
-  /// Get user's active diet plans - from cache with option to force refresh
   Future<Map<String, MealPlan>> getUserActiveDiets(
     String userId,
     List<ActiveDietPlan> activeDiets, {
@@ -239,37 +238,42 @@ class CacheService {
   /// Invalidate all cache items
   Future<void> clearAllCache() async {
     final prefs = await SharedPreferences.getInstance();
-    
+
     // Clear workout and meal plan caches
     await prefs.remove(kWorkoutProgramsKey);
     await prefs.remove(kMealPlansKey);
-    
+
     // Clear user-specific caches
-    final keys = prefs.getKeys()
-        .where((key) => key.startsWith(kUserWorkoutsKey) || 
-                         key.startsWith(kUserDietsKey))
-        .toList();
-    
+    final keys =
+        prefs
+            .getKeys()
+            .where(
+              (key) =>
+                  key.startsWith(kUserWorkoutsKey) ||
+                  key.startsWith(kUserDietsKey),
+            )
+            .toList();
+
     for (final key in keys) {
       await prefs.remove(key);
     }
-    
+
     _logger.i('Cleared all cache items');
   }
-  
+
   /// Get a single workout program by ID with caching
   Future<WorkoutProgram?> getSingleWorkoutProgram(
-    String workoutId, 
-    {bool forceRefresh = false}
-  ) async {
+    String workoutId, {
+    bool forceRefresh = false,
+  }) async {
     _logger.d('Getting single workout program: $workoutId');
-    
+
     if (!forceRefresh) {
       // Try to get from cache first
       final prefs = await SharedPreferences.getInstance();
       final singleKey = 'single_workout_$workoutId';
       final cachedData = prefs.getString(singleKey);
-      
+
       if (cachedData != null) {
         try {
           final Map<String, dynamic> workoutData = jsonDecode(cachedData);
@@ -280,36 +284,36 @@ class CacheService {
         }
       }
     }
-    
+
     return null;
   }
-  
+
   /// Cache a single workout program
   Future<void> cacheSingleWorkoutProgram(WorkoutProgram workout) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final singleKey = 'single_workout_${workout.id}';
-      
+
       await prefs.setString(singleKey, jsonEncode(workout.toMap()));
       _logger.i('Cached single workout: ${workout.id}');
     } catch (e) {
       _logger.e('Error caching single workout: $e');
     }
   }
-  
+
   /// Get a single meal plan by ID with caching
   Future<MealPlan?> getSingleMealPlan(
-    String mealPlanId, 
-    {bool forceRefresh = false}
-  ) async {
+    String mealPlanId, {
+    bool forceRefresh = false,
+  }) async {
     _logger.d('Getting single meal plan: $mealPlanId');
-    
+
     if (!forceRefresh) {
       // Try to get from cache first
       final prefs = await SharedPreferences.getInstance();
       final singleKey = 'single_mealplan_$mealPlanId';
       final cachedData = prefs.getString(singleKey);
-      
+
       if (cachedData != null) {
         try {
           final Map<String, dynamic> mealData = jsonDecode(cachedData);
@@ -320,16 +324,16 @@ class CacheService {
         }
       }
     }
-    
+
     return null;
   }
-  
+
   /// Cache a single meal plan
   Future<void> cacheSingleMealPlan(MealPlan mealPlan) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final singleKey = 'single_mealplan_${mealPlan.id}';
-      
+
       await prefs.setString(singleKey, jsonEncode(mealPlan.toMap()));
       _logger.i('Cached single meal plan: ${mealPlan.id}');
     } catch (e) {
@@ -344,25 +348,23 @@ class CacheService {
     final allKeys = prefs.getKeys();
     final now = DateTime.now().millisecondsSinceEpoch;
     const maxAge = 7 * 24 * 60 * 60 * 1000; // One week in milliseconds
-    
+
     // Get timestamp keys that are more than one week old
-    final oldTimestamps = allKeys
-        .where((key) => key.startsWith('timestamp_'))
-        .where((key) {
+    final oldTimestamps =
+        allKeys.where((key) => key.startsWith('timestamp_')).where((key) {
           final timestamp = prefs.getInt(key) ?? 0;
           return now - timestamp > maxAge;
-        })
-        .toList();
-    
+        }).toList();
+
     // Remove related caches for old timestamps
     for (final key in oldTimestamps) {
       final cacheKey = key.replaceFirst('timestamp_', '');
       final parts = cacheKey.split('_');
-      
+
       if (parts.length > 1) {
         final type = parts[0];
         final id = parts.length > 1 ? parts[1] : '';
-        
+
         if (type == 'userWorkouts') {
           await prefs.remove('$kUserWorkoutsKey$id');
         } else if (type == 'userDiets') {
@@ -371,12 +373,14 @@ class CacheService {
           await prefs.remove('single_$id');
         }
       }
-      
+
       // Remove the timestamp itself
       await prefs.remove(key);
     }
-    
-    _logger.i('Cache optimization completed, removed ${oldTimestamps.length} old entries');
+
+    _logger.i(
+      'Cache optimization completed, removed ${oldTimestamps.length} old entries',
+    );
   }
 
   // Private helper methods
@@ -631,21 +635,21 @@ class CacheService {
         // Check if we already have valid cache data
         final hasWorkoutCache = await _isCacheValid('workoutPrograms');
         final hasMealCache = await _isCacheValid('mealPlans');
-        
+
         final cacheTasks = <Future>[];
-        
+
         // Only refresh if the cache is invalid or expired
         if (!hasWorkoutCache) {
           cacheTasks.add(getWorkoutPrograms(forceRefresh: true));
         }
-        
+
         if (!hasMealCache) {
           cacheTasks.add(getMealPlans(forceRefresh: true));
         }
-        
+
         // Run periodic cache optimization
         cacheTasks.add(optimizeCache());
-        
+
         await Future.wait(cacheTasks);
         _logger.i('Global cache loading completed');
       } catch (e) {
@@ -653,6 +657,7 @@ class CacheService {
       }
     });
   }
+
   /// Load user-specific cache data
   Future<void> loadUserCache(
     String userId,
@@ -660,14 +665,17 @@ class CacheService {
     List<ActiveDietPlan> activeDiets,
   ) async {
     _logger.i('Loading user-specific cache data for user $userId');
-    
+
     // Run in a background task to avoid blocking the UI
     Future.microtask(() async {
       try {
         final tasks = <Future>[];
-        final userWorkoutCacheValid = await _isCacheValid('userWorkouts', userId);
+        final userWorkoutCacheValid = await _isCacheValid(
+          'userWorkouts',
+          userId,
+        );
         final userDietCacheValid = await _isCacheValid('userDiets', userId);
-        
+
         // Only load workouts if either cache is invalid or force refresh is needed
         if (activeWorkouts.isNotEmpty && !userWorkoutCacheValid) {
           _logger.i('Loading ${activeWorkouts.length} active workout programs');
@@ -677,14 +685,16 @@ class CacheService {
         } else {
           _logger.i('User workout cache is valid, skipping reload');
         }
-    
+
         if (activeDiets.isNotEmpty && !userDietCacheValid) {
           _logger.i('Loading ${activeDiets.length} active diet plans');
-          tasks.add(getUserActiveDiets(userId, activeDiets, forceRefresh: false));
+          tasks.add(
+            getUserActiveDiets(userId, activeDiets, forceRefresh: false),
+          );
         } else {
           _logger.i('User diet cache is valid, skipping reload');
         }
-    
+
         await Future.wait(tasks);
         _logger.i('User cache loading completed');
       } catch (e) {
@@ -696,49 +706,53 @@ class CacheService {
   /// Improves app loading time by prefetching frequently used data
   Future<void> prefetchFrequentlyAccessedData() async {
     _logger.i('Prefetching frequently accessed data');
-    
+
     try {
       final prefs = await SharedPreferences.getInstance();
-      
+
       // Check when data was last prefetched
       final lastPrefetchTime = prefs.getInt('last_prefetch_timestamp') ?? 0;
       final now = DateTime.now().millisecondsSinceEpoch;
-      
+
       // Only prefetch once per day to avoid unnecessary network calls
       if (now - lastPrefetchTime > const Duration(hours: 24).inMilliseconds) {
         // Run prefetching in background
         Future.microtask(() async {
           try {
             // Prefetch the most popular workout programs
-            final popularWorkouts = await FirebaseFirestore.instance
-                .collection('workoutPrograms')
-                .orderBy('popularity', descending: true)
-                .limit(5)
-                .get();
-                
+            final popularWorkouts =
+                await FirebaseFirestore.instance
+                    .collection('workoutPrograms')
+                    .orderBy('popularity', descending: true)
+                    .limit(5)
+                    .get();
+
             if (popularWorkouts.docs.isNotEmpty) {
-              final programs = popularWorkouts.docs
-                  .map((doc) => WorkoutProgram.fromMap(doc.data(), doc.id))
-                  .toList();
-                  
+              final programs =
+                  popularWorkouts.docs
+                      .map((doc) => WorkoutProgram.fromMap(doc.data(), doc.id))
+                      .toList();
+
               await _cacheWorkoutPrograms(programs);
             }
-            
+
             // Prefetch the most popular meal plans
-            final popularMeals = await FirebaseFirestore.instance
-                .collection('mealPlans')
-                .orderBy('popularity', descending: true)
-                .limit(5)
-                .get();
-                
+            final popularMeals =
+                await FirebaseFirestore.instance
+                    .collection('mealPlans')
+                    .orderBy('popularity', descending: true)
+                    .limit(5)
+                    .get();
+
             if (popularMeals.docs.isNotEmpty) {
-              final plans = popularMeals.docs
-                  .map((doc) => MealPlan.fromMap(doc.data()))
-                  .toList();
-                  
+              final plans =
+                  popularMeals.docs
+                      .map((doc) => MealPlan.fromMap(doc.data()))
+                      .toList();
+
               await _cacheMealPlans(plans);
             }
-            
+
             // Update the timestamp
             await prefs.setInt('last_prefetch_timestamp', now);
             _logger.i('Prefetching completed successfully');
@@ -753,42 +767,49 @@ class CacheService {
       _logger.e('Error checking prefetch status: $e');
     }
   }
-  
+
   /// Prioritizes cache loading by loading critical data first
   Future<void> prioritizedCacheLoad(String userId) async {
     try {
       _logger.i('Starting prioritized cache loading');
-      
+
       // Load active workouts first (most critical)
-      final activeWorkoutIds = await _getActiveEntityIds(userId, 'activeWorkoutPrograms');
+      final activeWorkoutIds = await _getActiveEntityIds(
+        userId,
+        'activeWorkoutPrograms',
+      );
       if (activeWorkoutIds.isNotEmpty) {
         for (final id in activeWorkoutIds) {
           await getSingleWorkoutProgram(id, forceRefresh: false);
         }
       }
-      
+
       // Then load active diet plans
-      final activeDietIds = await _getActiveEntityIds(userId, 'activeDietPlans');
+      final activeDietIds = await _getActiveEntityIds(
+        userId,
+        'activeDietPlans',
+      );
       if (activeDietIds.isNotEmpty) {
         for (final id in activeDietIds) {
           await getSingleMealPlan(id, forceRefresh: false);
         }
       }
-      
+
       _logger.i('Prioritized cache loading completed');
     } catch (e) {
       _logger.e('Error in prioritized cache loading: $e');
     }
   }
-  
+
   Future<List<String>> _getActiveEntityIds(String userId, String entity) async {
     try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .collection(entity)
-          .get();
-          
+      final snapshot =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(userId)
+              .collection(entity)
+              .get();
+
       return snapshot.docs.map((doc) {
         if (entity == 'activeWorkoutPrograms') {
           return doc.data()['workoutProgramId'] as String;

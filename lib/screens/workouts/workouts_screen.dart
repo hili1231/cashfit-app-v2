@@ -2,6 +2,7 @@ import 'package:cashfit/models/active_workout_program.dart';
 import 'package:cashfit/models/workout_program.dart';
 import 'package:cashfit/providers/user_provider.dart';
 import 'package:cashfit/screens/nav_screen.dart';
+import 'package:cashfit/screens/personalize/workout_diet_builder_screen.dart';
 import 'package:cashfit/screens/workouts/workout_day_detail_screen.dart';
 import 'package:cashfit/services/cache_service.dart';
 import 'package:cashfit/theme.dart';
@@ -66,10 +67,12 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
         return value;
       });
     }
-  }  Future<List<WorkoutProgram>> _fetchAllWorkouts() async {
+  }
+
+  Future<List<WorkoutProgram>> _fetchAllWorkouts() async {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     List<WorkoutProgram> allWorkouts = [];
-    
+
     try {
       debugPrint('Fetching all workout programs using CacheService');
       // Use the cache service to retrieve workout programs
@@ -133,7 +136,9 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Please log in to add workouts to your active programs'),
+            content: Text(
+              'Please log in to add workouts to your active programs',
+            ),
           ),
         );
         if (navState != null) {
@@ -171,7 +176,8 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
         'completedDays': [],
       });
 
-      debugPrint('Removing workout program from removedWorkoutPrograms');      await FirebaseFirestore.instance
+      debugPrint('Removing workout program from removedWorkoutPrograms');
+      await FirebaseFirestore.instance
           .collection('users')
           .doc(userProvider.firebaseUser!.uid)
           .collection('removedWorkoutPrograms')
@@ -179,19 +185,23 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
           .delete();
 
       // Invalidate the cache to force a refresh
-      await CacheService().invalidateUserWorkoutsCache(userProvider.firebaseUser!.uid);
-      
+      await CacheService().invalidateUserWorkoutsCache(
+        userProvider.firebaseUser!.uid,
+      );
+
       // Optimized approach - only fetch and update active programs
-      final activePrograms = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userProvider.firebaseUser!.uid)
-          .collection('activeWorkoutPrograms')
-          .get();
-          
-      final mappedPrograms = activePrograms.docs
-          .map((doc) => ActiveWorkoutProgram.fromMap(doc.data()))
-          .toList();
-          
+      final activePrograms =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(userProvider.firebaseUser!.uid)
+              .collection('activeWorkoutPrograms')
+              .get();
+
+      final mappedPrograms =
+          activePrograms.docs
+              .map((doc) => ActiveWorkoutProgram.fromMap(doc.data()))
+              .toList();
+
       // Update just the active workouts instead of refreshing all user data
       await userProvider.updateActiveWorkoutPrograms(mappedPrograms);
 
@@ -308,23 +318,28 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
           removedDate: DateTime.now(),
           uid: userProvider.firebaseUser!.uid,
         ).toMap(),
-      );      debugPrint('Deleting active workout program from Firestore');
+      );
+      debugPrint('Deleting active workout program from Firestore');
       await activeProgramRef.delete();
 
       // Invalidate the cache to force a refresh
-      await CacheService().invalidateUserWorkoutsCache(userProvider.firebaseUser!.uid);
-      
+      await CacheService().invalidateUserWorkoutsCache(
+        userProvider.firebaseUser!.uid,
+      );
+
       // Optimized approach - only fetch and update active programs
-      final activePrograms = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userProvider.firebaseUser!.uid)
-          .collection('activeWorkoutPrograms')
-          .get();
-          
-      final mappedPrograms = activePrograms.docs
-          .map((doc) => ActiveWorkoutProgram.fromMap(doc.data()))
-          .toList();
-          
+      final activePrograms =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(userProvider.firebaseUser!.uid)
+              .collection('activeWorkoutPrograms')
+              .get();
+
+      final mappedPrograms =
+          activePrograms.docs
+              .map((doc) => ActiveWorkoutProgram.fromMap(doc.data()))
+              .toList();
+
       // Update just the active workouts instead of refreshing all user data
       await userProvider.updateActiveWorkoutPrograms(mappedPrograms);
 
@@ -355,45 +370,60 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
       }
     }
   }
+
   Future<Map<String, WorkoutProgram>> _fetchWorkoutPrograms(
     List<String> programIds,
   ) async {
-    final Map<String, WorkoutProgram> workoutMap = {};    if (programIds.isEmpty) {
+    final Map<String, WorkoutProgram> workoutMap = {};
+    if (programIds.isEmpty) {
       _logger.w('No program IDs provided to fetch');
       return workoutMap;
     }
-    
+
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     if (!userProvider.isLoggedIn || userProvider.firebaseUser == null) {
       _logger.w('User not logged in, cannot fetch workout programs');
       return workoutMap;
     }
-    
+
     // Use CacheService to get active workouts for the user
-    final activeWorkoutPrograms = userProvider.currentUser?.activeWorkoutPrograms ?? [];
-    
+    final activeWorkoutPrograms =
+        userProvider.currentUser?.activeWorkoutPrograms ?? [];
+
     if (activeWorkoutPrograms.isEmpty) {
       _logger.w('No active workout programs in currentUser object');
       return workoutMap;
     }
-      try {
-      _logger.d('Using CacheService to fetch active workouts for user: ${userProvider.firebaseUser!.uid}');
+    try {
+      _logger.d(
+        'Using CacheService to fetch active workouts for user: ${userProvider.firebaseUser!.uid}',
+      );
       _logger.d('Active workout IDs: ${programIds.join(', ')}');
-        _logger.i('Fetching active workouts for user: ${userProvider.firebaseUser!.uid}');
+      _logger.i(
+        'Fetching active workouts for user: ${userProvider.firebaseUser!.uid}',
+      );
       _logger.d('Active workout IDs from params: ${programIds.join(', ')}');
-      _logger.d('Active workout IDs from user object: ${activeWorkoutPrograms.map((wp) => wp.workoutProgramId).join(', ')}');
-      
+      _logger.d(
+        'Active workout IDs from user object: ${activeWorkoutPrograms.map((wp) => wp.workoutProgramId).join(', ')}',
+      );
+
       // Force refresh to ensure we get the latest data
       final cachedWorkouts = await CacheService().getUserActiveWorkouts(
         userProvider.firebaseUser!.uid,
         activeWorkoutPrograms,
-        forceRefresh: true // Force refresh to get updated data
+        forceRefresh: true, // Force refresh to get updated data
       );
-      
-      _logger.i('Retrieved ${cachedWorkouts.length} workout programs from cache');
-      
+
+      _logger.i(
+        'Retrieved ${cachedWorkouts.length} workout programs from cache',
+      );
+
       // We still need to apply the deactivation status
       for (final entry in cachedWorkouts.entries) {
+        // Skip workouts that have a userId (user-specific workouts)
+        if (entry.value.userId != null && entry.value.userId!.isNotEmpty) {
+          continue;
+        }
         workoutMap[entry.key] = entry.value;
         _deactivatedWorkouts[entry.key] = false;
       }
@@ -405,18 +435,22 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
         for (var i = 0; i < programIds.length; i += batchSize) {
           final batchIds = programIds.sublist(
             i,
-            i + batchSize > programIds.length ? programIds.length : i + batchSize,
+            i + batchSize > programIds.length
+                ? programIds.length
+                : i + batchSize,
           );
-          
-          try {
-            final programSnapshot = await FirebaseFirestore.instance
-                .collection('workoutPrograms')
-                .where(FieldPath.documentId, whereIn: batchIds)
-                .get();
 
-            final batchWorkouts = programSnapshot.docs
-                .map((doc) => WorkoutProgram.fromMap(doc.data(), doc.id))
-                .toList();
+          try {
+            final programSnapshot =
+                await FirebaseFirestore.instance
+                    .collection('workoutPrograms')
+                    .where(FieldPath.documentId, whereIn: batchIds)
+                    .get();
+
+            final batchWorkouts =
+                programSnapshot.docs
+                    .map((doc) => WorkoutProgram.fromMap(doc.data(), doc.id))
+                    .toList();
 
             for (var workout in batchWorkouts) {
               workoutMap[workout.id] = workout;
@@ -491,6 +525,11 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                 final advancedWorkouts = <WorkoutProgram>[];
 
                 for (var wp in allWorkouts) {
+                  // Skip workouts that have a userId (user-specific workouts)
+                  if (wp.userId != null && wp.userId!.isNotEmpty) {
+                    continue;
+                  }
+                  
                   final level = wp.level.trim().toLowerCase();
                   if (level == "beginner") {
                     beginnerWorkouts.add(wp);
@@ -531,7 +570,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                                       MainAxisAlignment.spaceBetween,
                                   children: [
                                     Text(
-                                      "Your Active Programs",
+                                      "ACTIVE WORKOUTS",
                                       style: theme.textTheme.titleMedium
                                           ?.copyWith(
                                             color: colorScheme.onSurface,
@@ -560,41 +599,83 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 12),                                Builder(
+                                const SizedBox(height: 12),
+                                Builder(
                                   builder: (context) {
-                                    final activePrograms = userProvider.currentUser?.activeWorkoutPrograms ?? [];
-                                    
-                                    _logger.i('User has ${activePrograms.length} active workout programs');
+                                    final activePrograms =
+                                        userProvider
+                                            .currentUser
+                                            ?.activeWorkoutPrograms ??
+                                        [];
+
+                                    _logger.i(
+                                      'User has ${activePrograms.length} active workout programs',
+                                    );
                                     
                                     if (activePrograms.isEmpty) {
-                                      return Center(
-                                        child: Text(
-                                          "No active programs",
-                                          style: theme.textTheme.bodyMedium
-                                              ?.copyWith(
-                                                color:
-                                                    colorScheme
-                                                        .onSurfaceVariant,
+                                      return SizedBox(
+                                        height: 200,
+                                        child: ListView(
+                                          scrollDirection: Axis.horizontal,
+                                          physics: const BouncingScrollPhysics(),
+                                          children: [
+                                            SizedBox(
+                                              width: 180,
+                                              child: Card(
+                                                elevation: 4,
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius: BorderRadius.circular(12),
+                                                ),
+                                                color: colorScheme.surface,
+                                                child: InkWell(
+                                                  onTap: () {
+                                                    final navState = context.findAncestorStateOfType<NavScreenState>();
+                                                    navState?.setDetailScreen(
+                                                      const WorkoutDietBuilderScreen(),
+                                                    );
+                                                  },
+                                                  borderRadius: BorderRadius.circular(12),
+                                                  child: Column(
+                                                    mainAxisAlignment: MainAxisAlignment.center,
+                                                    children: [
+                                                      Icon(
+                                                        Icons.add_circle_outline,
+                                                        size: 48,
+                                                        color: colorScheme.primary,
+                                                      ),
+                                                      const SizedBox(height: 8),
+                                                      Text(
+                                                        'Build More Plans',
+                                                        style: theme.textTheme.titleMedium?.copyWith(
+                                                          color: colorScheme.primary,
+                                                          fontWeight: FontWeight.bold,
+                                                        ),
+                                                        textAlign: TextAlign.center,
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
                                               ),
+                                            ),
+                                          ],
                                         ),
                                       );
-                                    }return FutureBuilder<
-                                      Map<String, WorkoutProgram>
-                                    >(
+                                    }
+
+                                    return FutureBuilder<Map<String, WorkoutProgram>>(
                                       future: _fetchWorkoutPrograms(
-                                        activePrograms
-                                            .map((p) => p.workoutProgramId)
-                                            .toList(),
+                                        activePrograms.map((p) => p.workoutProgramId).toList(),
                                       ),
                                       builder: (context, workoutSnapshot) {
-                                        if (workoutSnapshot.connectionState ==
-                                            ConnectionState.waiting) {
+                                        if (workoutSnapshot.connectionState == ConnectionState.waiting) {
                                           return const Center(
                                             child: CircularProgressIndicator(),
                                           );
                                         }
                                         if (workoutSnapshot.hasError) {
-                                          _logger.e('Error fetching active workout programs: ${workoutSnapshot.error}');
+                                          _logger.e(
+                                            'Error fetching active workout programs: ${workoutSnapshot.error}',
+                                          );
                                           return Center(
                                             child: Text(
                                               'Error: ${workoutSnapshot.error}',
@@ -609,7 +690,9 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                                         }
                                         if (!workoutSnapshot.hasData ||
                                             workoutSnapshot.data!.isEmpty) {
-                                          _logger.w('No active workout programs found in cache');
+                                          _logger.w(
+                                            'No active workout programs found in cache',
+                                          );
                                           return Center(
                                             child: Text(
                                               "No active programs found",
@@ -621,24 +704,32 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                                                   ),
                                             ),
                                           );
-                                        }                                        final workoutMap =
+                                        }
+                                        final workoutMap =
                                             workoutSnapshot.data!;
-                                        
-                                        _logger.i('Retrieved ${workoutMap.length} workout programs from cache');
-                                        _logger.d('Workout IDs in map: ${workoutMap.keys.join(", ")}');
-                                        
+
+                                        _logger.i(
+                                          'Retrieved ${workoutMap.length} workout programs from cache',
+                                        );
+                                        _logger.d(
+                                          'Workout IDs in map: ${workoutMap.keys.join(", ")}',
+                                        );
+
                                         final activeData =
                                             activePrograms
-                                                .where(
-                                                  (program) {
-                                                    final hasWorkout = workoutMap.containsKey(
-                                                        program.workoutProgramId);
-                                                    if (!hasWorkout) {
-                                                      _logger.w('Active workout ${program.workoutProgramId} not found in cache');
-                                                    }
-                                                    return hasWorkout;
-                                                  },
-                                                )
+                                                .where((program) {
+                                                  final hasWorkout = workoutMap
+                                                      .containsKey(
+                                                        program
+                                                            .workoutProgramId,
+                                                      );
+                                                  if (!hasWorkout) {
+                                                    _logger.w(
+                                                      'Active workout ${program.workoutProgramId} not found in cache',
+                                                    );
+                                                  }
+                                                  return hasWorkout;
+                                                })
                                                 .map(
                                                   (program) => {
                                                     'program': program,
@@ -662,18 +753,55 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                                             ),
                                           );
                                         }
-
+                                        
                                         return SizedBox(
                                           height: 200,
                                           child: ListView.separated(
                                             scrollDirection: Axis.horizontal,
-                                            physics:
-                                                const BouncingScrollPhysics(),
-                                            itemCount: activeData.length,
-                                            separatorBuilder:
-                                                (_, __) =>
-                                                    const SizedBox(width: 14),
+                                            physics: const BouncingScrollPhysics(),
+                                            itemCount: activeData.length + 1,
+                                            separatorBuilder: (_, __) => const SizedBox(width: 14),
                                             itemBuilder: (context, index) {
+                                              if (index == activeData.length) {
+                                                return SizedBox(
+                                                  width: 180,
+                                                  child: Card(
+                                                    elevation: 4,
+                                                    shape: RoundedRectangleBorder(
+                                                      borderRadius: BorderRadius.circular(12),
+                                                    ),
+                                                    color: colorScheme.surface,
+                                                    child: InkWell(
+                                                      onTap: () {
+                                                        final navState = context.findAncestorStateOfType<NavScreenState>();
+                                                        navState?.setDetailScreen(
+                                                          const WorkoutDietBuilderScreen(),
+                                                        );
+                                                      },
+                                                      borderRadius: BorderRadius.circular(12),
+                                                      child: Column(
+                                                        mainAxisAlignment: MainAxisAlignment.center,
+                                                        children: [
+                                                          Icon(
+                                                            Icons.add_circle_outline,
+                                                            size: 48,
+                                                            color: colorScheme.primary,
+                                                          ),
+                                                          const SizedBox(height: 8),
+                                                          Text(
+                                                            'Build More Plans',
+                                                            style: theme.textTheme.titleMedium?.copyWith(
+                                                              color: colorScheme.primary,
+                                                              fontWeight: FontWeight.bold,
+                                                            ),
+                                                            textAlign: TextAlign.center,
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ),
+                                                );
+                                              }
                                               final workout =
                                                   activeData[index]['workout']
                                                       as WorkoutProgram;
@@ -801,21 +929,21 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                             _buildWorkoutCategorySection(
                               theme,
                               colorScheme,
-                              "Beginner",
+                              "BEGINNER",
                               beginnerWorkouts,
                             ),
                           if (intermediateWorkouts.isNotEmpty)
                             _buildWorkoutCategorySection(
                               theme,
                               colorScheme,
-                              "Intermediate",
+                              "INTERMEDIATE",
                               intermediateWorkouts,
                             ),
                           if (advancedWorkouts.isNotEmpty)
                             _buildWorkoutCategorySection(
                               theme,
                               colorScheme,
-                              "Advanced",
+                              "ADVANCED",
                               advancedWorkouts,
                             ),
                         ],

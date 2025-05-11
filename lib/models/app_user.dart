@@ -30,8 +30,6 @@ class AppUser {
   bool autoRenew;
   List<ActiveWorkoutProgram> activeWorkoutPrograms;
   List<ActiveDietPlan> activeDietPlans;
-  List<String> joinedChallenges;
-  String? activeChallengeId;
   List<String> joinedSideHustles;
   DateTime? lastLogin;
   int? streak;
@@ -58,8 +56,6 @@ class AppUser {
   double? mileRunTime;
   List<String> medicalConditions;
   List<String>? preferredWorkoutTimes;
-  List<Map<String, dynamic>> challengeCheckIns;
-  int challengeProgress;
   int? dailyStepTarget;
   List<Map<String, dynamic>> stepTargetHistory;
   double? dailyCalorieTarget;
@@ -116,8 +112,6 @@ class AppUser {
     this.autoRenew = false,
     required this.activeWorkoutPrograms,
     required this.activeDietPlans,
-    this.joinedChallenges = const [],
-    this.activeChallengeId,
     this.joinedSideHustles = const [],
     this.lastLogin,
     this.streak = 0,
@@ -144,8 +138,6 @@ class AppUser {
     this.mileRunTime,
     this.medicalConditions = const [],
     this.preferredWorkoutTimes = const [],
-    this.challengeCheckIns = const [],
-    this.challengeProgress = 0,
     this.dailyStepTarget,
     this.stepTargetHistory = const [],
     this.dailyCalorieTarget,
@@ -208,7 +200,6 @@ class AppUser {
       'activeWorkoutPrograms':
           activeWorkoutPrograms.map((p) => p.toMap()).toList(),
       'activeDietPlans': activeDietPlans.map((d) => d.toMap()).toList(),
-      'joinedChallenges': joinedChallenges,
       'joinedSideHustles': joinedSideHustles,
       'lastLogin': lastLogin != null ? Timestamp.fromDate(lastLogin!) : null,
       'streak': streak,
@@ -235,9 +226,6 @@ class AppUser {
       'mileRunTime': mileRunTime,
       'medicalConditions': medicalConditions,
       'preferredWorkoutTimes': preferredWorkoutTimes,
-      'challengeCheckIns': challengeCheckIns,
-      'activeChallengeId': activeChallengeId,
-      'challengeProgress': challengeProgress,
       'dailyStepTarget': dailyStepTarget,
       'stepTargetHistory': stepTargetHistory,
       'dailyCalorieTarget': dailyCalorieTarget,
@@ -305,7 +293,6 @@ class AppUser {
       id: map['id'] ?? '',
       name: map['name'] ?? '',
       email: map['email'] ?? '',
-      activeChallengeId: map['activeChallengeId'],
       avatar: map['avatar'] ?? '',
       workoutsCompleted: map['workoutsCompleted'] ?? 0,
       mealsTracked: map['mealsTracked'] ?? 0,
@@ -340,7 +327,6 @@ class AppUser {
               ?.map((e) => ActiveDietPlan.fromMap(e))
               .toList() ??
           [],
-      joinedChallenges: List<String>.from(map['joinedChallenges'] ?? []),
       joinedSideHustles: List<String>.from(map['joinedSideHustles'] ?? []),
       lastLogin:
           map['lastLogin'] != null
@@ -383,10 +369,6 @@ class AppUser {
       preferredWorkoutTimes: List<String>.from(
         map['preferredWorkoutTimes'] ?? [],
       ),
-      challengeCheckIns: List<Map<String, dynamic>>.from(
-        map['challengeCheckIns'] ?? [],
-      ),
-      challengeProgress: map['challengeProgress'] ?? 0,
       dailyStepTarget: map['dailyStepTarget'],
       stepTargetHistory: List<Map<String, dynamic>>.from(
         map['stepTargetHistory'] ?? [],
@@ -474,7 +456,9 @@ class AppUser {
     return premiumExpiryDate!.difference(DateTime.now()).inDays;
   }
 
-  ActiveDietPlan? get activeMealPlan => activeDietPlans.isNotEmpty ? activeDietPlans.first : null;
+  ActiveDietPlan? get activeMealPlan =>
+      activeDietPlans.isNotEmpty ? activeDietPlans.first : null;
 
-  ActiveWorkoutProgram? get activeWorkout => activeWorkoutPrograms.isNotEmpty ? activeWorkoutPrograms.first : null;
+  ActiveWorkoutProgram? get activeWorkout =>
+      activeWorkoutPrograms.isNotEmpty ? activeWorkoutPrograms.first : null;
 }

@@ -1,7 +1,7 @@
 class Donation {
   final String donorId;
   final String
-  recipientUserId; // The challenge participant receiving the donation
+  recipientUserId;
   final double amount;
   final DateTime date; // When the donation was made
 

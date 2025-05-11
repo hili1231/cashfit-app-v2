@@ -6,10 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '/ad_helper.dart';
+import '../ad_helper.dart';
 import '../models/meal_plan.dart';
 import '../models/workout_program.dart';
-import '../models/challenge.dart';
 import '../models/side_hustle.dart';
 import '../models/active_diet_plan.dart';
 import '../models/active_workout_program.dart';
@@ -19,33 +18,10 @@ import '../widgets/meal_card.dart';
 import '../screens/personalize/workout_diet_builder_screen.dart' as personalize;
 import '../screens/side_hustle/side_hustle_detail_screen.dart';
 import '../screens/diets/diet_selector_screen.dart';
+import '../screens/diets/diet_day_detail_screen.dart';
+import '../screens/workouts/workout_day_detail_screen.dart' as workout_detail;
 import '../providers/user_provider.dart';
 import 'side_hustle/side_hustle_screen.dart';
-
-class _WorkoutDietHeaderDelegate extends SliverPersistentHeaderDelegate {
-  final Widget child;
-  final double height;
-  _WorkoutDietHeaderDelegate({required this.child, required this.height});
-
-  @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) {
-    return SizedBox.expand(child: child);
-  }
-
-  @override
-  double get maxExtent => height;
-  @override
-  double get minExtent => height;
-
-  @override
-  bool shouldRebuild(covariant _WorkoutDietHeaderDelegate oldDelegate) {
-    return oldDelegate.child != child || oldDelegate.height != height;
-  }
-}
 
 class HomeScreen extends StatefulWidget {
   final MealPlan? activeMealPlan;
@@ -60,6 +36,11 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   late Future<Map<String, dynamic>> _homeDataFuture;
   bool _isAdRewardButtonEnabled = true;
+
+  // Card size constants
+  static const double _cardWidth = 180;
+  static const double _cardHeight = 220;
+  static const EdgeInsets _cardPadding = EdgeInsets.only(right: 12);
 
   @override
   void initState() {
@@ -86,21 +67,17 @@ class _HomeScreenState extends State<HomeScreen> {
     final workoutsFuture = cacheService.getWorkoutPrograms();
     final mealPlansFuture = cacheService.getMealPlans();
 
-    // Batch Firestore queries for challenges and side hustles
     final firestore = FirebaseFirestore.instance;
-    final challengesFuture = firestore.collection('challenges').get();
     final hustlesFuture = firestore.collection('sideHustles').get();
-
     final results = await Future.wait([
       workoutsFuture,
       mealPlansFuture,
-      challengesFuture,
       hustlesFuture,
     ]);
 
     final workoutPrograms = results[0] as List<WorkoutProgram>;
     final mealPlans = results[1] as List<MealPlan>;
-    final hustlesSnapshot = results[3] as QuerySnapshot;
+    final hustlesSnapshot = results[2] as QuerySnapshot;
     final sideHustles =
         hustlesSnapshot.docs
             .map(
@@ -114,7 +91,8 @@ class _HomeScreenState extends State<HomeScreen> {
       'sideHustles': sideHustles,
     };
   }
-  Widget _buildActivePlansSection(BuildContext context) {
+
+  Widget _buildActivePlansCards(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -122,191 +100,303 @@ class _HomeScreenState extends State<HomeScreen> {
     final activeMealPlan = userProvider.currentUser?.activeMealPlan;
     final activeWorkout = userProvider.currentUser?.activeWorkout;
 
-    if (activeMealPlan == null && activeWorkout == null) {
-      return Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "BUILD YOUR PLAN",
-              style: theme.textTheme.titleMedium?.copyWith(
-                color: colorScheme.onSurface,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              "You don't have an active meal plan or workout program. Start building your personalized plan now!",
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 12),
-            FilledButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const personalize.WorkoutDietBuilderScreen(),
-                  ),
-                );
-              },
-              child: const Text("Build Your Plan"),
-            ),
-          ],
-        ),
-      );
-    }    // Get the active plans directly from the user model
-    final List<ActiveWorkoutProgram> activeWorkouts = 
+    final List<ActiveWorkoutProgram> activeWorkouts =
         activeWorkout != null ? [activeWorkout] : [];
 
-    final List<ActiveDietPlan> activeDiets = 
+    final List<ActiveDietPlan> activeDiets =
         activeMealPlan != null ? [activeMealPlan] : [];
 
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (activeWorkout != null) ...[
-            Text(
-              "ACTIVE WORKOUT",
-              style: theme.textTheme.titleMedium?.copyWith(
-                color: colorScheme.onSurface,
-                fontWeight: FontWeight.bold,
-              ),
-            ),            const SizedBox(height: 8),
-            FutureBuilder<Map<String, WorkoutProgram>>(
-              future: CacheService().getUserActiveWorkouts(
-                userProvider.firebaseUser!.uid,
-                activeWorkouts,
-              ),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                
-                final workoutMap = snapshot.data;
-                if (workoutMap == null || workoutMap.isEmpty) {
-                  return Text(
-                    "No workout details available",
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle(context, "ACTIVE PLANS"),
+        SizedBox(
+          height: _cardHeight,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            children: [
+              // Active Workout Card
+              if (activeWorkout != null)
+                Padding(
+                  padding: _cardPadding,
+                  child: SizedBox(
+                    width: _cardWidth,
+                    height: _cardHeight,
+                    child: FutureBuilder<Map<String, WorkoutProgram>>(
+                      future: CacheService().getUserActiveWorkouts(
+                        userProvider.firebaseUser!.uid,
+                        activeWorkouts,
+                      ),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return Center(
+                            child: Card(
+                              elevation: 4,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Center(
+                                child: CircularProgressIndicator(),
+                              ),
+                            ),
+                          );
+                        }
+
+                        final workoutMap = snapshot.data;
+                        if (workoutMap == null || workoutMap.isEmpty) {
+                          return Card(
+                            elevation: 4,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Center(
+                              child: Text(
+                                "No workout details",
+                                style: theme.textTheme.bodyMedium,
+                              ),
+                            ),
+                          );
+                        }
+
+                        // Get the first workout program from the map
+                        final workoutProgram = workoutMap.values.first;
+                        return Stack(
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                  color: colorScheme.primary,
+                                  width: 2,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: WorkoutCard(
+                                workout: workoutProgram,
+                                currentDay: activeWorkout.currentDay,
+                                onDayButtonPressed: () {
+                                  final navState =
+                                      context
+                                          .findAncestorStateOfType<
+                                            NavScreenState
+                                          >();
+                                  navState?.setDetailScreen(
+                                    workout_detail.DayDetailScreen(
+                                      dayNumber: activeWorkout.currentDay,
+                                      dayExercises:
+                                          workoutProgram
+                                              .days['Day ${activeWorkout.currentDay}'] ??
+                                          [],
+                                      workout: workoutProgram,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                            Positioned(
+                              top: 8,
+                              right: 8,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: colorScheme.primary,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  'Active',
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: colorScheme.onPrimary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
-                  );
-                }
-                  // Get the first workout program from the map, since we're only loading one
-                final workoutProgram = workoutMap.values.first;
-                
-                return Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: colorScheme.primary,
-                      width: 2,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Stack(
-                    children: [
-                      WorkoutCard(workout: workoutProgram),
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
+                ),
+
+              // Active Meal Plan Card
+              if (activeMealPlan != null)
+                Padding(
+                  padding: _cardPadding,
+                  child: SizedBox(
+                    width: _cardWidth,
+                    height: _cardHeight,
+                    child: FutureBuilder<Map<String, MealPlan>>(
+                      future: CacheService().getUserActiveDiets(
+                        userProvider.firebaseUser!.uid,
+                        activeDiets,
+                      ),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return Center(
+                            child: Card(
+                              elevation: 4,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Center(
+                                child: CircularProgressIndicator(),
+                              ),
+                            ),
+                          );
+                        }
+
+                        final dietMap = snapshot.data;
+                        if (dietMap == null || dietMap.isEmpty) {
+                          return Card(
+                            elevation: 4,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Center(
+                              child: Text(
+                                "No meal plan details",
+                                style: theme.textTheme.bodyMedium,
+                              ),
+                            ),
+                          );
+                        }
+
+                        // Get the first meal plan from the map
+                        final mealPlan = dietMap.values.first;
+                        return Stack(
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                  color: colorScheme.primary,
+                                  width: 2,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: MealPlanCard(
+                                mealPlan: mealPlan,
+                                currentDay: activeMealPlan.currentDay,
+                                onDayButtonPressed: () {
+                                  final navState =
+                                      context
+                                          .findAncestorStateOfType<
+                                            NavScreenState
+                                          >();
+                                  if (navState != null &&
+                                      activeMealPlan.currentDay <=
+                                          mealPlan.days.length) {
+                                    // Navigate to meal plan day detail
+                                    final currentDay =
+                                        mealPlan.days[activeMealPlan
+                                                .currentDay -
+                                            1];
+                                    navState.setDetailScreen(
+                                      DietDayDetailScreen(
+                                        plan: mealPlan,
+                                        day: currentDay,
+                                      ),
+                                    );
+                                  }
+                                },
+                              ),
+                            ),
+                            Positioned(
+                              top: 8,
+                              right: 8,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: colorScheme.primary,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  'Active',
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: colorScheme.onPrimary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ),
+
+              // Always show the "Build Plan" card
+              Padding(
+                padding: _cardPadding,
+                child: SizedBox(
+                  width: _cardWidth,
+                  height: _cardHeight,
+                  child: Card(
+                    elevation: 4,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    color: colorScheme.surface,
+                    child: InkWell(
+                      onTap: () {
+                        final navState =
+                            context.findAncestorStateOfType<NavScreenState>();
+                        if (navState != null) {
+                          navState.setDetailScreen(
+                            const personalize.WorkoutDietBuilderScreen(),
+                          );
+                        } else {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (_) =>
+                                      const personalize.WorkoutDietBuilderScreen(),
+                            ),
+                          );
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.add_circle,
                             color: colorScheme.primary,
-                            borderRadius: BorderRadius.circular(8),
+                            size: 48,
                           ),
-                          child: Text(
-                            'Active',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: colorScheme.onPrimary,
+                          const SizedBox(height: 12),
+                          Text(
+                            "Build More Plans",
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: colorScheme.onSurface,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 16),
-          ],
-          if (activeMealPlan != null) ...[
-            Text(
-              "ACTIVE MEAL PLAN",
-              style: theme.textTheme.titleMedium?.copyWith(
-                color: colorScheme.onSurface,
-                fontWeight: FontWeight.bold,
-              ),
-            ),            const SizedBox(height: 8),
-            FutureBuilder<Map<String, MealPlan>>(
-              future: CacheService().getUserActiveDiets(
-                userProvider.firebaseUser!.uid,
-                activeDiets,
-              ),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                
-                final dietMap = snapshot.data;
-                if (dietMap == null || dietMap.isEmpty) {
-                  return Text(
-                    "No meal plan details available",
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                  );
-                }
-                
-                // Get the first meal plan from the map, since we're only loading one
-                final mealPlan = dietMap.values.first;
-                
-                return Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: colorScheme.primary,
-                      width: 2,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Stack(
-                    children: [
-                      MealPlanCard(mealPlan: mealPlan),
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: colorScheme.primary,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            'Active',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: colorScheme.onPrimary,
+                          const SizedBox(height: 8),
+                          Text(
+                            "Add or Amend Plans",
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: colorScheme.onSurface,
                             ),
+                            textAlign: TextAlign.center,
                           ),
-                        ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                );
-              },
-            ),
-          ],
-        ],
-      ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -314,7 +404,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-
     return Scaffold(
       backgroundColor: colorScheme.surface,
       body: Container(
@@ -322,16 +411,6 @@ class _HomeScreenState extends State<HomeScreen> {
         child: SafeArea(
           child: CustomScrollView(
             slivers: [
-              SliverToBoxAdapter(
-                child: _buildActivePlansSection(context),
-              ),
-              SliverPersistentHeader(
-                pinned: true,
-                delegate: _WorkoutDietHeaderDelegate(
-                  height: 94, // Already fixed to prevent overflow
-                  child: _buildWorkoutDietSection(context),
-                ),
-              ),
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
@@ -378,26 +457,25 @@ class _HomeScreenState extends State<HomeScreen> {
                     final data = snapshot.data!;
                     final workouts = data['workouts'] as List<WorkoutProgram>;
                     final mealPlans = data['mealPlans'] as List<MealPlan>;
-                    final allChallenges = data['challenges'] as List<Challenge>;
                     final sideHustles = data['sideHustles'] as List<SideHustle>;
-
-                    final userProvider = Provider.of<UserProvider>(context);
-                    allChallenges
-                        .where(
-                          (ch) =>
-                              ch.id ==
-                              (userProvider.currentUser?.activeChallengeId ??
-                                  ''),
-                        )
-                        .toList();
                     final bool hasSideHustles = sideHustles.isNotEmpty;
-
+                    final userProvider = Provider.of<UserProvider>(context);
+                    final activeMealPlan =
+                        userProvider.currentUser?.activeMealPlan;
+                    final activeWorkout =
+                        userProvider.currentUser?.activeWorkout;
+                    final hasActivePlans =
+                        activeMealPlan != null || activeWorkout != null;
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const SizedBox(height: 12),
                         AdHelper.bannerAdWidget(context),
                         const SizedBox(height: 12),
+                        if (hasActivePlans) ...[
+                          _buildActivePlansCards(context),
+                          const SizedBox(height: 16),
+                        ],
                         _buildSectionTitle(context, "WORKOUTS"),
                         _buildHorizontalList(
                           workouts
@@ -435,79 +513,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildWorkoutDietSection(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Container(
-      color: colorScheme.surface,
-      padding: const EdgeInsets.all(8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            "PERSONALIZE",
-            style: theme.textTheme.labelLarge?.copyWith(
-              color: colorScheme.onSurface,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 10),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _buildTabButton(
-                  label: "Workout & Diet",
-                  context: context,
-                  screen: const personalize.WorkoutDietBuilderScreen(),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTabButton({
-    required String label,
-    required BuildContext context,
-    required Widget screen,
-  }) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return FilledButton(
-      style: FilledButton.styleFrom(
-        backgroundColor: colorScheme.surfaceContainer,
-        foregroundColor: colorScheme.onSurface,
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-      onPressed: () {
-        debugPrint('Button "$label" pressed');
-        final navState = context.findAncestorStateOfType<NavScreenState>();
-        if (navState != null) {
-          debugPrint('NavScreenState found, using setDetailScreen');
-          navState.setDetailScreen(screen);
-        } else {
-          debugPrint('NavScreenState not found, using Navigator.push');
-          Navigator.push(context, MaterialPageRoute(builder: (_) => screen))
-              .then((_) => debugPrint('Navigation completed'))
-              .catchError((e) => debugPrint('Navigation error: $e'));
-        }
-      },
-      child: Text(
-        label,
-        style: theme.textTheme.labelLarge?.copyWith(
-          color: colorScheme.onSurface,
-          fontWeight: FontWeight.bold,
         ),
       ),
     );
@@ -565,15 +570,91 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHorizontalList(List<Widget> items) {
-    Theme.of(context);
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    if (items.isEmpty) {
+      return SizedBox(
+        height: _cardHeight,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              Expanded(
+                child: Card(
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  color: colorScheme.surface,
+                  child: InkWell(
+                    onTap: () {
+                      final navState =
+                          context.findAncestorStateOfType<NavScreenState>();
+                      if (navState != null) {
+                        navState.setDetailScreen(
+                          const personalize.WorkoutDietBuilderScreen(),
+                        );
+                      } else {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder:
+                                (_) =>
+                                    const personalize.WorkoutDietBuilderScreen(),
+                          ),
+                        );
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.fitness_center,
+                          color: colorScheme.primary,
+                          size: 48,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          "Build a Workout Plan",
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: colorScheme.onSurface,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          "Start your fitness journey",
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurface,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return SizedBox(
-      height: 220, // Match card height
+      height: _cardHeight, // Match card height
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.only(left: 16, right: 8),
         itemCount: items.length,
         separatorBuilder: (_, __) => const SizedBox(width: 12),
-        itemBuilder: (_, index) => items[index],
+        itemBuilder:
+            (_, index) => SizedBox(
+              width: _cardWidth,
+              height: _cardHeight,
+              child: items[index],
+            ),
       ),
     );
   }
@@ -581,28 +662,99 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildMealPlansRow(BuildContext context, List<MealPlan> mealPlans) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final userProvider = Provider.of<UserProvider>(context);
+    final activeMealPlan = userProvider.currentUser?.activeMealPlan;
 
     if (mealPlans.isEmpty) {
       return SizedBox(
-        height: 220,
-        child: Center(
-          child: Text(
-            'No meal plans found',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurface,
-            ),
+        height: _cardHeight,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              Expanded(
+                child: Card(
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  color: colorScheme.surface,
+                  child: InkWell(
+                    onTap: () {
+                      final navState =
+                          context.findAncestorStateOfType<NavScreenState>();
+                      if (navState != null) {
+                        navState.setDetailScreen(
+                          const personalize.WorkoutDietBuilderScreen(),
+                        );
+                      } else {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder:
+                                (_) =>
+                                    const personalize.WorkoutDietBuilderScreen(),
+                          ),
+                        );
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.restaurant_menu,
+                          color: colorScheme.primary,
+                          size: 48,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          "Build a Meal Plan",
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: colorScheme.onSurface,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          "Add nutrition to your day",
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurface,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       );
     }
+
     return SizedBox(
-      height: 220,
+      height: _cardHeight,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.only(left: 16, right: 8),
         itemCount: mealPlans.length,
         itemBuilder: (context, index) {
-          return MealPlanCard(mealPlan: mealPlans[index]);
+          return Padding(
+            padding: _cardPadding,
+            child: SizedBox(
+              width: _cardWidth,
+              height: _cardHeight,
+              child: MealPlanCard(
+                mealPlan: mealPlans[index],
+                currentDay:
+                    activeMealPlan?.dietPlanId == mealPlans[index].id
+                        ? activeMealPlan!.currentDay
+                        : null,
+              ),
+            ),
+          );
         },
       ),
     );
@@ -614,25 +766,83 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (hustles.isEmpty) {
       return SizedBox(
-        height: 220,
-        child: Center(
-          child: Text(
-            "No side hustles found",
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurface,
-            ),
+        height: _cardHeight,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              Expanded(
+                child: Card(
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  color: colorScheme.surface,
+                  child: InkWell(
+                    onTap: () {
+                      final navState =
+                          context.findAncestorStateOfType<NavScreenState>();
+                      if (navState != null) {
+                        navState.setDetailScreen(const SideHustleScreen());
+                      } else {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const SideHustleScreen(),
+                          ),
+                        );
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.monetization_on,
+                          color: colorScheme.primary,
+                          size: 48,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          "Explore Side Hustles",
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: colorScheme.onSurface,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          "Earn rewards with challenges",
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurface,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       );
     }
     return SizedBox(
-      height: 220,
+      height: _cardHeight,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         itemCount: hustles.length,
         padding: const EdgeInsets.only(left: 16),
         itemBuilder:
-            (context, index) => _buildSideHustleCard(context, hustles[index]),
+            (context, index) => Padding(
+              padding: _cardPadding,
+              child: SizedBox(
+                width: _cardWidth,
+                height: _cardHeight,
+                child: _buildSideHustleCard(context, hustles[index]),
+              ),
+            ),
       ),
     );
   }

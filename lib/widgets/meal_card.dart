@@ -9,6 +9,7 @@ class MealPlanCard extends StatelessWidget {
   final MealPlan mealPlan;
   final int? currentDay;
   final VoidCallback? onDayButtonPressed;
+  
   const MealPlanCard({
     super.key,
     required this.mealPlan,
@@ -76,30 +77,22 @@ class MealPlanCard extends StatelessWidget {
                     ),
                   ],
                 ),
-              ),
+              ),              
               const SizedBox(height: 4),
               Padding(
                 padding: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
                 child: OutlinedButton(
-                  onPressed: () {
-                    final navScreenState =
-                        context.findAncestorStateOfType<NavScreenState>();
-                    if (navScreenState != null) {
-                      navScreenState.setDetailScreen(
-                        MealPlanScreen(plan: mealPlan),
-                      );
-                    } else {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => MealPlanScreen(plan: mealPlan),
-                        ),
-                      );
-                    }
+                  onPressed: 
+                  onDayButtonPressed ?? 
+                  () {
+                    final navState = context.findAncestorStateOfType<NavScreenState>();
+                    navState?.setDetailScreen(
+                      MealPlanScreen(plan: mealPlan),
+                    );
                   },
-                  // no style override—uses your outlinedButtonTheme
+                  // No style: will pick up your AppTheme.outlinedButtonTheme  
                   child: Text(
-                    "View Plan",
+                    currentDay != null ? "Day $currentDay" : "View Diet",
                     style: theme.textTheme.labelMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -151,7 +144,7 @@ class MealPlanCard extends StatelessWidget {
             width: double.infinity,
             color: colorScheme.surfaceContainer,
             alignment: Alignment.center,
-            child: Icon(Icons.fastfood, size: 40, color: colorScheme.primary),
+            child: Icon(Icons.restaurant_menu, size: 40, color: colorScheme.primary),
           ),
       memCacheWidth: 320,
       maxWidthDiskCache: 320,
