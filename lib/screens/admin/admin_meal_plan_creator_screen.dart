@@ -71,6 +71,15 @@ class _AdminCreateMealPlanScreenState extends State<AdminCreateMealPlanScreen> {
     });
   }
 
+  void _removeDay(int dayIndex) {
+    setState(() {
+      mealDays.removeAt(dayIndex);
+      for (int i = 0; i < mealDays.length; i++) {
+        mealDays[i] = mealDays[i].copyWith(dayNumber: i + 1);
+      }
+    });
+  }
+
   void _setMealForDay(int dayIndex, String mealType, Meal meal) {
     final updatedDay = mealDays[dayIndex].swapMeal(mealType, meal, 1.0);
     setState(() {
@@ -216,7 +225,7 @@ class _AdminCreateMealPlanScreenState extends State<AdminCreateMealPlanScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Create Meal Plan"),
+        title: const Text("Create or Edit Meal Plan"),
         backgroundColor: Colors.black,
       ),
       body: SingleChildScrollView(
@@ -226,7 +235,6 @@ class _AdminCreateMealPlanScreenState extends State<AdminCreateMealPlanScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Dropdown to select existing meal plan
               DropdownButtonFormField<MealPlan?>(
                 value: selectedMealPlan,
                 isExpanded: true,
@@ -310,12 +318,21 @@ class _AdminCreateMealPlanScreenState extends State<AdminCreateMealPlanScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          "Day ${day.dayNumber}",
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 16,
-                          ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              "Day ${day.dayNumber}",
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 16,
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () => _removeDay(i),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 8),
                         _mealDropdown(i, "Breakfast", day.breakfast),

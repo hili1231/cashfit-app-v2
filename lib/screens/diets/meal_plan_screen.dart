@@ -1,4 +1,4 @@
-import 'package:cashfit/screens/diets/replace_meal_plan.dart';
+import 'package:cashfit/screens/diets/replace_meal_screen.dart';
 import 'package:cashfit/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';

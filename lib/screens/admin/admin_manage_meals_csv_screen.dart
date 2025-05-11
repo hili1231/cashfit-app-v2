@@ -24,10 +24,9 @@ class AdminManageMealsScreenState extends State<AdminManageMealsScreen> {
 
   // Fetch meals from Firestore
   Future<void> fetchMeals() async {
-    // Store ScaffoldMessengerState before async operation
     final scaffoldMessenger = ScaffoldMessenger.of(context);
-
     try {
+      setState(() => meals = []); // Clear meals list while loading
       final snapshot =
           await FirebaseFirestore.instance.collection('meals').get();
       if (mounted) {
@@ -36,6 +35,7 @@ class AdminManageMealsScreenState extends State<AdminManageMealsScreen> {
         });
       }
     } catch (e) {
+      debugPrint("Error fetching meals: $e");
       scaffoldMessenger.showSnackBar(
         SnackBar(content: Text('Error fetching meals from Firestore: $e')),
       );
@@ -44,10 +44,9 @@ class AdminManageMealsScreenState extends State<AdminManageMealsScreen> {
 
   // Fetch meals from the MealDB API
   Future<void> fetchMealsFromMealDB() async {
-    // Store ScaffoldMessengerState before async operation
     final scaffoldMessenger = ScaffoldMessenger.of(context);
-
     try {
+      setState(() => meals = []); // Clear meals list while loading
       final response = await _dio.get(
         'https://www.themealdb.com/api/json/v1/1/filter.php',
         queryParameters: {
@@ -77,6 +76,7 @@ class AdminManageMealsScreenState extends State<AdminManageMealsScreen> {
         throw Exception("Failed to load meals from MealDB API");
       }
     } catch (e) {
+      debugPrint("Error fetching meals from MealDB API: $e");
       scaffoldMessenger.showSnackBar(
         SnackBar(content: Text('Error fetching meals from MealDB API: $e')),
       );
@@ -85,10 +85,8 @@ class AdminManageMealsScreenState extends State<AdminManageMealsScreen> {
 
   // Create a Meal object from MealDB API data
   Future<Meal> _createMealFromMealDB(dynamic mealData) async {
-    // Create a list of MealIngredients
     List<MealIngredient> ingredients = [];
 
-    // MealDB API provides up to 20 ingredients as strIngredient1, strIngredient2, etc.
     for (int i = 1; i <= 20; i++) {
       String? ingredientName = mealData['strIngredient$i'];
       String? measure = mealData['strMeasure$i'];
@@ -97,41 +95,42 @@ class AdminManageMealsScreenState extends State<AdminManageMealsScreen> {
           ingredientName.isNotEmpty &&
           measure != null &&
           measure.isNotEmpty) {
-        // Check if the ingredient exists in Firestore
         Ingredient? existingIngredient;
-        final ingredientSnapshot =
+        try {
+          final ingredientSnapshot =
+              await FirebaseFirestore.instance
+                  .collection('ingredients')
+                  .doc(ingredientName.toLowerCase())
+                  .get();
+          if (ingredientSnapshot.exists) {
+            existingIngredient = Ingredient.fromMap(ingredientSnapshot.data()!);
+          } else {
+            existingIngredient = Ingredient(
+              id: ingredientName.toLowerCase(),
+              name: ingredientName,
+              calories: 0.0,
+              protein: 0.0,
+              carbs: 0.0,
+              fat: 0.0,
+            );
             await FirebaseFirestore.instance
                 .collection('ingredients')
-                .doc(ingredientName.toLowerCase())
-                .get();
-        if (ingredientSnapshot.exists) {
-          existingIngredient = Ingredient.fromMap(ingredientSnapshot.data()!);
-        } else {
-          // If ingredient doesn't exist, create a placeholder and add to Firestore
-          existingIngredient = Ingredient(
-            id: ingredientName.toLowerCase(),
-            name: ingredientName,
-            calories: 0.0, // Placeholder; should be updated later
-            protein: 0.0,
-            carbs: 0.0,
-            fat: 0.0,
-          );
-          await FirebaseFirestore.instance
-              .collection('ingredients')
-              .doc(existingIngredient.id)
-              .set(existingIngredient.toMap());
+                .doc(existingIngredient.id)
+                .set(existingIngredient.toMap());
+          }
+        } catch (e) {
+          debugPrint("Error processing ingredient $ingredientName: $e");
+          continue;
         }
 
-        // Parse the quantity from the measure (e.g., "2 cups" -> 2.0)
         double quantity = 0.0;
         try {
           final numberPart = measure.split(' ').first;
           quantity = double.tryParse(numberPart) ?? 0.0;
         } catch (e) {
-          quantity = 0.0; // Default if parsing fails
+          quantity = 0.0;
         }
 
-        // Create MealIngredient object
         ingredients.add(
           MealIngredient(
             ingredient: existingIngredient,
@@ -142,25 +141,23 @@ class AdminManageMealsScreenState extends State<AdminManageMealsScreen> {
       }
     }
 
-    // Create and return the Meal object
     return Meal(
       id: mealData['idMeal'] ?? mealData['strMeal']?.toLowerCase() ?? '',
       name: mealData['strMeal'] ?? '',
       image: mealData['strMealThumb'] ?? '',
       ingredients: ingredients,
-      instructions:
-          (mealData['strInstructions'] ?? '')
-              .split('\n')
-              .where((i) => i.isNotEmpty)
-              .toList(),
-      diets: [], // MealDB doesn't provide diets; can be added manually
+      instructions: (mealData['strInstructions'] ?? '')
+          .split('\n')
+          .where((i) => i.isNotEmpty)
+          .toList(),
+      diets: [],
       category: mealData['strCategory'] ?? 'Uncategorized',
-      allergies: [], // MealDB doesn't provide allergies; can be added manually
-      prepTime: 0, // MealDB doesn't provide prep time; can be added manually
+      allergies: [],
+      prepTime: 0,
       cookTime: null,
       video: mealData['strYoutube'],
       tags: mealData['strTags']?.split(',') ?? [],
-      difficulty: 'Medium', // Default value; MealDB doesn't provide difficulty
+      difficulty: 'Medium',
     );
   }
 

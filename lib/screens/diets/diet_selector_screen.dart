@@ -597,9 +597,8 @@ class _DietSelectorScreenState extends State<DietSelectorScreen> {
                                                   .map(
                                                     (id) => {
                                                       'plan': ActiveDietPlan(
-                                                        dietPlanId: id,
-                                                        startDate:
-                                                            DateTime.now(),
+                                                        dietPlanId: id, // Added the missing dietPlanId argument
+                                                        startDate: DateTime.now(),
                                                         currentDay: 1,
                                                       ),
                                                       'diet': planMap[id]!,

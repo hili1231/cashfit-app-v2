@@ -39,6 +39,12 @@ class MealIngredient {
     'unit': unit,
   };
 
+  Map<String, dynamic> toJson() => {
+    'ingredient': ingredient.toMap(),
+    'quantity': quantity,
+    'unit': unit,
+  };
+
   factory MealIngredient.fromMap(Map<String, dynamic> map) {
     return MealIngredient(
       ingredient: Ingredient.fromMap(map['ingredient'] as Map<String, dynamic>),

@@ -47,52 +47,70 @@ class _ReplaceExerciseScreenState extends State<ReplaceExerciseScreen> {
       _recommendedExercises =
           ReplaceExerciseScreen._cachedRecommendedExercises[widget.exerciseId]!;
       _isLoading = false;
-      setState(() {});
     } else {
-      _fetchExercises();
+      _listenToExercises();
     }
   }
 
-  Future<void> _fetchExercises() async {
+  void _listenToExercises() {
     setState(() => _isLoading = true);
     try {
-      debugPrint('Fetching exercises for exerciseId: ${widget.exerciseId}');
-      final userProvider = Provider.of<UserProvider>(context, listen: false);
-      final currentExerciseDoc =
-          await FirebaseFirestore.instance
-              .collection('exercises')
-              .doc(widget.exerciseId)
-              .get();
-      if (!currentExerciseDoc.exists) {
-        throw Exception('Current exercise not found: ${widget.exerciseId}');
-      }
-      final currentExercise = Exercise.fromMap(currentExerciseDoc.data()!);
-
-      final snapshot =
-          await FirebaseFirestore.instance.collection('exercises').get();
-      final allExercises =
-          snapshot.docs
+      FirebaseFirestore.instance.collection('exercises').snapshots().listen(
+        (snapshot) {
+          final allExercises = snapshot.docs
               .map((doc) => Exercise.fromMap(doc.data()..['id'] = doc.id))
               .toList();
 
-      final recommended = _rankExercises(
-        allExercises,
-        currentExercise,
-        userProvider.currentUser,
-      );
+          final currentExercise = allExercises.firstWhere(
+            (exercise) => exercise.id == widget.exerciseId,
+            orElse: () => Exercise(
+              id: '',
+              name: 'Unknown Exercise',
+              category: '',
+              muscleGroups: [],
+              difficulty: '',
+              specificEquipment: '',
+              injuryRisks: [],
+              instructions: '',
+            ),
+          );
 
-      if (mounted) {
-        setState(() {
-          _allExercises = allExercises;
-          _recommendedExercises = recommended.take(5).toList();
-          _isLoading = false;
-        });
-        ReplaceExerciseScreen._cachedAllExercises = allExercises;
-        ReplaceExerciseScreen._cachedRecommendedExercises[widget.exerciseId] =
-            recommended.take(5).toList();
-      }
+          if (mounted) {
+            final userProvider = Provider.of<UserProvider>(context, listen: false);
+            final recommended = _rankExercises(
+              allExercises,
+              currentExercise,
+              userProvider.currentUser,
+            );
+
+            setState(() {
+              _allExercises = allExercises;
+              _recommendedExercises = recommended.take(5).toList();
+              _isLoading = false;
+            });
+            ReplaceExerciseScreen._cachedAllExercises = allExercises;
+            ReplaceExerciseScreen._cachedRecommendedExercises[widget.exerciseId] =
+                recommended.take(5).toList();
+          }
+        },
+        onError: (error) {
+          debugPrint('Error listening to exercises: $error');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Failed to load exercises: $error',
+                  style: TextStyle(color: Theme.of(context).colorScheme.onError),
+                ),
+                backgroundColor: Theme.of(context).colorScheme.error,
+              ),
+            );
+            setState(() => _isLoading = false);
+          }
+        },
+      );
     } catch (e) {
-      debugPrint('Fetch exercises error: $e');
+      debugPrint('Listen to exercises error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -113,46 +131,34 @@ class _ReplaceExerciseScreenState extends State<ReplaceExerciseScreen> {
     Exercise current,
     AppUser? user,
   ) {
-    final scoredExercises =
-        exercises.asMap().entries.map((entry) {
-          final index = entry.key;
-          final exercise = entry.value;
-          double score = 0.0;
+    final scoredExercises = exercises.map((exercise) {
+      double score = 0.0;
 
-          if (exercise.category == current.category) score += 0.4;
-          final muscleOverlap =
-              (exercise.muscleGroups
-                  .toSet()
-                  .intersection(current.muscleGroups.toSet())
-                  .length) /
-              (exercise.muscleGroups
-                  .toSet()
-                  .union(current.muscleGroups.toSet())
-                  .length);
-          score += 0.3 * muscleOverlap;
-          if (exercise.difficulty == current.difficulty ||
-              (user != null && exercise.difficulty == user.experienceLevel)) {
-            score += 0.2;
-          }
-          if (exercise.specificEquipment == current.specificEquipment ||
-              (user != null &&
-                  user.availableEquipment.contains(
-                    exercise.specificEquipment,
-                  ))) {
-            score += 0.1;
-          }
+      if (exercise.category == current.category) score += 0.4;
+      final muscleOverlap = exercise.muscleGroups
+          .toSet()
+          .intersection(current.muscleGroups.toSet())
+          .length /
+          exercise.muscleGroups
+              .toSet()
+              .union(current.muscleGroups.toSet())
+              .length;
+      score += 0.3 * muscleOverlap;
+      if (exercise.difficulty == current.difficulty ||
+          (user != null && exercise.difficulty == user.experienceLevel)) {
+        score += 0.2;
+      }
+      if (exercise.specificEquipment == current.specificEquipment) {
+        score += 0.1;
+      }
 
-          if (user != null &&
-              exercise.injuryRisks.any(
-                (risk) =>
-                    user.injuryHistory.contains(risk) ||
-                    user.medicalConditions.contains(risk),
-              )) {
-            score = 0.0;
-          }
+      if (user != null &&
+          exercise.injuryRisks.any((risk) => user.medicalConditions.contains(risk))) {
+        score = 0.0;
+      }
 
-          return {'index': index, 'score': score, 'exercise': exercise};
-        }).toList();
+      return {'exercise': exercise, 'score': score};
+    }).toList();
 
     scoredExercises.sort((a, b) {
       final scoreA = a['score'] as double? ?? 0.0;

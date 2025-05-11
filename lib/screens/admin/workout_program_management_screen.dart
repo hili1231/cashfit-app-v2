@@ -51,23 +51,39 @@ class _AdminWorkoutProgramManagementScreenState
   }
 
   Future<void> loadWorkoutPrograms() async {
-    final snapshot = await firestore.collection('workoutPrograms').get();
-    setState(() {
-      workoutPrograms =
-          snapshot.docs
-              .map((doc) => WorkoutProgram.fromMap(doc.data(), doc.id))
-              .toList();
-    });
+    try {
+      final snapshot = await firestore.collection('workoutPrograms').get();
+      if (!mounted) return; // Ensure the widget is still mounted
+      setState(() {
+        workoutPrograms = snapshot.docs
+            .map((doc) => WorkoutProgram.fromMap(doc.data(), doc.id))
+            .toList();
+      });
+    } catch (e, stackTrace) {
+      debugPrint("Error loading workout programs: $e\n$stackTrace");
+      if (!mounted) return; // Ensure the widget is still mounted
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Failed to load workout programs.")),
+      );
+    }
   }
 
   Future<void> loadExercises() async {
-    final snapshot = await firestore.collection('exercises').get();
-    setState(() {
-      exercises =
-          snapshot.docs
-              .map((doc) => Exercise.fromMap(doc.data()..['id'] = doc.id))
-              .toList();
-    });
+    try {
+      final snapshot = await firestore.collection('exercises').get();
+      if (!mounted) return; // Ensure the widget is still mounted
+      setState(() {
+        exercises = snapshot.docs
+            .map((doc) => Exercise.fromMap(doc.data()..['id'] = doc.id))
+            .toList();
+      });
+    } catch (e, stackTrace) {
+      debugPrint("Error loading exercises: $e\n$stackTrace");
+      if (!mounted) return; // Ensure the widget is still mounted
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Failed to load exercises.")),
+      );
+    }
   }
 
   void _populateForm(WorkoutProgram program) {
@@ -112,78 +128,86 @@ class _AdminWorkoutProgramManagementScreenState
   }
 
   Future<void> uploadCSVFile() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['csv'],
-    );
-    if (result != null && result.files.single.path != null) {
-      final file = File(result.files.single.path!);
-      final csvString = await file.readAsString();
-      final csvData = const CsvToListConverter().convert(csvString);
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv'],
+      );
+      if (result != null && result.files.single.path != null) {
+        final file = File(result.files.single.path!);
+        final csvString = await file.readAsString();
+        final csvData = const CsvToListConverter().convert(csvString);
 
-      Map<String, WorkoutProgram> programsMap = {};
+        Map<String, WorkoutProgram> programsMap = {};
 
-      // Parse CSV rows (skip header)
-      for (int i = 1; i < csvData.length; i++) {
-        final row = csvData[i];
-        final programId = row[0].toString();
-        final programTitle = row[1].toString();
-        final programImage = row[2].toString();
-        final programLevel = row[3].toString();
-        final programDescription = row[4].toString();
-        final programUserId =
-            row[5].toString().isEmpty ? null : row[5].toString();
-        final dayStr = row[6].toString();
-        final dayNumber =
-            int.tryParse(dayStr.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
-        final exerciseId = row[7].toString();
-        final sets = int.tryParse(row[8].toString()) ?? 0;
-        final reps = row[9].toString();
+        // Parse CSV rows (skip header)
+        for (int i = 1; i < csvData.length; i++) {
+          final row = csvData[i];
+          final programId = row[0].toString();
+          final programTitle = row[1].toString();
+          final programImage = row[2].toString();
+          final programLevel = row[3].toString();
+          final programDescription = row[4].toString();
+          final programUserId =
+              row[5].toString().isEmpty ? null : row[5].toString();
+          final dayStr = row[6].toString();
+          final dayNumber =
+              int.tryParse(dayStr.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+          final exerciseId = row[7].toString();
+          final sets = int.tryParse(row[8].toString()) ?? 0;
+          final reps = row[9].toString();
 
-        // Initialize program if not already in map
-        if (!programsMap.containsKey(programId)) {
-          programsMap[programId] = WorkoutProgram(
-            id: programId,
-            title: programTitle,
-            image: programImage,
-            days: {},
-            level: programLevel,
-            description: programDescription,
-            userId: programUserId,
-          );
+          // Initialize program if not already in map
+          if (!programsMap.containsKey(programId)) {
+            programsMap[programId] = WorkoutProgram(
+              id: programId,
+              title: programTitle,
+              image: programImage,
+              days: {},
+              level: programLevel,
+              description: programDescription,
+              userId: programUserId,
+            );
+          }
+
+          // Add exercise to day
+          final dayKey = 'Day $dayNumber';
+          programsMap[programId]!.days[dayKey] =
+              programsMap[programId]!.days[dayKey] ?? [];
+          programsMap[programId]!.days[dayKey]!.add({
+            'exerciseId': exerciseId,
+            'sets': sets,
+            'reps': reps,
+          });
         }
 
-        // Add exercise to day
-        final dayKey = 'Day $dayNumber';
-        programsMap[programId]!.days[dayKey] =
-            programsMap[programId]!.days[dayKey] ?? [];
-        programsMap[programId]!.days[dayKey]!.add({
-          'exerciseId': exerciseId,
-          'sets': sets,
-          'reps': reps,
-        });
-      }
+        // Process each program
+        for (var program in programsMap.values) {
+          final extendedDays = await _extendToOneMonth(
+            program.title,
+            program.days,
+          );
+          await firestore.collection('workoutPrograms').doc(program.id).set({
+            'title': program.title,
+            'image': program.image,
+            'days': extendedDays,
+            'level': program.level,
+            'description': program.description,
+            if (program.userId != null) 'userId': program.userId,
+          }, SetOptions(merge: true));
+        }
 
-      // Process each program
-      for (var program in programsMap.values) {
-        final extendedDays = await _extendToOneMonth(
-          program.title,
-          program.days,
+        await loadWorkoutPrograms();
+        if (!mounted) return; // Ensure the widget is still mounted
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✅ CSV Uploaded and Programs Processed!')),
         );
-        await firestore.collection('workoutPrograms').doc(program.id).set({
-          'title': program.title,
-          'image': program.image,
-          'days': extendedDays,
-          'level': program.level,
-          'description': program.description,
-          if (program.userId != null) 'userId': program.userId,
-        }, SetOptions(merge: true));
       }
-
-      await loadWorkoutPrograms();
-      // ignore: use_build_context_synchronously
+    } catch (e, stackTrace) {
+      debugPrint("Error uploading CSV: $e\n$stackTrace");
+      if (!mounted) return; // Ensure the widget is still mounted
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('✅ CSV Uploaded and Programs Processed!')),
+        const SnackBar(content: Text("Failed to upload CSV.")),
       );
     }
   }
@@ -281,18 +305,23 @@ class _AdminWorkoutProgramManagementScreenState
 
     final extendedDays = await _extendToOneMonth(title, workoutExercisesPerDay);
 
-    await firestore.collection('workoutPrograms').doc(docId).set({
-      'title': title,
-      'image': imageUrl,
-      'days': extendedDays,
-      'level': createLevel,
-      'description': desc,
-    });
+    try {
+      await firestore.collection('workoutPrograms').doc(docId).set({
+        'title': title,
+        'image': imageUrl,
+        'days': extendedDays,
+        'level': createLevel,
+        'description': desc,
+      });
 
-    await loadWorkoutPrograms();
-    _clearFormForNewProgram();
-    if (!mounted) return;
-    showError('✅ Workout Program created!');
+      await loadWorkoutPrograms();
+      _clearFormForNewProgram();
+      if (!mounted) return;
+      showError('✅ Workout Program created!');
+    } catch (e, stackTrace) {
+      debugPrint("Error creating workout program: $e\n$stackTrace");
+      showError("Failed to create workout program.");
+    }
   }
 
   Future<void> updateExistingProgram() async {

@@ -39,12 +39,21 @@ class _AdminCreateSideHustleScreenState
   }
 
   Future<void> _loadSideHustles() async {
-    final snapshot =
-        await FirebaseFirestore.instance.collection('sideHustles').get();
-    setState(() {
-      allHustles =
-          snapshot.docs.map((doc) => SideHustle.fromMap(doc.data())).toList();
-    });
+    try {
+      final snapshot =
+          await FirebaseFirestore.instance.collection('sideHustles').get();
+      if (!mounted) return; // Ensure the widget is still mounted
+      setState(() {
+        allHustles =
+            snapshot.docs.map((doc) => SideHustle.fromMap(doc.data())).toList();
+      });
+    } catch (e, stackTrace) {
+      debugPrint("Error loading side hustles: $e\n$stackTrace");
+      if (!mounted) return; // Ensure widget is still mounted
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Failed to load side hustles.")),
+      );
+    }
   }
 
   Future<void> _pickImage() async {
@@ -69,8 +78,6 @@ class _AdminCreateSideHustleScreenState
   Future<void> _saveSideHustle() async {
     if (!_formKey.currentState!.validate()) return;
 
-    // If editing existing hustle, keep same ID
-    // Otherwise, use name + timestamp
     final String hustleId;
     if (selectedHustleId != null) {
       hustleId = selectedHustleId!;
@@ -86,8 +93,6 @@ class _AdminCreateSideHustleScreenState
       description: _descriptionController.text,
       reward: int.tryParse(_rewardController.text) ?? 0,
       videoRequirement: _videoRequirementController.text,
-      // NOTE: This is just the local file path on admin's device.
-      // For a real app, consider uploading to Firebase Storage & storing the download URL
       thumbnail: _pickedImage?.path ?? '',
       endDate: _endDate,
       isActive: _isActive,
@@ -101,22 +106,29 @@ class _AdminCreateSideHustleScreenState
       maxParticipants: int.tryParse(_maxParticipantsController.text),
     );
 
-    // Use doc(hustle.id).set(...) to preserve your custom ID
-    await FirebaseFirestore.instance
-        .collection('sideHustles')
-        .doc(hustle.id)
-        .set(hustle.toMap());
+    try {
+      await FirebaseFirestore.instance
+          .collection('sideHustles')
+          .doc(hustle.id)
+          .set(hustle.toMap());
 
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(selectedHustleId != null ? "✅ Updated!" : "✅ Created!"),
-      ),
-    );
+      if (!mounted) return; // Ensure the widget is still mounted
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(selectedHustleId != null ? "✅ Updated!" : "✅ Created!"),
+        ),
+      );
 
-    // If brand new, you can pop or do whatever you want
-    if (selectedHustleId == null) {
-      Navigator.pop(context);
+      if (selectedHustleId == null) {
+        if (!mounted) return; // Ensure the widget is still mounted
+        Navigator.pop(context);
+      }
+    } catch (e, stackTrace) {
+      debugPrint("Error saving side hustle: $e\n$stackTrace");
+      if (!mounted) return; // Ensure widget is still mounted
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Failed to save side hustle.")),
+      );
     }
   }
 
@@ -201,6 +213,11 @@ class _AdminCreateSideHustleScreenState
                 style: const TextStyle(color: Colors.white),
                 keyboardType: TextInputType.number,
                 decoration: _input("Reward (points)"),
+                validator: (v) {
+                  if (v == null || v.isEmpty) return "Required";
+                  if (int.tryParse(v) == null) return "Must be a valid number";
+                  return null;
+                },
               ),
               const SizedBox(height: 12),
 
@@ -218,6 +235,12 @@ class _AdminCreateSideHustleScreenState
                 style: const TextStyle(color: Colors.white),
                 keyboardType: TextInputType.number,
                 decoration: _input("Max Participants (optional)"),
+                validator: (v) {
+                  if (v != null && v.isNotEmpty && int.tryParse(v) == null) {
+                    return "Must be a valid number";
+                  }
+                  return null;
+                },
               ),
               const SizedBox(height: 12),
 
@@ -251,6 +274,13 @@ class _AdminCreateSideHustleScreenState
                   );
                   if (picked != null) {
                     setState(() => _endDate = picked);
+                  } else {
+                    // ignore: use_build_context_synchronously
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Please select a valid end date."),
+                      ),
+                    );
                   }
                 },
               ),

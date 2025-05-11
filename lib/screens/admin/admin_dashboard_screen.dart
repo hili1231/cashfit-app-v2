@@ -95,6 +95,17 @@ class AdminDashboardScreenState extends State<AdminDashboardScreen> {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
+        if (snapshot.hasError) {
+          debugPrint("Error fetching users: ");
+          return Center(
+            child: Text(
+              "Error loading users",
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+          );
+        }
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return Center(
             child: Text(
@@ -154,13 +165,23 @@ class AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     user.isBanned
                         ? TextButton(
                           onPressed: () async {
-                            await _authService.unbanUser(user.id);
-                            scaffoldMessenger.showSnackBar(
-                              SnackBar(
-                                content: Text("${user.name} unbanned"),
-                                backgroundColor: colorScheme.secondary,
-                              ),
-                            );
+                            try {
+                              await _authService.unbanUser(user.id);
+                              scaffoldMessenger.showSnackBar(
+                                SnackBar(
+                                  content: Text("${user.name} unbanned"),
+                                  backgroundColor: colorScheme.secondary,
+                                ),
+                              );
+                            } catch (e) {
+                              debugPrint("Error unbanning user: $e");
+                              scaffoldMessenger.showSnackBar(
+                                SnackBar(
+                                  content: Text("Error unbanning user: $e"),
+                                  backgroundColor: colorScheme.error,
+                                ),
+                              );
+                            }
                           },
                           child: Text(
                             "Unban",
@@ -171,13 +192,23 @@ class AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         )
                         : TextButton(
                           onPressed: () async {
-                            await _authService.banUser(user.id);
-                            scaffoldMessenger.showSnackBar(
-                              SnackBar(
-                                content: Text("${user.name} banned"),
-                                backgroundColor: colorScheme.error,
-                              ),
-                            );
+                            try {
+                              await _authService.banUser(user.id);
+                              scaffoldMessenger.showSnackBar(
+                                SnackBar(
+                                  content: Text("${user.name} banned"),
+                                  backgroundColor: colorScheme.error,
+                                ),
+                              );
+                            } catch (e) {
+                              debugPrint("Error banning user: $e");
+                              scaffoldMessenger.showSnackBar(
+                                SnackBar(
+                                  content: Text("Error banning user: $e"),
+                                  backgroundColor: colorScheme.error,
+                                ),
+                              );
+                            }
                           },
                           child: Text(
                             "Ban",
@@ -200,6 +231,17 @@ class AdminDashboardScreenState extends State<AdminDashboardScreen> {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          debugPrint("Error fetching challenges: ");
+          return Center(
+            child: Text(
+              "Error loading challenges",
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+          );
         }
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return Center(
@@ -252,13 +294,23 @@ class AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ),
                 trailing: TextButton(
                   onPressed: () async {
-                    await _authService.deleteChallenge(challenge.id);
-                    scaffoldMessenger.showSnackBar(
-                      SnackBar(
-                        content: Text("${challenge.name} deleted"),
-                        backgroundColor: colorScheme.error,
-                      ),
-                    );
+                    try {
+                      await _authService.deleteChallenge(challenge.id);
+                      scaffoldMessenger.showSnackBar(
+                        SnackBar(
+                          content: Text("${challenge.name} deleted"),
+                          backgroundColor: colorScheme.error,
+                        ),
+                      );
+                    } catch (e) {
+                      debugPrint("Error deleting challenge: $e");
+                      scaffoldMessenger.showSnackBar(
+                        SnackBar(
+                          content: Text("Error deleting challenge: $e"),
+                          backgroundColor: colorScheme.error,
+                        ),
+                      );
+                    }
                   },
                   child: Text(
                     "Delete",

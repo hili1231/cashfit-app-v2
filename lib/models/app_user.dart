@@ -473,4 +473,8 @@ class AppUser {
     if (premiumExpiryDate == null) return 0;
     return premiumExpiryDate!.difference(DateTime.now()).inDays;
   }
+
+  ActiveDietPlan? get activeMealPlan => activeDietPlans.isNotEmpty ? activeDietPlans.first : null;
+
+  ActiveWorkoutProgram? get activeWorkout => activeWorkoutPrograms.isNotEmpty ? activeWorkoutPrograms.first : null;
 }

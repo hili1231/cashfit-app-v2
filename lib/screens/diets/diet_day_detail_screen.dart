@@ -11,7 +11,7 @@ import '../../providers/user_provider.dart';
 import '../../widgets/calorie_tracker_widget.dart';
 import '../nav_screen.dart';
 import 'meal_detail_screen.dart';
-import 'replace_meal_plan.dart';
+import 'replace_meal_screen.dart';
 
 enum DayStatus { notDone, doneToday, doneEarlier }
 

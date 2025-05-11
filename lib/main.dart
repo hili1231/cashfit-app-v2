@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:provider/provider.dart';
-
 import 'firebase_options.dart';
 import 'screens/nav_screen.dart';
 import 'theme.dart';
@@ -20,13 +19,15 @@ final GlobalKey<NavScreenState> navKey = GlobalKey<NavScreenState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Start Firebase initialization and cache loading in parallel
-  final firebaseInit = Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  
+  final firebaseInit = Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
   // Preload global cache data in the background
   _preloadGlobalCache();
-  
+
   // Wait for Firebase to finish initializing (required before we can continue)
   await firebaseInit;
 
@@ -46,13 +47,13 @@ Future<void> _preloadGlobalCache() async {
   try {
     // Use our optimized prefetch method for better initial loading
     final cacheService = CacheService();
-    
+
     // Start with prioritized cache optimization in a background task
     await cacheService.optimizeCache();
-    
+
     // Load global cache with optimized approach
     await cacheService.loadGlobalCache();
-    
+
     // Prefetch frequently accessed data to improve user experience
     await cacheService.prefetchFrequentlyAccessedData();
   } catch (e) {

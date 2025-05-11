@@ -443,9 +443,9 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
 
   // Add a helper method to show error messages
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   // Update the generatePersonalizedPlans method to include validation
@@ -487,11 +487,16 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
       // Removed: localWorkoutDuration, localAvailableDays, localPreferredWorkoutTimes, localIntensity, localMealFrequency, localMealTimes, localMedicalConditions, localMaxPushUps, localMaxPullUps, localMileRunTime
 
       // Use relevant variables directly from SharedPreferences or class properties
-      final localTrainingStyle = prefs.getString('trainingStyle') ?? trainingStyle ?? "Gym";
-      final localExperienceLevel = prefs.getString('experience') ?? experience ?? "Beginner";
-      final localWorkoutGoal = prefs.getString('workoutGoal') ?? workoutGoal ?? "Build Muscle";
-      final localDietGoal = prefs.getString('dietGoal') ?? dietGoal ?? "Maintain Weight";
-      final localDietPreference = prefs.getString('dietPreference') ?? dietPreference ?? "Balanced";
+      final localTrainingStyle =
+          prefs.getString('trainingStyle') ?? trainingStyle ?? "Gym";
+      final localExperienceLevel =
+          prefs.getString('experience') ?? experience ?? "Beginner";
+      final localWorkoutGoal =
+          prefs.getString('workoutGoal') ?? workoutGoal ?? "Build Muscle";
+      final localDietGoal =
+          prefs.getString('dietGoal') ?? dietGoal ?? "Maintain Weight";
+      final localDietPreference =
+          prefs.getString('dietPreference') ?? dietPreference ?? "Balanced";
 
       // Update the AppUser with the form data
       final updatedUserWithFormData = AppUser(
@@ -512,15 +517,20 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
         workoutGoal: localWorkoutGoal,
         experienceLevel: localExperienceLevel,
         trainingStyle: localTrainingStyle,
-        availableEquipment: availableEquipment.isNotEmpty ? availableEquipment : currentUser.availableEquipment,
-        injuryHistory: injuryHistory.isNotEmpty ? injuryHistory : currentUser.injuryHistory,
+        availableEquipment:
+            availableEquipment.isNotEmpty
+                ? availableEquipment
+                : currentUser.availableEquipment,
+        injuryHistory:
+            injuryHistory.isNotEmpty
+                ? injuryHistory
+                : currentUser.injuryHistory,
         workoutFrequency: workoutFrequency,
         allergies: currentUser.allergies,
         isAdmin: currentUser.isAdmin,
         isPremium: currentUser.isPremium,
         activeWorkoutPrograms: currentUser.activeWorkoutPrograms,
         activeDietPlans: currentUser.activeDietPlans,
-        joinedChallenges: currentUser.joinedChallenges,
         joinedSideHustles: currentUser.joinedSideHustles,
         lastLogin: currentUser.lastLogin,
         streak: currentUser.streak,
@@ -535,18 +545,31 @@ class _WorkoutDietBuilderScreenState extends State<WorkoutDietBuilderScreen> {
         referrer: currentUser.referrer,
         balance: currentUser.balance,
         hydration: hydration ?? currentUser.hydration,
-        dietaryRestrictions: dietaryRestrictions.isNotEmpty ? dietaryRestrictions : currentUser.dietaryRestrictions,
-        workoutFocus: workoutFocus.isNotEmpty ? workoutFocus : currentUser.workoutFocus,
+        dietaryRestrictions:
+            dietaryRestrictions.isNotEmpty
+                ? dietaryRestrictions
+                : currentUser.dietaryRestrictions,
+        workoutFocus:
+            workoutFocus.isNotEmpty ? workoutFocus : currentUser.workoutFocus,
         workoutDuration: workoutDuration,
         intensity: intensity ?? currentUser.intensity,
-        availableDays: availableDays.isNotEmpty ? availableDays : currentUser.availableDays,
+        availableDays:
+            availableDays.isNotEmpty
+                ? availableDays
+                : currentUser.availableDays,
         mealFrequency: mealFrequency ?? currentUser.mealFrequency,
         mealTimes: mealTimes.isNotEmpty ? mealTimes : currentUser.mealTimes,
         maxPushUps: maxPushUps ?? currentUser.maxPushUps,
         maxPullUps: maxPullUps ?? currentUser.maxPullUps,
         mileRunTime: mileRunTime ?? currentUser.mileRunTime,
-        medicalConditions: medicalConditions.isNotEmpty ? medicalConditions : currentUser.medicalConditions,
-        preferredWorkoutTimes: preferredWorkoutTimes.isNotEmpty ? preferredWorkoutTimes : currentUser.preferredWorkoutTimes,
+        medicalConditions:
+            medicalConditions.isNotEmpty
+                ? medicalConditions
+                : currentUser.medicalConditions,
+        preferredWorkoutTimes:
+            preferredWorkoutTimes.isNotEmpty
+                ? preferredWorkoutTimes
+                : currentUser.preferredWorkoutTimes,
         dailyStepTarget: currentUser.dailyStepTarget,
         stepTargetHistory: currentUser.stepTargetHistory,
         dailyCalorieTarget: currentUser.dailyCalorieTarget,

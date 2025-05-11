@@ -50,50 +50,70 @@ class _ReplaceMealScreenState extends State<ReplaceMealScreen> {
       _isLoading = false;
       setState(() {});
     } else {
-      _fetchMeals();
+      _listenToMeals();
     }
   }
 
-  Future<void> _fetchMeals() async {
+  void _listenToMeals() {
     setState(() => _isLoading = true);
     try {
-      debugPrint('Fetching meals for mealId: ${widget.mealId}');
-      final userProvider = Provider.of<UserProvider>(context, listen: false);
-      final currentMealDoc =
-          await FirebaseFirestore.instance
-              .collection('meals')
-              .doc(widget.mealId)
-              .get();
-      if (!currentMealDoc.exists) {
-        throw Exception('Current meal not found: ${widget.mealId}');
-      }
-      final currentMeal = Meal.fromMap(currentMealDoc.data()!);
-
-      final snapshot =
-          await FirebaseFirestore.instance.collection('meals').get();
-      final allMeals =
-          snapshot.docs
+      FirebaseFirestore.instance.collection('meals').snapshots().listen(
+        (snapshot) {
+          final allMeals = snapshot.docs
               .map((doc) => Meal.fromMap(doc.data()..['id'] = doc.id))
               .toList();
 
-      final recommended = _rankMeals(
-        allMeals,
-        currentMeal,
-        userProvider.currentUser,
-      );
+          final currentMeal = allMeals.firstWhere(
+            (meal) => meal.id == widget.mealId,
+            orElse: () => Meal(
+              id: '',
+              name: 'Unknown Meal',
+              image: '',
+              ingredients: [],
+              instructions: [],
+              diets: [],
+              category: '',
+              allergies: [],
+              prepTime: 0,
+            ),
+          );
 
-      if (mounted) {
-        setState(() {
-          _allMeals = allMeals;
-          _recommendedMeals = recommended.take(5).toList();
-          _isLoading = false;
-        });
-        ReplaceMealScreen._cachedAllMeals = allMeals;
-        ReplaceMealScreen._cachedRecommendedMeals[widget.mealId] =
-            recommended.take(5).toList();
-      }
+          if (mounted) {
+            final userProvider = Provider.of<UserProvider>(context, listen: false);
+            final recommended = _rankMeals(
+              allMeals,
+              currentMeal,
+              userProvider.currentUser,
+            );
+
+            setState(() {
+              _allMeals = allMeals;
+              _recommendedMeals = recommended.take(5).toList();
+              _isLoading = false;
+            });
+            ReplaceMealScreen._cachedAllMeals = allMeals;
+            ReplaceMealScreen._cachedRecommendedMeals[widget.mealId] =
+                recommended.take(5).toList();
+          }
+        },
+        onError: (error) {
+          debugPrint('Error listening to meals: $error');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Failed to load meals: $error',
+                  style: TextStyle(color: Theme.of(context).colorScheme.onError),
+                ),
+                backgroundColor: Theme.of(context).colorScheme.error,
+              ),
+            );
+            setState(() => _isLoading = false);
+          }
+        },
+      );
     } catch (e) {
-      debugPrint('Fetch meals error: $e');
+      debugPrint('Listen to meals error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

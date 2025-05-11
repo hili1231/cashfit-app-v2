@@ -98,6 +98,24 @@ class Meal {
     difficulty: map['difficulty'] as String?,
   );
 
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'image': image,
+      'ingredients': ingredients.map((i) => i.toJson()).toList(),
+      'instructions': instructions,
+      'diets': diets,
+      'category': category,
+      'allergies': allergies,
+      'prepTime': prepTime,
+      'cookTime': cookTime,
+      'video': video,
+      'tags': tags,
+      'difficulty': difficulty,
+    };
+  }
+
   Meal scaledToCalories(double targetCalories) {
     final currentCalories = calories;
 
@@ -128,6 +146,38 @@ class Meal {
       video: video,
       tags: tags,
       difficulty: difficulty,
+    );
+  }
+
+  Meal copyWith({
+    String? id,
+    String? name,
+    String? image,
+    List<MealIngredient>? ingredients,
+    List<String>? instructions,
+    List<String>? diets,
+    String? category,
+    List<String>? allergies,
+    int? prepTime,
+    int? cookTime,
+    String? video,
+    List<String>? tags,
+    String? difficulty,
+  }) {
+    return Meal(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      image: image ?? this.image,
+      ingredients: ingredients ?? this.ingredients,
+      instructions: instructions ?? this.instructions,
+      diets: diets ?? this.diets,
+      category: category ?? this.category,
+      allergies: allergies ?? this.allergies,
+      prepTime: prepTime ?? this.prepTime,
+      cookTime: cookTime ?? this.cookTime,
+      video: video ?? this.video,
+      tags: tags ?? this.tags,
+      difficulty: difficulty ?? this.difficulty,
     );
   }
 }

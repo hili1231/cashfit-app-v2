@@ -88,12 +88,12 @@ class _AdminCreateMealScreenState extends State<AdminCreateMealScreen> {
     try {
       final snapshot =
           await FirebaseFirestore.instance.collection('meals').get();
-      if (!mounted) return; // Check if the widget is still mounted
+      if (!mounted) return; // Ensure the widget is still mounted
       setState(() {
         meals = snapshot.docs.map((doc) => Meal.fromMap(doc.data())).toList();
       });
     } catch (e) {
-      if (!mounted) return; // Check if the widget is still mounted
+      if (!mounted) return; // Ensure the widget is still mounted
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text("Failed to load meals: $e"),
@@ -104,18 +104,18 @@ class _AdminCreateMealScreenState extends State<AdminCreateMealScreen> {
   }
 
   void _loadMealData(Meal meal) {
-    nameController.text = meal.name;
-    instructions.clear();
-    instructions.addAll(meal.instructions);
-    selectedDiets.clear();
-    selectedDiets.addAll(meal.diets);
-    selectedAllergies.clear();
-    selectedAllergies.addAll(meal.allergies);
-    mealIngredients.clear();
-    mealIngredients.addAll(meal.ingredients);
-    category = meal.category.isNotEmpty ? meal.category : 'Breakfast';
     setState(() {
-      selectedMeal = meal;
+      nameController.text = meal.name;
+      instructions.clear();
+      instructions.addAll(meal.instructions);
+      selectedDiets.clear();
+      selectedDiets.addAll(meal.diets);
+      selectedAllergies.clear();
+      selectedAllergies.addAll(meal.allergies);
+      mealIngredients.clear();
+      mealIngredients.addAll(meal.ingredients);
+      category = meal.category;
+      _selectedImage = null; // Reset image selection
     });
   }
 
@@ -136,13 +136,9 @@ class _AdminCreateMealScreenState extends State<AdminCreateMealScreen> {
     });
   }
 
-  Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final image = await picker.pickImage(source: ImageSource.gallery);
-    if (!mounted) return; // Check if the widget is still mounted
-    if (image != null) {
-      setState(() => _selectedImage = image);
-    }
+  Future<XFile?> _pickImage() async {
+    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+    return picked;
   }
 
   Future<String> _uploadImage(XFile image) async {
@@ -198,7 +194,7 @@ class _AdminCreateMealScreenState extends State<AdminCreateMealScreen> {
             .collection('meals')
             .doc(mealId)
             .update(newMeal.toMap());
-        if (!mounted) return; // Check if the widget is still mounted
+        if (!mounted) return; // Ensure the widget is still mounted
         scaffoldMessenger.showSnackBar(
           SnackBar(
             content: const Text("✅ Meal updated successfully"),
@@ -210,7 +206,7 @@ class _AdminCreateMealScreenState extends State<AdminCreateMealScreen> {
             .collection('meals')
             .doc(mealId)
             .set(newMeal.toMap());
-        if (!mounted) return; // Check if the widget is still mounted
+        if (!mounted) return; // Ensure the widget is still mounted
         scaffoldMessenger.showSnackBar(
           SnackBar(
             content: const Text("✅ New meal saved to database"),
@@ -219,7 +215,7 @@ class _AdminCreateMealScreenState extends State<AdminCreateMealScreen> {
         );
       }
     } catch (e) {
-      if (!mounted) return; // Check if the widget is still mounted
+      if (!mounted) return; // Ensure the widget is still mounted
       scaffoldMessenger.showSnackBar(
         SnackBar(
           content: Text("⚠️ Error saving meal: $e"),
@@ -228,7 +224,7 @@ class _AdminCreateMealScreenState extends State<AdminCreateMealScreen> {
       );
     }
 
-    if (!mounted) return; // Check if the widget is still mounted
+    if (!mounted) return; // Ensure the widget is still mounted
     setState(() {
       nameController.clear();
       instructionController.clear();
@@ -257,371 +253,189 @@ class _AdminCreateMealScreenState extends State<AdminCreateMealScreen> {
     );
   }
 
-  InputDecoration _inputDecoration(
-    String label,
-    ThemeData theme,
-    ColorScheme colorScheme,
-  ) => InputDecoration(
-    labelText: label,
-    filled: true,
-    fillColor: colorScheme.surfaceContainer,
-    labelStyle: theme.textTheme.bodyLarge?.copyWith(
-      color: colorScheme.onSurfaceVariant,
-    ),
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8),
-      borderSide: BorderSide(color: colorScheme.outline),
-    ),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8),
-      borderSide: BorderSide(color: colorScheme.outline),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8),
-      borderSide: BorderSide(color: colorScheme.primary),
-    ),
-  );
+  Future<void> _editMeal(Meal meal) async {
+    if (!_formKey.currentState!.validate()) return;
+
+    final updatedMeal = Meal(
+      id: meal.id,
+      name: nameController.text.trim(),
+      instructions: instructions,
+      diets: selectedDiets,
+      allergies: selectedAllergies,
+      ingredients: mealIngredients,
+      category: category,
+      image: meal.image,
+      prepTime: meal.prepTime, // Added required parameter
+      cookTime: meal.cookTime,
+      video: meal.video,
+      tags: meal.tags,
+      difficulty: meal.difficulty,
+    );
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('meals')
+          .doc(meal.id)
+          .update(updatedMeal.toMap());
+
+      if (!mounted) return; // Ensure the widget is still mounted
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Meal updated successfully!')),
+      );
+
+      _loadMeals();
+    } catch (e) {
+      if (!mounted) return; // Ensure the widget is still mounted
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to update meal: $e')),
+      );
+    }
+  }
+
+  Future<void> _assignMealToDay(String day, Meal meal) async {
+    try {
+      final dayRef = FirebaseFirestore.instance.collection('mealDays').doc(day);
+      final dayData = await dayRef.get();
+
+      if (dayData.exists) {
+        await dayRef.update({
+          'meals': FieldValue.arrayUnion([meal.id]),
+        });
+      } else {
+        await dayRef.set({
+          'meals': [meal.id],
+        });
+      }
+
+      // ignore: use_build_context_synchronously
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Meal assigned to $day successfully!')),
+      );
+    } catch (e) {
+      // ignore: use_build_context_synchronously
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to assign meal: $e')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
     return Scaffold(
-      backgroundColor: colorScheme.surface,
       appBar: AppBar(
-        title: Text(
-          "Edit Meal",
-          style: theme.textTheme.titleLarge?.copyWith(
-            color: colorScheme.onSurface,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        backgroundColor: colorScheme.surface,
-        elevation: 2,
+        title: const Text('Create or Edit Meal'),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
+      body: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Select Meal
-              DropdownButtonFormField<Meal>(
+              DropdownButton<Meal>(
+                hint: const Text('Select a Meal to Edit'),
                 value: selectedMeal,
-                decoration: _inputDecoration(
-                  "Select Meal to Edit",
-                  theme,
-                  colorScheme,
-                ),
-                isExpanded: true,
-                dropdownColor: colorScheme.surfaceContainer,
-                style: theme.textTheme.bodyLarge?.copyWith(
-                  color: colorScheme.onSurface,
-                ),
-                items:
-                    meals.map((meal) {
-                      return DropdownMenuItem(
-                        value: meal,
-                        child: Text(meal.name),
-                      );
-                    }).toList(),
+                items: meals.map((meal) {
+                  return DropdownMenuItem<Meal>(
+                    value: meal,
+                    child: Text(meal.name),
+                  );
+                }).toList(),
                 onChanged: (meal) {
                   if (meal != null) {
+                    setState(() {
+                      selectedMeal = meal;
+                    });
                     _loadMealData(meal);
                   }
                 },
               ),
-              const SizedBox(height: 16),
-
-              // Meal Name
               TextFormField(
                 controller: nameController,
-                style: theme.textTheme.bodyLarge?.copyWith(
-                  color: colorScheme.onSurface,
-                ),
-                decoration: _inputDecoration('Meal Name', theme, colorScheme),
-                validator:
-                    (value) =>
-                        (value == null || value.isEmpty) ? 'Required' : null,
-              ),
-              const SizedBox(height: 16),
-
-              // Category
-              DropdownButtonFormField(
-                value: category,
-                isExpanded: true,
-                decoration: _inputDecoration("Category", theme, colorScheme),
-                dropdownColor: colorScheme.surfaceContainer,
-                style: theme.textTheme.bodyLarge?.copyWith(
-                  color: colorScheme.onSurface,
-                ),
-                items:
-                    ['Breakfast', 'Lunch', 'Dinner', 'Snack'].map((cat) {
-                      return DropdownMenuItem(value: cat, child: Text(cat));
-                    }).toList(),
-                onChanged: (value) {
-                  setState(() => category = value as String);
+                decoration: const InputDecoration(labelText: 'Meal Name'),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter a meal name';
+                  }
+                  return null;
                 },
               ),
-              const SizedBox(height: 16),
-
-              // Diets
-              Text(
-                "Diets",
-                style: theme.textTheme.titleMedium?.copyWith(
-                  color: colorScheme.onSurface,
-                ),
+              const SizedBox(height: 16.0),
+              TextFormField(
+                controller: instructionController,
+                decoration: const InputDecoration(labelText: 'Add Instruction'),
               ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                children:
-                    allDiets.map((diet) {
-                      return FilterChip(
-                        label: Text(diet),
-                        selected: selectedDiets.contains(diet),
-                        labelStyle: theme.textTheme.bodyMedium?.copyWith(
-                          color: colorScheme.onSurface,
-                        ),
-                        selectedColor: colorScheme.primary,
-                        backgroundColor: colorScheme.surfaceContainer,
-                        onSelected: (isSelected) {
-                          setState(() {
-                            if (isSelected) {
-                              selectedDiets.add(diet);
-                            } else {
-                              selectedDiets.remove(diet);
-                            }
-                          });
-                        },
-                      );
-                    }).toList(),
+              ElevatedButton(
+                onPressed: _addInstruction,
+                child: const Text('Add Instruction'),
               ),
-              const SizedBox(height: 16),
-
-              // Allergies
-              Text(
-                "Allergies",
-                style: theme.textTheme.titleMedium?.copyWith(
-                  color: colorScheme.onSurface,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                children:
-                    allAllergies.map((allergy) {
-                      return FilterChip(
-                        label: Text(allergy),
-                        selected: selectedAllergies.contains(allergy),
-                        labelStyle: theme.textTheme.bodyMedium?.copyWith(
-                          color: colorScheme.onSurface,
-                        ),
-                        selectedColor: colorScheme.primary,
-                        backgroundColor: colorScheme.surfaceContainer,
-                        onSelected: (isSelected) {
-                          setState(() {
-                            if (isSelected) {
-                              selectedAllergies.add(allergy);
-                            } else {
-                              selectedAllergies.remove(allergy);
-                            }
-                          });
-                        },
-                      );
-                    }).toList(),
-              ),
-              const SizedBox(height: 16),
-
-              // Pick Image
-              ElevatedButton.icon(
-                onPressed: _pickImage,
-                icon: Icon(Icons.image, color: colorScheme.onPrimary),
-                label: Text(
-                  "Choose Image",
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: colorScheme.onPrimary,
-                  ),
-                ),
-                style: theme.elevatedButtonTheme.style?.copyWith(
-                  backgroundColor: WidgetStateProperty.all(colorScheme.primary),
-                  foregroundColor: WidgetStateProperty.all(
-                    colorScheme.onPrimary,
-                  ),
-                ),
-              ),
-              if (_selectedImage != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: Image.file(File(_selectedImage!.path), height: 150),
-                ),
-
-              const SizedBox(height: 12),
-
-              // Ingredients
-              Text(
-                "Ingredients",
-                style: theme.textTheme.titleMedium?.copyWith(
-                  color: colorScheme.onSurface,
-                ),
-              ),
-              ...mealIngredients.map(
-                (mi) => Text(
-                  "- ${mi.ingredient.name} (${mi.quantity}g)",
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurface,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-
-              // Add Ingredient
-              DropdownButtonFormField<Ingredient>(
-                isExpanded: true,
-                dropdownColor: colorScheme.surfaceContainer,
-                style: theme.textTheme.bodyLarge?.copyWith(
-                  color: colorScheme.onSurface,
-                ),
-                decoration: _inputDecoration(
-                  "Add Ingredient",
-                  theme,
-                  colorScheme,
-                ),
-                items:
-                    allIngredients.map((ing) {
-                      return DropdownMenuItem(
-                        value: ing,
-                        child: Text(ing.name),
-                      );
-                    }).toList(),
-                onChanged: (ingredient) {
-                  if (ingredient != null) {
-                    final qtyController = TextEditingController();
-                    showDialog(
-                      context: context,
-                      builder:
-                          (ctx) => AlertDialog(
-                            backgroundColor: colorScheme.surface,
-                            title: Text(
-                              "Quantity for ${ingredient.name}",
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                color: colorScheme.onSurface,
-                              ),
-                            ),
-                            content: TextField(
-                              controller: qtyController,
-                              keyboardType: TextInputType.number,
-                              style: theme.textTheme.bodyLarge?.copyWith(
-                                color: colorScheme.onSurface,
-                              ),
-                              decoration: _inputDecoration(
-                                "grams",
-                                theme,
-                                colorScheme,
-                              ),
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () {
-                                  final qty =
-                                      double.tryParse(qtyController.text) ??
-                                      0.0;
-                                  _addIngredient(ingredient, qty);
-                                  Navigator.pop(ctx);
-                                },
-                                child: Text(
-                                  "Add",
-                                  style: theme.textTheme.labelLarge?.copyWith(
-                                    color: colorScheme.primary,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                    );
+              const SizedBox(height: 16.0),
+              ElevatedButton(
+                onPressed: () async {
+                  final image = await _pickImage();
+                  if (image != null) {
+                    setState(() => _selectedImage = image);
                   }
                 },
+                child: const Text('Pick Image'),
               ),
-
-              const SizedBox(height: 16),
-
-              // Instructions
-              Text(
-                "Instructions",
-                style: theme.textTheme.titleMedium?.copyWith(
-                  color: colorScheme.onSurface,
-                ),
-              ),
-              ...instructions.map(
-                (i) => Text(
-                  "• $i",
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurface,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: instructionController,
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        color: colorScheme.onSurface,
-                      ),
-                      decoration: _inputDecoration(
-                        "New instruction",
-                        theme,
-                        colorScheme,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    icon: Icon(Icons.add, color: colorScheme.onSurface),
-                    onPressed: _addInstruction,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-
-              // Save Button
+              const SizedBox(height: 16.0),
               ElevatedButton(
-                onPressed: _saveMeal,
-                style: theme.elevatedButtonTheme.style?.copyWith(
-                  backgroundColor: WidgetStateProperty.all(colorScheme.primary),
-                  foregroundColor: WidgetStateProperty.all(
-                    colorScheme.onPrimary,
-                  ),
-                ),
-                child: Text(
-                  "Save Edited Meal",
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: colorScheme.onPrimary,
-                  ),
-                ),
+                onPressed: () async {
+                  if (selectedMeal != null) {
+                    await _editMeal(selectedMeal!);
+                  } else {
+                    await _saveMeal();
+                  }
+                },
+                child: const Text('Save or Edit Meal'),
               ),
-              const SizedBox(height: 12),
-
-              // Upload Sample (Placeholder)
-              ElevatedButton.icon(
-                onPressed: _uploadSampleMeals,
-                icon: Icon(Icons.upload_file, color: colorScheme.onSurface),
-                label: Text(
-                  "Upload Sample Meals",
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: colorScheme.onSurface,
-                  ),
-                ),
-                style: theme.elevatedButtonTheme.style?.copyWith(
-                  backgroundColor: WidgetStateProperty.all(
-                    colorScheme.surfaceContainer,
-                  ),
-                  foregroundColor: WidgetStateProperty.all(
-                    colorScheme.onSurface,
-                  ),
-                ),
+              const SizedBox(height: 16.0),
+              ElevatedButton(
+                onPressed: () async {
+                  await _uploadSampleMeals();
+                },
+                child: const Text('Upload Sample Meals'),
+              ),
+              const SizedBox(height: 16.0),
+              ElevatedButton(
+                onPressed: () async {
+                  if (selectedMeal != null) {
+                    await _assignMealToDay('Monday', selectedMeal!);
+                  }
+                },
+                child: const Text('Assign Meal to Monday'),
+              ),
+              const SizedBox(height: 16.0),
+              ElevatedButton(
+                onPressed: () {
+                  final ingredient = Ingredient(
+                    id: 'sample_id',
+                    name: 'Sample Ingredient',
+                    calories: 50.0,
+                    protein: 2.0,
+                    carbs: 10.0,
+                    fat: 1.0,
+                    fiber: 1.0,
+                    sugar: 0.0,
+                    saturatedFat: 0.0,
+                    cholesterol: 0.0,
+                    vitaminA: 0.0,
+                    vitaminC: 0.0,
+                    vitaminD: 0.0,
+                    vitaminK: 0.0,
+                    vitaminB12: 0.0,
+                    iron: 0.0,
+                    calcium: 0.0,
+                    potassium: 0.0,
+                    magnesium: 0.0,
+                    sodium: 0.0,
+                    zinc: 0.0,
+                    glycemicIndex: null,
+                  );
+                  _addIngredient(ingredient, 1.0);
+                },
+                child: const Text('Add Ingredient'),
               ),
             ],
           ),

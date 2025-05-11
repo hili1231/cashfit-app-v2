@@ -34,7 +34,7 @@ class _AdminUploadIngredientsScreenState
 
       final response = await http.get(url);
       if (response.statusCode != 200) {
-        throw Exception("Failed to fetch data.");
+        throw Exception("Failed to fetch data. Status code: ${response.statusCode}");
       }
 
       final data = json.decode(response.body);
@@ -112,8 +112,9 @@ class _AdminUploadIngredientsScreenState
       );
 
       setState(() => parsedIngredients = fetched);
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (!mounted) return;
+      debugPrint("Search error: $e\n$stackTrace");
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text("Search error: $e")));
@@ -140,20 +141,25 @@ class _AdminUploadIngredientsScreenState
   Future<void> uploadIngredients() async {
     setState(() => isLoading = true);
     try {
-      final batch = FirebaseFirestore.instance.batch();
-      for (var ingredient in parsedIngredients) {
-        final docRef = FirebaseFirestore.instance
-            .collection('ingredients')
-            .doc(ingredient.id);
-        batch.set(docRef, ingredient.toMap()); // Changed to toMap()
+      final batchSize = 500;
+      for (int i = 0; i < parsedIngredients.length; i += batchSize) {
+        final batch = FirebaseFirestore.instance.batch();
+        final chunk = parsedIngredients.skip(i).take(batchSize);
+        for (var ingredient in chunk) {
+          final docRef = FirebaseFirestore.instance
+              .collection('ingredients')
+              .doc(ingredient.id);
+          batch.set(docRef, ingredient.toMap());
+        }
+        await batch.commit();
       }
-      await batch.commit();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("✅ All ingredients uploaded!")),
       );
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (!mounted) return;
+      debugPrint("Upload failed: $e\n$stackTrace");
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text("Upload failed: $e")));
@@ -177,6 +183,30 @@ class _AdminUploadIngredientsScreenState
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text("Upload failed: $e")));
+    }
+  }
+
+  Future<void> _confirmAndUploadIngredients() async {
+    final shouldUpload = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Confirm Upload"),
+        content: const Text("Are you sure you want to upload all ingredients?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text("Upload"),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldUpload == true) {
+      await uploadIngredients();
     }
   }
 
@@ -279,7 +309,7 @@ class _AdminUploadIngredientsScreenState
                 ElevatedButton(
                   onPressed:
                       parsedIngredients.isNotEmpty && !isLoading
-                          ? uploadIngredients
+                          ? _confirmAndUploadIngredients
                           : null,
                   child:
                       isLoading

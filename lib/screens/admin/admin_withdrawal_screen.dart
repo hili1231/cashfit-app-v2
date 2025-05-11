@@ -46,6 +46,10 @@ class _AdminWithdrawalsScreenState extends State<AdminWithdrawalsScreen> {
     return requests;
   }
 
+  Future<void> _refreshWithdrawals() async {
+    setState(() {});
+  }
+
   Future<void> _approveWithdrawal(String userId, String withdrawalId) async {
     setState(() {
       isLoading = true;
@@ -81,7 +85,7 @@ class _AdminWithdrawalsScreenState extends State<AdminWithdrawalsScreen> {
       );
 
       // Refresh the list
-      setState(() {});
+      await _refreshWithdrawals();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -141,7 +145,7 @@ class _AdminWithdrawalsScreenState extends State<AdminWithdrawalsScreen> {
       );
 
       // Refresh the list
-      setState(() {});
+      await _refreshWithdrawals();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

@@ -499,9 +499,9 @@ class AdminExerciseManagementScreenState
 
       if (result == null || result.files.isEmpty) {
         if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('No file selected.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No file selected.')),
+        );
         return;
       }
 

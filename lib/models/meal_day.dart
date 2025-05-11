@@ -53,6 +53,28 @@ class MealDay {
     );
   }
 
+  MealDay copyWith({
+    int? dayNumber,
+    MealPortion? breakfast,
+    MealPortion? snack1,
+    MealPortion? lunch,
+    MealPortion? snack2,
+    MealPortion? dinner,
+    MealPortion? snack3,
+    bool? isFasting,
+  }) {
+    return MealDay(
+      dayNumber: dayNumber ?? this.dayNumber,
+      breakfast: breakfast ?? this.breakfast,
+      snack1: snack1 ?? this.snack1,
+      lunch: lunch ?? this.lunch,
+      snack2: snack2 ?? this.snack2,
+      dinner: dinner ?? this.dinner,
+      snack3: snack3 ?? this.snack3,
+      isFasting: isFasting ?? this.isFasting,
+    );
+  }
+
   Map<String, dynamic> toMap() => {
     'dayNumber': dayNumber,
     if (breakfast != null) 'breakfast': breakfast!.toMap(),

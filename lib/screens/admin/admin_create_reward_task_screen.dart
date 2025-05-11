@@ -44,6 +44,7 @@ class _AdminCreateRewardTaskScreenState
                 .toList();
       });
     } catch (e) {
+      debugPrint("Error loading tasks: $e");
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -124,6 +125,7 @@ class _AdminCreateRewardTaskScreenState
       });
       await _loadTasks();
     } catch (e) {
+      debugPrint("Error saving task: $e");
       if (!mounted) return;
       scaffoldMessenger.showSnackBar(
         SnackBar(
@@ -148,6 +150,7 @@ class _AdminCreateRewardTaskScreenState
       );
       await _loadTasks();
     } catch (e) {
+      debugPrint("Error uploading static tasks: $e");
       if (!mounted) return;
       scaffoldMessenger.showSnackBar(
         SnackBar(
