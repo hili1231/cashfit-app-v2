@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:cashfit/models/app_user.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -52,7 +52,7 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
   int dailyStepTarget = 10000;
   Stream<StepCount>? stepCountStream;
   bool stepCounterInitialized = false;
-  bool stepCounterSupported = Platform.isAndroid || Platform.isIOS;
+  bool get stepCounterSupported => !kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS);
   DateTime? lastAdAttempt;
 
   @override
@@ -62,9 +62,7 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
     if (stepCounterSupported) {
       _initializeStepCounter();
     } else {
-      _logger.i(
-        'Step counter skipped on unsupported platform: ${Platform.operatingSystem}',
-      );
+      _logger.i('Step counter skipped on web or desktop platform');
     }
   }
 
@@ -125,40 +123,143 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
 
   Future<void> _loadTasks() async {
     try {
-      final snapshot =
-          await FirebaseFirestore.instance.collection('rewards').get();
+      final snapshot = await FirebaseFirestore.instance
+          .collection('rewards')
+          .get()
+          .timeout(const Duration(seconds: 1));
       rewardTasks =
           snapshot.docs.map((doc) => RewardTask.fromJson(doc.data())).toList();
+      if (rewardTasks.isEmpty) {
+        rewardTasks = _getDefaultTasksList();
+      }
       taskSparkleStates = {for (var task in rewardTasks) task.id: false};
     } catch (e) {
-      _logger.e("Failed to load reward tasks: $e");
-      rewardTasks = [];
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to load reward tasks: $e'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
-      }
+      _logger.e("Failed to load reward tasks from firestore, using defaults: $e");
+      rewardTasks = _getDefaultTasksList();
+      taskSparkleStates = {for (var task in rewardTasks) task.id: false};
     }
+  }
+
+  List<RewardTask> _getDefaultTasksList() {
+    return [
+      RewardTask(
+        id: 'daily_check_in',
+        title: 'Daily Check-In',
+        description: 'Check in daily to earn escalating FitCoins.',
+        points: 0,
+        type: RewardType.dailyCheckIn,
+        maxCount: 1,
+        isCompleted: false,
+        isEnabled: false,
+        buttonText: 'Check In',
+      ),
+      RewardTask(
+        id: 'complete_workout',
+        title: 'Complete a Workout',
+        description: 'Finish a workout to earn FitCoins.',
+        points: 20,
+        type: RewardType.daily,
+        maxCount: 1,
+        isCompleted: false,
+        isEnabled: false,
+        buttonText: 'Complete Workout',
+      ),
+      RewardTask(
+        id: 'complete_meal_plan',
+        title: 'Complete Daily Meal Plan',
+        description: 'Complete your daily meals to earn FitCoins.',
+        points: 15,
+        type: RewardType.daily,
+        maxCount: 1,
+        isCompleted: false,
+        isEnabled: false,
+        buttonText: 'Complete Meal Day',
+      ),
+      RewardTask(
+        id: 'daily_step_goal',
+        title: 'Daily Step Goal',
+        description: 'Meet your daily step target to earn FitCoins.',
+        points: 10,
+        type: RewardType.daily,
+        maxCount: 1,
+        isCompleted: false,
+        isEnabled: false,
+        buttonText: 'Check Steps',
+      ),
+      RewardTask(
+        id: 'update_weight',
+        title: 'Update Your Weight',
+        description: 'Update your weight weekly to earn FitCoins.',
+        points: 10,
+        type: RewardType.weekly,
+        maxCount: 1,
+        isCompleted: false,
+        isEnabled: false,
+        buttonText: 'Update Weight',
+      ),
+      RewardTask(
+        id: 'build_profile',
+        title: 'Build Profile',
+        description: 'Complete your profile to earn FitCoins.',
+        points: 15,
+        type: RewardType.oneOff,
+        maxCount: 1,
+        isCompleted: false,
+        isEnabled: false,
+        buttonText: 'Build Profile',
+      ),
+      RewardTask(
+        id: 'build_plans',
+        title: 'Build Workout & Diet Plan',
+        description: 'Set up your workout and diet plan to earn FitCoins.',
+        points: 10,
+        type: RewardType.oneOff,
+        maxCount: 1,
+        isCompleted: false,
+        isEnabled: false,
+        buttonText: 'Build Plan',
+      ),
+      RewardTask(
+        id: 'complete_side_hustle',
+        title: 'Compete in your first Side Hustle',
+        description: 'Complete your first side hustle to earn FitCoins.',
+        points: 20,
+        type: RewardType.oneOff,
+        maxCount: 1,
+        isCompleted: false,
+        isEnabled: false,
+        buttonText: 'Start Side Hustle',
+      ),
+      RewardTask(
+        id: 'watch_ad',
+        title: 'Watch an Ad',
+        description: 'Watch an ad to earn FitCoins.',
+        points: 10,
+        type: RewardType.adReward,
+        maxCount: 7,
+        isCompleted: false,
+        isEnabled: false,
+        buttonText: 'Watch Ad',
+      ),
+    ];
   }
 
   Future<void> _loadUserData() async {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
 
-    if (userProvider.currentUser == null) {
-      await userProvider.loadUserData(FirebaseAuth.instance.currentUser!.uid);
-    } else {
-      await userProvider.refreshUser();
+    try {
+      final fbUser = FirebaseAuth.instance.currentUser;
+      if (userProvider.currentUser == null && fbUser != null) {
+        await userProvider.loadUserData(fbUser.uid);
+      } else if (userProvider.currentUser != null) {
+        await userProvider.refreshUser();
+      }
+    } catch (e) {
+      _logger.w("Failed to load user data for rewards screen: $e");
     }
 
-    if (userProvider.currentUser != null) {
+    if (mounted) {
       _updateTaskStates();
-      setState(() {
-        isUserDataLoaded = true;
-      });
-    } else {
       setState(() {
         isLoading = false;
         isUserDataLoaded = true;
@@ -168,7 +269,12 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
   void _updateTaskStates() {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     final now = DateTime.now();
-    final user = userProvider.currentUser!;
+    final user = userProvider.currentUser ?? AppUser.fromMap({
+      'id': 'guest',
+      'email': 'guest@cashfit.com',
+      'name': 'Guest User',
+      'points': 100,
+    });
 
     // Daily Check-In Logic
     final lastCheckIn = user.lastCheckIn;
@@ -287,12 +393,12 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
   void _buildRewardTasks() {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     final navState = context.findAncestorStateOfType<NavScreenState>();
-    final user = userProvider.currentUser;
-
-    if (user == null) {
-      _logger.w('User is null, cannot build reward tasks');
-      return;
-    }
+    final user = userProvider.currentUser ?? AppUser.fromMap({
+      'id': 'guest',
+      'email': 'guest@cashfit.com',
+      'name': 'Guest User',
+      'points': 100,
+    });
 
     if (navState == null) {
       _logger.w('NavScreenState is null, navigation may not work');
@@ -325,8 +431,14 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
           DateTime? lastClaimedDate;
 
           if (claimedReward != null && claimedReward['lastClaimed'] != null) {
-            lastClaimedDate =
-                (claimedReward['lastClaimed'] as Timestamp).toDate();
+            final lc = claimedReward['lastClaimed'];
+            if (lc is Timestamp) {
+              lastClaimedDate = lc.toDate();
+            } else if (lc is DateTime) {
+              lastClaimedDate = lc;
+            } else if (lc is String) {
+              lastClaimedDate = DateTime.tryParse(lc);
+            }
           }
 
           if (lastClaimedDate != null) {
@@ -545,7 +657,12 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
   }
 
   String _getTaskDescription(RewardTask task) {
-    final user = Provider.of<UserProvider>(context, listen: false).currentUser!;
+    final user = Provider.of<UserProvider>(context, listen: false).currentUser ?? AppUser.fromMap({
+      'id': 'guest',
+      'email': 'guest@cashfit.com',
+      'name': 'Guest User',
+      'points': 100,
+    });
     final now = DateTime.now();
 
     final claimedReward = user.claimedRewards[task.id];
@@ -553,7 +670,14 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
     DateTime? lastClaimedDate;
 
     if (claimedReward != null && claimedReward['lastClaimed'] != null) {
-      lastClaimedDate = (claimedReward['lastClaimed'] as Timestamp).toDate();
+      final lc = claimedReward['lastClaimed'];
+      if (lc is Timestamp) {
+        lastClaimedDate = lc.toDate();
+      } else if (lc is DateTime) {
+        lastClaimedDate = lc;
+      } else if (lc is String) {
+        lastClaimedDate = DateTime.tryParse(lc);
+      }
     }
 
     if (lastClaimedDate != null) {
@@ -1127,7 +1251,7 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
                         ),
                       ),
                       const SizedBox(width: 4),
-                      Image.asset('assets/images/fitcoin_icon.png', width: 24),
+                      const Icon(Icons.monetization_on, color: Colors.amber, size: 24),
                     ],
                   ),
                 ],
@@ -1207,7 +1331,7 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
       _updateTaskStates();
     }
 
-    if (isLoading || userProvider.currentUser == null) {
+    if (isLoading) {
       return Container(
         decoration: AppTheme.backgroundGradient(colorScheme),
         child: Scaffold(
@@ -1239,7 +1363,7 @@ class _EarnPointsScreenState extends State<EarnPointsScreen> {
                         ),
                       ),
                       const SizedBox(width: 6),
-                      Image.asset('assets/images/fitcoin_icon.png', width: 30),
+                      const Icon(Icons.monetization_on, color: Colors.amber, size: 28),
                     ],
                   ),
                   const SizedBox(height: 20),

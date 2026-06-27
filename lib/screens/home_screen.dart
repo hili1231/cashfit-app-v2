@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../ad_helper.dart';
 import '../models/meal_plan.dart';
 import '../models/workout_program.dart';
 import '../models/side_hustle.dart';
@@ -35,7 +34,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late Future<Map<String, dynamic>> _homeDataFuture;
-  bool _isAdRewardButtonEnabled = true;
 
   // Card size constants
   static const double _cardWidth = 180;
@@ -48,48 +46,85 @@ class _HomeScreenState extends State<HomeScreen> {
     _homeDataFuture = fetchAllHomeData();
   }
 
-  void _handleAdWatched() {
-    setState(() {
-      _isAdRewardButtonEnabled = false; // Disable button after watching ad
-    });
-    // Simulate ad reward logic
-    Future.delayed(Duration(seconds: 5), () {
-      setState(() {
-        _isAdRewardButtonEnabled = true; // Re-enable button after reward
-      });
-    });
-  }
 
   Future<Map<String, dynamic>> fetchAllHomeData() async {
-    final cacheService = CacheService();
+    try {
+      final cacheService = CacheService();
 
-    // Use cache service to get workout programs and meal plans
-    final workoutsFuture = cacheService.getWorkoutPrograms();
-    final mealPlansFuture = cacheService.getMealPlans();
+      final workoutsFuture = cacheService.getWorkoutPrograms();
+      final mealPlansFuture = cacheService.getMealPlans();
 
-    final firestore = FirebaseFirestore.instance;
-    final hustlesFuture = firestore.collection('sideHustles').get();
-    final results = await Future.wait([
-      workoutsFuture,
-      mealPlansFuture,
-      hustlesFuture,
-    ]);
+      final firestore = FirebaseFirestore.instance;
+      final hustlesFuture = firestore
+          .collection('sideHustles')
+          .get()
+          .timeout(const Duration(seconds: 1));
 
-    final workoutPrograms = results[0] as List<WorkoutProgram>;
-    final mealPlans = results[1] as List<MealPlan>;
-    final hustlesSnapshot = results[2] as QuerySnapshot;
-    final sideHustles =
-        hustlesSnapshot.docs
-            .map(
-              (doc) => SideHustle.fromMap(doc.data() as Map<String, dynamic>),
-            )
-            .toList();
+      final results = await Future.wait([
+        workoutsFuture,
+        mealPlansFuture,
+        hustlesFuture.catchError((_) => throw Exception('Firestore offline')),
+      ]);
 
-    return {
-      'workouts': workoutPrograms,
-      'mealPlans': mealPlans,
-      'sideHustles': sideHustles,
-    };
+      final workoutPrograms = results[0] as List<WorkoutProgram>;
+      final mealPlans = results[1] as List<MealPlan>;
+      final hustlesSnapshot = results[2] as QuerySnapshot;
+      var sideHustles = hustlesSnapshot.docs
+          .map(
+            (doc) => SideHustle.fromMap(doc.data() as Map<String, dynamic>),
+          )
+          .toList();
+
+      if (sideHustles.isEmpty) {
+        sideHustles = _getSampleSideHustles();
+      }
+
+      return {
+        'workouts': workoutPrograms,
+        'mealPlans': mealPlans,
+        'sideHustles': sideHustles,
+      };
+    } catch (e) {
+      final cacheService = CacheService();
+      final workouts = await cacheService.getWorkoutPrograms().timeout(
+        const Duration(seconds: 1),
+        onTimeout: () => [],
+      );
+      final mealPlans = await cacheService.getMealPlans().timeout(
+        const Duration(seconds: 1),
+        onTimeout: () => [],
+      );
+      return {
+        'workouts': workouts,
+        'mealPlans': mealPlans,
+        'sideHustles': _getSampleSideHustles(),
+      };
+    }
+  }
+
+  List<SideHustle> _getSampleSideHustles() {
+    return [
+      SideHustle(
+        id: 'hustle_1',
+        title: 'Fitness Community Ambassador',
+        description: 'Lead group workout discussions and earn weekly FitCoin bonuses.',
+        reward: 150,
+        videoRequirement: 'Record a 30s community workout update',
+        thumbnail: 'https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?auto=format&fit=crop&w=600&q=80',
+        maxParticipants: 10,
+        participants: ['user_1', 'user_2'],
+      ),
+      SideHustle(
+        id: 'hustle_2',
+        title: 'Healthy Recipe Creator',
+        description: 'Submit verified weight loss recipes to earn rewards.',
+        reward: 200,
+        videoRequirement: 'Record a meal prep demonstration video',
+        thumbnail: 'https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=600&q=80',
+        maxParticipants: 15,
+        participants: ['user_1'],
+      ),
+    ];
   }
 
   Widget _buildActivePlansCards(BuildContext context) {
@@ -470,8 +505,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const SizedBox(height: 12),
-                        AdHelper.bannerAdWidget(context),
-                        const SizedBox(height: 12),
                         if (hasActivePlans) ...[
                           _buildActivePlansCards(context),
                           const SizedBox(height: 16),
@@ -493,19 +526,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         if (hasSideHustles) ...[
                           _buildSectionTitle(context, "SIDE HUSTLES"),
                           _buildSideHustleRow(context, sideHustles),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 16),
                         ],
-                        ElevatedButton(
-                          onPressed:
-                              _isAdRewardButtonEnabled
-                                  ? _handleAdWatched
-                                  : null,
-                          child: Text(
-                            _isAdRewardButtonEnabled
-                                ? 'Watch Ad'
-                                : 'Ad Loading...',
-                          ),
-                        ),
                       ],
                     );
                   },
@@ -857,12 +879,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final spotsLeft = maxP > 0 ? (maxP - totalParticipants) : 0;
 
     return AnimatedCard(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      color: colorScheme.surfaceContainer,
-      child: SizedBox(
+      child: Container(
         width: 180,
         height: 220,
+        decoration: AppTheme.glassCardDecoration(colorScheme),
         child: GestureDetector(
           onTap: () {
             if (navState != null) {

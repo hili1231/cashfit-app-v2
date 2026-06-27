@@ -24,11 +24,10 @@ class WorkoutCard extends StatelessWidget {
     final totalDays = workout.days.length;
 
     return AnimatedCard(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: SizedBox(
-        width: 180,
+      child: Container(
+        width: 190,
         height: 240,
+        decoration: AppTheme.glassCardDecoration(colorScheme),
         child: GestureDetector(
           onTap: () {
             final navState = context.findAncestorStateOfType<NavScreenState>();
@@ -37,21 +36,48 @@ class WorkoutCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ClipRRect(
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(12),
-                  topRight: Radius.circular(12),
-                ),
-                child: _buildWorkoutImage(context),
+              Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                    child: _buildWorkoutImage(context),
+                  ),
+                  Positioned(
+                    top: 8,
+                    left: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.65),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: colorScheme.primary.withValues(alpha: 0.5), width: 1),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.bolt, color: colorScheme.primary, size: 14),
+                          const SizedBox(width: 4),
+                          Text(
+                            "$totalDays Days",
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
                 child: Text(
                   workout.title,
                   style: theme.textTheme.titleSmall?.copyWith(
                     color: colorScheme.onSurface,
                     fontWeight: FontWeight.bold,
+                    fontSize: 15,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -59,42 +85,18 @@ class WorkoutCard extends StatelessWidget {
               ),
               const Spacer(),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.calendar_today,
-                      color: colorScheme.primary,
-                      size: 14,
-                    ),
-                    const SizedBox(width: 5),
-                    Text(
-                      "$totalDays days",
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 4),
-              Padding(
-                padding: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
-                child: OutlinedButton(
-                  onPressed:
-                      onDayButtonPressed ??
-                      () {
-                        final navState =
-                            context.findAncestorStateOfType<NavScreenState>();
-                        navState?.setDetailScreen(
-                          WorkoutDetailScreen(workout: workout),
-                        );
-                      },
-                  // No style: will pick up your AppTheme.outlinedButtonTheme
-                  child: Text(
-                    currentDay != null ? "Day $currentDay" : "View Workout",
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
+                padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: onDayButtonPressed ??
+                        () {
+                          final navState = context.findAncestorStateOfType<NavScreenState>();
+                          navState?.setDetailScreen(WorkoutDetailScreen(workout: workout));
+                        },
+                    child: Text(
+                      currentDay != null ? "Day $currentDay" : "View Program",
+                      style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
                 ),
@@ -110,48 +112,30 @@ class WorkoutCard extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final imageUrl = workout.image.trim();
 
-    if (imageUrl.isEmpty) {
-      return Container(
-        height: 80,
-        width: double.infinity,
-        color: colorScheme.surfaceContainer,
-        alignment: Alignment.center,
-        child: Icon(Icons.fitness_center, size: 40, color: colorScheme.primary),
-      );
-    }
+    final validUrl = imageUrl.startsWith('http')
+        ? imageUrl
+        : 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=600&q=80';
 
     return CachedNetworkImage(
-      imageUrl: imageUrl,
-      height: 80,
+      imageUrl: validUrl,
+      height: 100,
       width: double.infinity,
       fit: BoxFit.cover,
       fadeInDuration: const Duration(milliseconds: 200),
-      placeholder:
-          (context, url) => Container(
-            height: 80,
-            width: double.infinity,
-            color: colorScheme.surfaceContainer,
-            alignment: Alignment.center,
-            child: Icon(
-              Icons.fitness_center,
-              size: 40,
-              color: colorScheme.primary,
-            ),
-          ),
-      errorWidget:
-          (context, url, error) => Container(
-            height: 80,
-            width: double.infinity,
-            color: colorScheme.surfaceContainer,
-            alignment: Alignment.center,
-            child: Icon(
-              Icons.fitness_center,
-              size: 40,
-              color: colorScheme.primary,
-            ),
-          ),
-      memCacheWidth: 320,
-      maxWidthDiskCache: 320,
+      placeholder: (context, url) => Container(
+        height: 100,
+        width: double.infinity,
+        color: colorScheme.surfaceContainer,
+        alignment: Alignment.center,
+        child: Icon(Icons.fitness_center, size: 44, color: colorScheme.primary),
+      ),
+      errorWidget: (context, url, error) => Container(
+        height: 100,
+        width: double.infinity,
+        color: colorScheme.surfaceContainer,
+        alignment: Alignment.center,
+        child: Icon(Icons.fitness_center, size: 44, color: colorScheme.primary),
+      ),
     );
   }
 }

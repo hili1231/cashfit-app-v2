@@ -6,6 +6,7 @@ import '../models/meal_plan.dart';
 import '../models/workout_program.dart';
 import '../models/active_diet_plan.dart';
 import '../models/active_workout_program.dart';
+import '../data/meal_plan_data.dart';
 
 /// Centralized cache management service for the app
 /// Handles caching and retrieving data from local storage
@@ -45,18 +46,53 @@ class CacheService {
       }
     }
 
-    // Cache miss or force refresh - fetch from Firestore
-    _logger.i('Fetching workout programs from Firestore');
-    final snapshot =
-        await FirebaseFirestore.instance.collection('workoutPrograms').get();
+    try {
+      _logger.i('Fetching workout programs from Firestore');
+      final snapshot = await FirebaseFirestore.instance
+          .collection('workoutPrograms')
+          .get()
+          .timeout(const Duration(seconds: 1));
 
-    final programs =
-        snapshot.docs
-            .map((doc) => WorkoutProgram.fromMap(doc.data(), doc.id))
-            .toList();
+      final programs =
+          snapshot.docs
+              .map((doc) => WorkoutProgram.fromMap(doc.data(), doc.id))
+              .toList();
 
-    await _cacheWorkoutPrograms(programs);
-    return programs;
+      if (programs.isNotEmpty) {
+        await _cacheWorkoutPrograms(programs);
+        return programs;
+      }
+      return _getSampleWorkoutPrograms();
+    } catch (e) {
+      _logger.w('Firestore offline or timeout fetching workouts, returning sample programs');
+      return _getSampleWorkoutPrograms();
+    }
+  }
+
+  List<WorkoutProgram> _getSampleWorkoutPrograms() {
+    return [
+      WorkoutProgram(
+        id: 'full_body_starter',
+        title: 'Full Body Starter',
+        description: 'Complete full body conditioning for all fitness levels.',
+        level: 'Beginner',
+        image: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=600&q=80',
+        days: {
+          '1': [{'exerciseId': 'pushup'}, {'exerciseId': 'squat'}],
+          '2': [{'exerciseId': 'crunch'}, {'exerciseId': 'plank'}],
+        },
+      ),
+      WorkoutProgram(
+        id: 'hiit_fat_burn',
+        title: 'HIIT Fat Burner',
+        description: 'High intensity interval training designed for maximum calorie burn.',
+        level: 'Intermediate',
+        image: 'https://images.unsplash.com/photo-1549576490-b0b4831ef60a?auto=format&fit=crop&w=600&q=80',
+        days: {
+          '1': [{'exerciseId': 'burpee'}, {'exerciseId': 'jumping_jack'}],
+        },
+      ),
+    ];
   }
 
   /// Get meal plans - first from cache, then from Firestore if needed
@@ -69,20 +105,29 @@ class CacheService {
       }
     }
 
-    // Cache miss or force refresh - fetch from Firestore
-    _logger.i('Fetching meal plans from Firestore');
-    final snapshot =
-        await FirebaseFirestore.instance.collection('mealPlans').get();
+    try {
+      _logger.i('Fetching meal plans from Firestore');
+      final snapshot = await FirebaseFirestore.instance
+          .collection('mealPlans')
+          .get()
+          .timeout(const Duration(seconds: 1));
 
-    final mealPlans =
-        snapshot.docs.map((doc) {
-          final data = doc.data();
-          data['id'] = doc.id;
-          return MealPlan.fromMap(data);
-        }).toList();
+      final mealPlans =
+          snapshot.docs.map((doc) {
+            final data = doc.data();
+            data['id'] = doc.id;
+            return MealPlan.fromMap(data);
+          }).toList();
 
-    await _cacheMealPlans(mealPlans);
-    return mealPlans;
+      if (mealPlans.isNotEmpty) {
+        await _cacheMealPlans(mealPlans);
+        return mealPlans;
+      }
+      return mealPlanData;
+    } catch (e) {
+      _logger.w('Firestore offline or timeout fetching meal plans, returning defaults');
+      return mealPlanData;
+    }
   }
 
   /// Get user's active workout programs - from cache with option to force refresh

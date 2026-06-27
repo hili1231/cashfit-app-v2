@@ -15,11 +15,10 @@ class SideHustleCard extends StatelessWidget {
     final colorScheme = theme.colorScheme;
 
     return AnimatedCard(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: SizedBox(
+      child: Container(
         width: 160,
         height: 220,
+        decoration: AppTheme.glassCardDecoration(colorScheme),
         child: GestureDetector(
           onTap:
               () => Navigator.push(

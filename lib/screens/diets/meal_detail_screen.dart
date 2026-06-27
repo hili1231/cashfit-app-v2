@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:provider/provider.dart';
 import '../../models/meal.dart';
 import '../../models/meal_day.dart';
 import '../../models/meal_plan.dart';
+import '../../providers/shopping_list_provider.dart';
+import '../../utils/quantity_formatter.dart';
 
 class MealDetailScreen extends StatefulWidget {
   final MealPlan plan;
@@ -25,30 +28,30 @@ class MealDetailScreenState extends State<MealDetailScreen> {
   VideoPlayerController? _videoController;
   late Meal _cachedMeal;
 
-  bool get isVideo => widget.meal.image.toLowerCase().endsWith('.mp4');
+  bool get isVideo =>
+      (_cachedMeal.video != null && _cachedMeal.video!.isNotEmpty) ||
+      _cachedMeal.image.toLowerCase().endsWith('.mp4');
+
+  String get videoUrl =>
+      (_cachedMeal.video != null && _cachedMeal.video!.isNotEmpty)
+          ? _cachedMeal.video!
+          : _cachedMeal.image;
 
   @override
   void initState() {
     super.initState();
-    // Cache the meal data once on initialization
     _cachedMeal = widget.meal;
 
-    // Initialize video if applicable
     if (isVideo) {
       _videoController = VideoPlayerController.networkUrl(
-          Uri.parse(_cachedMeal.image), // Use networkUrl with Uri
-        )
-        ..initialize()
-            .then((_) {
-              if (!mounted) return; // Guard context usage
-              setState(() {});
-              _videoController?.setLooping(true);
-              _videoController?.play();
-            })
-            .catchError((error) {
-              // Removed print statement; consider using a logging framework in production
-              // e.g., logger.e('Video initialization error: $error');
-            });
+        Uri.parse(videoUrl),
+      )
+        ..initialize().then((_) {
+          if (!mounted) return;
+          setState(() {});
+          _videoController?.setLooping(true);
+          _videoController?.play();
+        }).catchError((error) {});
     }
   }
 
@@ -84,32 +87,60 @@ class MealDetailScreenState extends State<MealDetailScreen> {
             ),
             const SizedBox(height: 12),
             ClipRRect(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
               child: isVideo ? _buildVideoPlayer() : _buildImage(colorScheme),
             ),
             const SizedBox(height: 16),
-            _buildInfoRow(
-              Icons.local_fire_department,
-              "${_cachedMeal.calories.round()} Calories",
-              colorScheme.primary,
-              theme,
-              colorScheme,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildInfoRow(
+                  Icons.local_fire_department,
+                  QuantityFormatter.formatCalories(_cachedMeal.calories),
+                  colorScheme.primary,
+                  theme,
+                  colorScheme,
+                ),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    context
+                        .read<ShoppingListProvider>()
+                        .addIngredients(_cachedMeal.ingredients);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Ingredients added to Shopping List!"),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.add_shopping_cart, size: 18),
+                  label: const Text("Add to Shopping List"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: colorScheme.primary,
+                    foregroundColor: colorScheme.onPrimary,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 20),
             _buildSectionTitle("Ingredients", theme, colorScheme),
             ..._cachedMeal.ingredients.map(
               (ingredientLine) => _buildBulletText(
-                "${ingredientLine.quantity} ${ingredientLine.unit} ${ingredientLine.ingredient.name}",
+                "${QuantityFormatter.format(ingredientLine.quantity)} ${ingredientLine.unit} ${ingredientLine.ingredient.name}",
                 theme,
                 colorScheme,
               ),
             ),
             const SizedBox(height: 20),
             _buildSectionTitle("Instructions", theme, colorScheme),
-            ..._cachedMeal.instructions.map(
-              (instruction) =>
-                  _buildBulletText(instruction, theme, colorScheme),
-            ),
+            ..._cachedMeal.instructions.asMap().entries.map(
+                  (entry) => _buildNumberedInstruction(
+                    entry.key + 1,
+                    entry.value,
+                    theme,
+                    colorScheme,
+                  ),
+                ),
             const SizedBox(height: 30),
           ],
         ),
@@ -120,21 +151,50 @@ class MealDetailScreenState extends State<MealDetailScreen> {
   Widget _buildVideoPlayer() {
     final colorScheme = Theme.of(context).colorScheme;
     if (_videoController != null && _videoController!.value.isInitialized) {
-      return AspectRatio(
-        aspectRatio: _videoController!.value.aspectRatio,
-        child: VideoPlayer(_videoController!),
+      return Stack(
+        alignment: Alignment.center,
+        children: [
+          AspectRatio(
+            aspectRatio: _videoController!.value.aspectRatio,
+            child: VideoPlayer(_videoController!),
+          ),
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                if (_videoController!.value.isPlaying) {
+                  _videoController!.pause();
+                } else {
+                  _videoController!.play();
+                }
+              });
+            },
+            child: CircleAvatar(
+              backgroundColor: Colors.black54,
+              radius: 28,
+              child: Icon(
+                _videoController!.value.isPlaying
+                    ? Icons.pause
+                    : Icons.play_arrow,
+                color: Colors.white,
+                size: 32,
+              ),
+            ),
+          ),
+        ],
       );
     } else {
-      return _buildPlaceholderImage(colorScheme);
+      return _buildImage(colorScheme);
     }
   }
 
   Widget _buildImage(ColorScheme colorScheme) {
+    final url = _cachedMeal.image;
+    final validUrl = (url.isNotEmpty && url.startsWith('http') && !url.contains('firebasestorage.googleapis.com'))
+        ? url
+        : 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80';
+
     return CachedNetworkImage(
-      imageUrl:
-          _cachedMeal.image.isNotEmpty
-              ? _cachedMeal.image
-              : 'assets/images/placeholder.jpg',
+      imageUrl: validUrl,
       width: double.infinity,
       height: 220,
       fit: BoxFit.cover,
@@ -208,6 +268,49 @@ class MealDetailScreenState extends State<MealDetailScreen> {
               style: theme.textTheme.bodyLarge?.copyWith(
                 color: colorScheme.onSurface,
                 fontSize: 16,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNumberedInstruction(
+    int stepNumber,
+    String text,
+    ThemeData theme,
+    ColorScheme colorScheme,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: colorScheme.primaryContainer,
+              shape: BoxShape.circle,
+            ),
+            child: Text(
+              "$stepNumber",
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onPrimaryContainer,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                text,
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: colorScheme.onSurface,
+                  height: 1.4,
+                ),
               ),
             ),
           ),

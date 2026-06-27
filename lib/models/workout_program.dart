@@ -33,10 +33,14 @@ class WorkoutProgram {
   }
 
   factory WorkoutProgram.fromMap(Map<String, dynamic> map, String id) {
+    String rawImg = map['image'] ?? map['imageUrl'] ?? '';
+    if (rawImg.isEmpty || rawImg.startsWith('assets/')) {
+      rawImg = 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=600&q=80';
+    }
     return WorkoutProgram(
       id: id,
       title: map['title'] ?? '',
-      image: map['image'] ?? '',
+      image: rawImg,
       days: Map<String, List<dynamic>>.from(map['days'] ?? {}).map(
         (key, value) => MapEntry(
           key,
@@ -48,7 +52,7 @@ class WorkoutProgram {
       userId: map['userId'],
       preferredWorkoutTimes: List<String>.from(
         map['preferredWorkoutTimes'] ?? [],
-      ), // Deserialize
+      ),
     );
   }
 

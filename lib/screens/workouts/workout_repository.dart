@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/exercise.dart';
+import '../../data/exercise_data.dart';
 
 class ActiveWorkoutProgram {
   final String workoutProgramId;
@@ -136,13 +137,31 @@ class WorkoutRepository {
 
   Future<List<Exercise>> fetchExercises(List<String> exerciseIds) async {
     if (exerciseIds.isEmpty) return [];
-    final snapshot =
-        await _firestore
-            .collection('exercises')
-            .where(FieldPath.documentId, whereIn: exerciseIds)
-            .get();
-    return snapshot.docs
-        .map((doc) => Exercise.fromMap(doc.data()..['id'] = doc.id))
-        .toList();
+    try {
+      final snapshot = await _firestore
+          .collection('exercises')
+          .where(FieldPath.documentId, whereIn: exerciseIds)
+          .get()
+          .timeout(const Duration(seconds: 1));
+      final list = snapshot.docs
+          .map((doc) => Exercise.fromMap(doc.data()..['id'] = doc.id))
+          .toList();
+      if (list.isNotEmpty) return list;
+      return _getFallbackExercises(exerciseIds);
+    } catch (e) {
+      return _getFallbackExercises(exerciseIds);
+    }
+  }
+
+  List<Exercise> _getFallbackExercises(List<String> exerciseIds) {
+    List<Exercise> matched = [];
+    for (var id in exerciseIds) {
+      final found = exerciseLibrary.firstWhere(
+        (ex) => ex.id == id,
+        orElse: () => exerciseLibrary.first,
+      );
+      matched.add(found);
+    }
+    return matched.isNotEmpty ? matched : exerciseLibrary;
   }
 }

@@ -103,9 +103,12 @@ class UserProvider with ChangeNotifier {
 
       _logger.i("Loading user data from Firestore for UID: $uid");
       
-      // First get the user document
-      final snapshot =
-          await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      // First get the user document with a 1-second safety timeout
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get()
+          .timeout(const Duration(seconds: 1));
           
       if (snapshot.exists) {
         _currentUser = AppUser.fromMap(snapshot.data()!);
@@ -836,6 +839,25 @@ class UserProvider with ChangeNotifier {
       _errorMessage = "Failed to update active diet plans: $e";
       notifyListeners();
     }
+  }
+
+  Future<void> upgradeToPremium() async {
+    final expiry = DateTime.now().add(const Duration(days: 365));
+    if (_currentUser != null) {
+      _currentUser!.isPremium = true;
+      _currentUser!.premiumExpiryDate = expiry;
+    }
+    try {
+      if (firebaseUser != null) {
+        await FirebaseFirestore.instance.collection('users').doc(firebaseUser!.uid).update({
+          'isPremium': true,
+          'premiumExpiryDate': Timestamp.fromDate(expiry),
+        });
+      }
+    } catch (e) {
+      _logger.w("Failed to update Firestore premium status: $e");
+    }
+    notifyListeners();
   }
 }
 

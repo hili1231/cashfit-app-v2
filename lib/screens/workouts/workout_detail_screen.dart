@@ -181,6 +181,28 @@ class WorkoutDetailScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
+      appBar: AppBar(
+        title: Text(
+          workout.title.toUpperCase(),
+          style: theme.textTheme.titleMedium?.copyWith(
+            color: colorScheme.onSurface,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.1,
+          ),
+        ),
+        centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            final navState = context.findAncestorStateOfType<NavScreenState>();
+            if (navState != null) {
+              navState.setDetailScreen(null);
+            } else if (Navigator.canPop(context)) {
+              Navigator.pop(context);
+            }
+          },
+        ),
+      ),
       body: Container(
         decoration: AppTheme.backgroundGradient(colorScheme),
         child: SafeArea(

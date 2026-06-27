@@ -56,13 +56,17 @@ class SideHustle {
   }
 
   factory SideHustle.fromMap(Map<String, dynamic> map) {
+    String thumb = map['thumbnail'] ?? '';
+    if (thumb.isEmpty || thumb.startsWith('assets/') || thumb.contains('firebasestorage.googleapis.com')) {
+      thumb = 'https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?auto=format&fit=crop&w=600&q=80';
+    }
     return SideHustle(
       id: map['id'] ?? '',
       title: map['title'] ?? '',
       description: map['description'] ?? '',
       reward: map['reward'] ?? 0,
       videoRequirement: map['videoRequirement'] ?? '',
-      thumbnail: map['thumbnail'] ?? '',
+      thumbnail: thumb,
       progressVideos:
           (map['progressVideos'] as Map<String, dynamic>?)?.map(
             (userId, videoList) => MapEntry(

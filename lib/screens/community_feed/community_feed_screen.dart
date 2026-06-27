@@ -318,20 +318,9 @@ class CommunityFeedScreenState extends State<CommunityFeedScreen> {
                         ),
                       );
                     }
-                    final posts =
-                        snapshot.data!.docs
-                            .map((doc) => Post.fromMap(doc.data()))
-                            .toList();
-                    if (posts.isEmpty) {
-                      return Center(
-                        child: Text(
-                          "No posts yet. Be the first to share!",
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      );
-                    }
+                    final posts = snapshot.data != null && snapshot.data!.docs.isNotEmpty
+                        ? snapshot.data!.docs.map((doc) => Post.fromMap(doc.data())).toList()
+                        : _getSampleCommunityPosts();
 
                     return ListView.builder(
                       shrinkWrap: true,
@@ -685,5 +674,37 @@ class CommunityFeedScreenState extends State<CommunityFeedScreen> {
             ],
           ),
     );
+  }
+
+  List<Post> _getSampleCommunityPosts() {
+    return [
+      Post(
+        id: 'post_1',
+        userId: 'user_alex',
+        userName: 'Alex Rivers',
+        userAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
+        content: 'Crushed my 10,000 steps step goal for today! Earned 50 FitCoins. Who else is staying consistent this week? 🔥 💪',
+        imageUrl: 'https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?auto=format&fit=crop&w=800&q=80',
+        likes: ['u1', 'u2', 'u3', 'u4'],
+        comments: [
+          {'userName': 'Sarah Chen', 'content': 'Awesome work Alex! Keep pushing!'},
+          {'userName': 'Jordan Miller', 'content': 'Let’s go!! 🔥'},
+        ],
+        timestamp: DateTime.now().subtract(const Duration(hours: 2)),
+      ),
+      Post(
+        id: 'post_2',
+        userId: 'user_sarah',
+        userName: 'Sarah Chen',
+        userAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80',
+        content: 'Just tried the Herbed Avocado Toast Deluxe recipe from the CashFit meal plan! Super delicious and macro-friendly. 🥑 🍞',
+        imageUrl: 'https://images.unsplash.com/photo-1525351484163-7529414344d8?auto=format&fit=crop&w=800&q=80',
+        likes: ['u1', 'u5', 'u6'],
+        comments: [
+          {'userName': 'Alex Rivers', 'content': 'That looks delicious!'},
+        ],
+        timestamp: DateTime.now().subtract(const Duration(hours: 5)),
+      ),
+    ];
   }
 }

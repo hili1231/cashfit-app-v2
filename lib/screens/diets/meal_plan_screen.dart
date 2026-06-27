@@ -9,10 +9,12 @@ import '../../models/meal_plan.dart';
 import '../../models/meal_day.dart';
 import '../../models/meal_portion.dart';
 import '../../providers/user_provider.dart';
+import '../../providers/shopping_list_provider.dart';
 import '../diets/replace_meal_context_provider.dart';
 import '../nav_screen.dart';
 import 'diet_day_detail_screen.dart';
 import 'meal_detail_screen.dart';
+import 'shopping_list_screen.dart';
 
 class MealPlanScreen extends StatelessWidget {
   final MealPlan plan;
@@ -158,6 +160,28 @@ class MealPlanScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
+      appBar: AppBar(
+        title: Text(
+          plan.planName.toUpperCase(),
+          style: theme.textTheme.titleMedium?.copyWith(
+            color: colorScheme.onSurface,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.1,
+          ),
+        ),
+        centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            final navState = context.findAncestorStateOfType<NavScreenState>();
+            if (navState != null) {
+              navState.setDetailScreen(null);
+            } else if (Navigator.canPop(context)) {
+              Navigator.pop(context);
+            }
+          },
+        ),
+      ),
       body: Container(
         decoration: AppTheme.backgroundGradient(colorScheme),
         child: SafeArea(
@@ -227,6 +251,63 @@ class MealPlanScreen extends StatelessWidget {
                         plan.description,
                         style: theme.textTheme.bodyLarge?.copyWith(
                           color: colorScheme.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            final shoppingListProvider =
+                                context.read<ShoppingListProvider>();
+                            for (var day in plan.days) {
+                              final portions = [
+                                day.breakfast,
+                                day.snack1,
+                                day.lunch,
+                                day.snack2,
+                                day.dinner,
+                                day.snack3,
+                              ].whereType<MealPortion>();
+
+                              for (var portion in portions) {
+                                shoppingListProvider
+                                    .addIngredients(portion.meal.ingredients);
+                              }
+                            }
+
+                            final itemCount = shoppingListProvider.items.length;
+                            final navState = context
+                                .findAncestorStateOfType<NavScreenState>();
+                            if (navState != null) {
+                              navState.setDetailScreen(
+                                const ShoppingListScreen(),
+                              );
+                            }
+
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  "Consolidated weekly meal plan into $itemCount organized grocery items!",
+                                ),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.shopping_cart_checkout, size: 22),
+                          label: const Text(
+                            "EXPORT WEEKLY SHOPPING LIST",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.1,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: colorScheme.primary,
+                            foregroundColor: colorScheme.onPrimary,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            elevation: 3,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 20),

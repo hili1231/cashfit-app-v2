@@ -9,6 +9,7 @@ import 'diets/diet_selector_screen.dart';
 import 'diets/meal_plan_screen.dart';
 import 'diets/diet_day_detail_screen.dart';
 import 'diets/meal_detail_screen.dart';
+import 'diets/shopping_list_screen.dart';
 import 'community_feed/community_feed_screen.dart';
 import 'side_hustle/side_hustle_screen.dart';
 import 'profile_screen.dart';
@@ -250,9 +251,19 @@ class NavScreenState extends State<NavScreen> {
       });
     }
 
-    return Container(
-      decoration: AppTheme.backgroundGradient(colorScheme),
-      child: Scaffold(
+    return PopScope(
+      canPop: detailScreen == null && selectedIndex == 0,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (detailScreen != null) {
+          clearDetailScreen();
+        } else if (selectedIndex != 0) {
+          onItemTapped(0);
+        }
+      },
+      child: Container(
+        decoration: AppTheme.backgroundGradient(colorScheme),
+        child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
           backgroundColor:
@@ -278,6 +289,13 @@ class NavScreenState extends State<NavScreen> {
                     },
                   ),
           actions: [
+            IconButton(
+              icon: const Icon(Icons.shopping_cart_outlined, size: 26),
+              tooltip: "Shopping List",
+              onPressed: () {
+                setDetailScreen(const ShoppingListScreen());
+              },
+            ),
             IconButton(
               icon: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 250),
@@ -321,40 +339,54 @@ class NavScreenState extends State<NavScreen> {
               ),
         ),
         bottomNavigationBar: NavigationBarTheme(
-          data: NavigationBarThemeData(indicatorColor: Colors.transparent),
+          data: NavigationBarThemeData(
+            indicatorColor: colorScheme.primary.withValues(alpha: 0.2),
+            iconTheme: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.selected)) {
+                return IconThemeData(color: colorScheme.primary, size: 28);
+              }
+              return IconThemeData(color: colorScheme.onSurfaceVariant, size: 26);
+            }),
+            labelTextStyle: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.selected)) {
+                return TextStyle(color: colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 13);
+              }
+              return TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12);
+            }),
+          ),
           child: NavigationBar(
             selectedIndex: selectedIndex,
             onDestinationSelected: onItemTapped,
             backgroundColor: colorScheme.surface,
-            elevation: 5,
-            labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
+            elevation: 8,
             destinations: const [
               NavigationDestination(
-                icon: Icon(Icons.home_rounded, size: 28),
+                icon: Icon(Icons.home_rounded),
                 label: "Home",
               ),
               NavigationDestination(
-                icon: Icon(Icons.fitness_center_rounded, size: 28),
+                icon: Icon(Icons.fitness_center_rounded),
                 label: "Workouts",
               ),
               NavigationDestination(
-                icon: Icon(Icons.restaurant_menu, size: 28),
+                icon: Icon(Icons.restaurant_menu),
                 label: "Diet",
               ),
               NavigationDestination(
-                icon: Icon(Icons.people, size: 28),
+                icon: Icon(Icons.people_alt_rounded),
                 label: "Community",
               ),
               NavigationDestination(
-                icon: Icon(Icons.monetization_on_rounded, size: 28),
+                icon: Icon(Icons.monetization_on_rounded),
                 label: "Side Hustles",
               ),
             ],
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   PreferredSizeWidget _buildFitCoinBar(
     BuildContext context,

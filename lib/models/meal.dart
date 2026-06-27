@@ -79,24 +79,41 @@ class Meal {
     if (difficulty != null) 'difficulty': difficulty,
   };
 
-  factory Meal.fromMap(Map<String, dynamic> map) => Meal(
-    id: map['id'] ?? '',
-    name: map['name'] ?? '',
-    image: map['image'] ?? '',
-    ingredients:
-        (map['ingredients'] as List<dynamic>? ?? [])
-            .map((e) => MealIngredient.fromMap(e as Map<String, dynamic>))
-            .toList(),
-    instructions: List<String>.from(map['instructions'] ?? []),
-    diets: List<String>.from(map['diets'] ?? []),
-    category: map['category'] ?? '',
-    allergies: List<String>.from(map['allergies'] ?? []),
-    prepTime: (map['prepTime'] as num?)?.toInt() ?? 0,
-    cookTime: (map['cookTime'] as num?)?.toInt(),
-    video: map['video'] as String?,
-    tags: (map['tags'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
-    difficulty: map['difficulty'] as String?,
-  );
+  factory Meal.fromMap(Map<String, dynamic> map) {
+    String rawImg = map['image'] ?? map['imageUrl'] ?? '';
+    if (rawImg.isEmpty || rawImg.startsWith('assets/') || rawImg.contains('firebasestorage.googleapis.com')) {
+      final mealName = (map['name'] as String? ?? '').toLowerCase();
+      if (mealName.contains('egg') || mealName.contains('scramble')) {
+        rawImg = 'https://images.unsplash.com/photo-1525351484163-7529414344d8?auto=format&fit=crop&w=600&q=80';
+      } else if (mealName.contains('chicken') || mealName.contains('salad')) {
+        rawImg = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80';
+      } else if (mealName.contains('oatmeal') || mealName.contains('berry')) {
+        rawImg = 'https://images.unsplash.com/photo-1517673400267-0251440c45dc?auto=format&fit=crop&w=600&q=80';
+      } else if (mealName.contains('salmon') || mealName.contains('fish')) {
+        rawImg = 'https://images.unsplash.com/photo-1467003909585-2f8a72700288?auto=format&fit=crop&w=600&q=80';
+      } else {
+        rawImg = 'https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=600&q=80';
+      }
+    }
+    return Meal(
+      id: map['id'] ?? '',
+      name: map['name'] ?? '',
+      image: rawImg,
+      ingredients:
+          (map['ingredients'] as List<dynamic>? ?? [])
+              .map((e) => MealIngredient.fromMap(e as Map<String, dynamic>))
+              .toList(),
+      instructions: List<String>.from(map['instructions'] ?? []),
+      diets: List<String>.from(map['diets'] ?? []),
+      category: map['category'] ?? '',
+      allergies: List<String>.from(map['allergies'] ?? []),
+      prepTime: (map['prepTime'] as num?)?.toInt() ?? 0,
+      cookTime: (map['cookTime'] as num?)?.toInt(),
+      video: map['video'] as String?,
+      tags: (map['tags'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
+      difficulty: map['difficulty'] as String?,
+    );
+  }
 
   Map<String, dynamic> toJson() {
     return {

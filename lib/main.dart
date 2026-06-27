@@ -11,6 +11,7 @@ import 'firebase_options.dart';
 import 'screens/nav_screen.dart';
 import 'theme.dart';
 import 'providers/user_provider.dart';
+import 'providers/shopping_list_provider.dart';
 import 'screens/workouts/replace_workout_context_provider.dart';
 import 'services/cache_service.dart';
 
@@ -71,6 +72,7 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => UserProvider()),
+        ChangeNotifierProvider(create: (_) => ShoppingListProvider()),
         ChangeNotifierProvider(create: (_) => ReplaceContextProvider()),
         ChangeNotifierProvider(create: (_) => ReplaceMealContextProvider()),
         Provider<WorkoutRepository>(create: (_) => WorkoutRepository()),
@@ -83,8 +85,8 @@ class MyApp extends StatelessWidget {
         builder:
             (_, mode, __) => MaterialApp(
               debugShowCheckedModeBanner: false,
-              theme: AppTheme.lightTheme(),
-              darkTheme: AppTheme.darkTheme(),
+              theme: AppTheme.lightTheme,
+              darkTheme: AppTheme.darkTheme,
               themeMode: mode,
               home: const AuthWrapper(),
             ),

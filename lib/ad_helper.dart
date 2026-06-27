@@ -38,8 +38,9 @@ class AdHelper {
     throw UnsupportedError('Unsupported platform');
   }
 
-  // Check if ads should be shown (not for premium users)
+  // Check if ads should be shown (not for premium users or web platform)
   static bool shouldShowAds(BuildContext context) {
+    if (kIsWeb) return false;
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     return userProvider.isLoggedIn &&
         userProvider.currentUser != null &&
